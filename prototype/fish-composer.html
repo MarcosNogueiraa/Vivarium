@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vivarium — Compositor Visual</title>
+<style>
+  :root {
+    --bg: #081b24;
+    --panel: #0e2530;
+    --panel-2: #0b202a;
+    --line: #17394a;
+    --ink: #d7e9ee;
+    --muted: #7fa2ae;
+    --accent: #3fc6da;
+    --mono: ui-monospace, Consolas, "Cascadia Mono", monospace;
+    --r-comum: #93a7b0;
+    --r-incomum: #57b876;
+    --r-raro: #4d8fe0;
+    --r-epico: #a86ce4;
+    --r-lendario: #f0b93b;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.5 system-ui, "Segoe UI", sans-serif;
+    min-height: 100vh;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    align-items: center;
+  }
+  header { width: 100%; max-width: 1060px; display: flex; align-items: baseline; gap: 12px; }
+  header h1 { font-size: 1.15rem; font-weight: 600; letter-spacing: 0.02em; }
+  header .sub { color: var(--muted); font-size: 0.85rem; }
+  main {
+    width: 100%; max-width: 1060px;
+    display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
+    gap: 20px; align-items: start;
+  }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+
+  .stage {
+    background: linear-gradient(180deg, #0d3244 0%, #092331 55%, #071b26 100%);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 8px;
+    display: flex; justify-content: center;
+  }
+  canvas { max-width: 100%; height: auto; display: block; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  label { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; }
+  input[type="text"] {
+    flex: 1; min-width: 160px;
+    background: var(--panel-2); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 8px 10px; font-family: var(--mono); font-size: 0.9rem;
+  }
+  input[type="text"]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button {
+    background: var(--panel-2); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 8px 14px; font: inherit; font-size: 0.88rem;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #06222b; font-weight: 600; }
+  .tiers { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tiers button { font-size: 0.78rem; padding: 5px 10px; }
+
+  .badge-row { display: flex; align-items: center; gap: 10px; }
+  .badge {
+    padding: 3px 12px; border-radius: 999px;
+    font-size: 0.82rem; font-weight: 700; letter-spacing: 0.04em;
+    color: #06222b;
+  }
+  .score { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.88rem; }
+
+  .traits { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 14px; }
+  .trait-line { display: flex; align-items: center; gap: 8px; font-size: 0.88rem; }
+  .trait-line .part { color: var(--muted); width: 118px; flex-shrink: 0; font-size: 0.8rem; }
+  .chip {
+    width: 13px; height: 13px; border-radius: 3px; flex-shrink: 0;
+    border: 1px solid rgba(255,255,255,0.25);
+  }
+  .pat { color: var(--muted); }
+  footer { width: 100%; max-width: 1060px; color: var(--muted); font-size: 0.78rem; }
+  footer code { font-family: var(--mono); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Vivarium — Compositor Visual</h1>
+  <span class="sub">protótipo · mesmo seed = mesmo peixe</span>
+</header>
+
+<main>
+  <section class="stage">
+    <canvas id="tank" width="560" height="420" role="img" aria-label="Peixe gerado a partir do seed"></canvas>
+  </section>
+
+  <aside class="panel">
+    <div>
+      <label for="seed">Seed</label>
+      <div class="row" style="margin-top:6px">
+        <input type="text" id="seed" inputmode="numeric" spellcheck="false">
+        <button class="primary" id="btn-gerar">Gerar</button>
+        <button id="btn-aleatorio">Aleatório</button>
+      </div>
+    </div>
+
+    <div>
+      <label>Buscar por tier de brilho</label>
+      <div class="tiers" style="margin-top:6px">
+        <button data-tier="None">Sem brilho</button>
+        <button data-tier="Subtle">Sutil</button>
+        <button data-tier="Vibrant">Vibrante</button>
+        <button data-tier="Rare">Raro</button>
+        <button data-tier="Legendary">Lendário</button>
+      </div>
+    </div>
+
+    <div class="badge-row">
+      <span class="badge" id="badge">—</span>
+      <span class="score" id="score"></span>
+    </div>
+
+    <div class="traits" id="traits"></div>
+  </aside>
+</main>
+
+<footer>
+  Port JS do motor determinístico de <code>Vivarium.Core</code> (config v1). O cliente final receberá os
+  traits prontos da API — este port existe só para o protótipo funcionar sem backend.
+</footer>
+
+<script>
+"use strict";
+// === VIVARIUM GENERATOR BEGIN ===
+// Port fiel de Vivarium.Core.Generation (TraitConfigV1 + TraitGenerator).
+// Mesmos salts, mesma ordem de sorteio, mesma aritmética — verificado contra o
+// dump do motor C# (tools/Vivarium.Simulation dump).
+
+const SHA256 = (() => {
+  const K = new Uint32Array([
+    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2]);
+  const rotr = (x, n) => ((x >>> n) | (x << (32 - n))) >>> 0;
+
+  function hash(bytes) {
+    const len = bytes.length;
+    const padded = new Uint8Array((((len + 8) >> 6) + 1) << 6);
+    padded.set(bytes);
+    padded[len] = 0x80;
+    const dv = new DataView(padded.buffer);
+    dv.setUint32(padded.length - 4, len * 8);
+
+    const H = new Uint32Array([0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19]);
+    const w = new Uint32Array(64);
+    for (let off = 0; off < padded.length; off += 64) {
+      for (let i = 0; i < 16; i++) w[i] = dv.getUint32(off + i * 4);
+      for (let i = 16; i < 64; i++) {
+        const s0 = rotr(w[i-15], 7) ^ rotr(w[i-15], 18) ^ (w[i-15] >>> 3);
+        const s1 = rotr(w[i-2], 17) ^ rotr(w[i-2], 19) ^ (w[i-2] >>> 10);
+        w[i] = (w[i-16] + s0 + w[i-7] + s1) >>> 0;
+      }
+      let [a,b,c,d,e,f,g,h] = H;
+      for (let i = 0; i < 64; i++) {
+        const S1 = rotr(e,6) ^ rotr(e,11) ^ rotr(e,25);
+        const ch = (e & f) ^ (~e & g);
+        const t1 = (h + S1 + ch + K[i] + w[i]) >>> 0;
+        const S0 = rotr(a,2) ^ rotr(a,13) ^ rotr(a,22);
+        const maj = (a & b) ^ (a & c) ^ (b & c);
+        const t2 = (S0 + maj) >>> 0;
+        h = g; g = f; f = e; e = (d + t1) >>> 0;
+        d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+      }
+      H[0]=(H[0]+a)>>>0; H[1]=(H[1]+b)>>>0; H[2]=(H[2]+c)>>>0; H[3]=(H[3]+d)>>>0;
+      H[4]=(H[4]+e)>>>0; H[5]=(H[5]+f)>>>0; H[6]=(H[6]+g)>>>0; H[7]=(H[7]+h)>>>0;
+    }
+    const out = new Uint8Array(32);
+    const odv = new DataView(out.buffer);
+    for (let i = 0; i < 8; i++) odv.setUint32(i * 4, H[i]);
+    return out;
+  }
+  return { hash };
+})();
+
+const textEncoder = new TextEncoder();
+
+// Equivalente a DeterministicHash.Hash: SHA256(seed LE 8 bytes + salt UTF-8),
+// primeiros 8 bytes lidos como ulong little-endian (BitConverter).
+function hashU64(seed, salt) {
+  const saltBytes = textEncoder.encode(salt);
+  const input = new Uint8Array(8 + saltBytes.length);
+  new DataView(input.buffer).setBigInt64(0, BigInt.asIntN(64, seed), true);
+  input.set(saltBytes, 8);
+  const digest = SHA256.hash(input);
+  return new DataView(digest.buffer).getBigUint64(0, true);
+}
+
+function roll01(seed, salt) {
+  return Number(hashU64(seed, salt) >> 11n) * Math.pow(2, -53);
+}
+
+const CONFIG = {
+  shimmerTiers: [
+    ["None", 78.0], ["Subtle", 15.0], ["Vibrant", 5.5], ["Rare", 1.3], ["Legendary", 0.2],
+  ],
+  shimmerColorsByTier: {
+    Subtle: ["Gold", "Silver", "Bluish"],
+    Vibrant: ["Emerald", "Purple", "Pink"],
+    Rare: ["Rainbow", "AbsoluteBlack"],
+    Legendary: ["Iridescent"],
+  },
+  shimmerOpacityByTier: { Subtle: [10, 25], Vibrant: [30, 50], Rare: [55, 75], Legendary: [80, 100] },
+  partColors: [
+    ["Orange", 22.0], ["Blue", 20.0], ["Red", 18.0], ["Yellow", 16.0],
+    ["Green", 14.0], ["Purple", 6.0], ["Black", 3.0], ["PureWhite", 1.0],
+  ],
+  patternTypes: [
+    ["None", 65.0], ["Stripe", 15.0], ["Dot", 15.0], ["Gradient", 4.0], ["Mottled", 1.0],
+  ],
+  correlationBoostPoints: 15.0,
+  sizeMean: 50.0, sizeStdDev: 20.0, sizeExtremeLow: 10.0, sizeExtremeHigh: 90.0,
+  opacityMin: 20.0, opacityMax: 90.0, opacityExtremeLow: 30.0, opacityExtremeHigh: 80.0,
+  closestPartColor: {
+    Gold: "Yellow", Silver: "PureWhite", Bluish: "Blue", Emerald: "Green",
+    Purple: "Purple", Pink: "Red", Rainbow: "PureWhite", AbsoluteBlack: "Black",
+    Iridescent: "PureWhite",
+  },
+};
+
+function weightedPick(table, roll) {
+  let total = 0;
+  for (const [, w] of table) total += w;
+  const target = roll * total;
+  let cumulative = 0;
+  for (const [value, w] of table) {
+    cumulative += w;
+    if (target < cumulative) return [value, w / total];
+  }
+  const [lastValue, lastW] = table[table.length - 1];
+  return [lastValue, lastW / total];
+}
+
+function erf(x) {
+  const sign = Math.sign(x);
+  x = Math.abs(x);
+  const t = 1.0 / (1.0 + 0.3275911 * x);
+  const y = 1.0 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592)
+            * t * Math.exp(-x * x);
+  return sign * y;
+}
+
+function normalCdf(x) {
+  const z = (x - CONFIG.sizeMean) / (CONFIG.sizeStdDev * Math.sqrt(2.0));
+  return 0.5 * (1.0 + erf(z));
+}
+
+function normalPick(seed, salt) {
+  const u1 = 1.0 - roll01(seed, salt);
+  const u2 = roll01(seed, salt + "_phase");
+  const z = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+  return Math.min(100, Math.max(0, CONFIG.sizeMean + CONFIG.sizeStdDev * z));
+}
+
+function applyCorrelation(table, boosted) {
+  if (boosted === null) return table;
+  let boostedBase = 0;
+  for (const [value, w] of table) if (value === boosted) boostedBase = w;
+  const boostedNew = boostedBase + CONFIG.correlationBoostPoints;
+  const othersScale = (100.0 - boostedNew) / (100.0 - boostedBase);
+  return table.map(([value, w]) => [value, value === boosted ? boostedNew : w * othersScale]);
+}
+
+function generateTraits(seed) {
+  let score = 0;
+  const selfInfo = (p) => -Math.log10(p);
+
+  const [tier, tierP] = weightedPick(CONFIG.shimmerTiers, roll01(seed, "body_shimmer"));
+  score += selfInfo(tierP);
+
+  let shimmerColor = null;
+  let shimmerOpacity = 0;
+  if (tier !== "None") {
+    const palette = CONFIG.shimmerColorsByTier[tier];
+    shimmerColor = palette[Math.floor(roll01(seed, "body_shimmer_color") * palette.length)];
+    const [min, max] = CONFIG.shimmerOpacityByTier[tier];
+    shimmerOpacity = min + roll01(seed, "body_shimmer_opacity") * (max - min);
+  }
+
+  const boosted = (tier === "Vibrant" || tier === "Rare" || tier === "Legendary")
+    ? CONFIG.closestPartColor[shimmerColor]
+    : null;
+  const colorTable = applyCorrelation(CONFIG.partColors, boosted);
+
+  function generatePart(partSalt) {
+    const [color, colorP] = weightedPick(colorTable, roll01(seed, partSalt + "_color"));
+    score += selfInfo(colorP);
+
+    const [pattern, patternP] = weightedPick(CONFIG.patternTypes, roll01(seed, partSalt + "_pattern"));
+    score += selfInfo(patternP);
+
+    if (pattern === "None")
+      return { color, pattern, patternColor: null, patternSize: null, patternOpacity: null };
+
+    const patternPalette = CONFIG.partColors.filter(([value]) => value !== color);
+    const [patternColor, patternColorP] = weightedPick(patternPalette, roll01(seed, partSalt + "_pattern_color"));
+    score += selfInfo(patternColorP);
+
+    const size = normalPick(seed, partSalt + "_pattern_size");
+    if (size < CONFIG.sizeExtremeLow) score += selfInfo(normalCdf(CONFIG.sizeExtremeLow));
+    else if (size > CONFIG.sizeExtremeHigh) score += selfInfo(1 - normalCdf(CONFIG.sizeExtremeHigh));
+
+    const opacity = CONFIG.opacityMin
+      + roll01(seed, partSalt + "_pattern_opacity") * (CONFIG.opacityMax - CONFIG.opacityMin);
+    const range = CONFIG.opacityMax - CONFIG.opacityMin;
+    if (opacity < CONFIG.opacityExtremeLow)
+      score += selfInfo((CONFIG.opacityExtremeLow - CONFIG.opacityMin) / range);
+    else if (opacity > CONFIG.opacityExtremeHigh)
+      score += selfInfo((CONFIG.opacityMax - CONFIG.opacityExtremeHigh) / range);
+
+    return { color, pattern, patternColor, patternSize: size, patternOpacity: opacity };
+  }
+
+  const tail = generatePart("tail");
+  const dorsal = generatePart("dorsal");
+  const pectoral = generatePart("pectoral");
+
+  return { shimmerTier: tier, shimmerColor, shimmerOpacity, tail, dorsal, pectoral, rarityScore: score };
+}
+
+function tierOf(seed) {
+  return weightedPick(CONFIG.shimmerTiers, roll01(seed, "body_shimmer"))[0];
+}
+// === VIVARIUM GENERATOR END ===
+
+// ---------- Renderização ----------
+
+const PART_HEX = {
+  Orange: "#e8813a", Blue: "#3d84dc", Red: "#d94f4f", Yellow: "#ecc94b",
+  Green: "#4fae6e", Purple: "#925cd1", Black: "#23272e", PureWhite: "#f2f5f7",
+};
+const SHIMMER_HEX = {
+  Gold: "#f7c948", Silver: "#dde3e8", Bluish: "#86bcdd", Emerald: "#34d399",
+  Purple: "#a06ae0", Pink: "#f472b6", AbsoluteBlack: "#000000",
+};
+
+const PT = {
+  tier: { None: "Sem brilho", Subtle: "Brilho sutil", Vibrant: "Brilho vibrante", Rare: "Brilho raro", Legendary: "Brilho lendário" },
+  shimmer: { Gold: "Dourado", Silver: "Prateado", Bluish: "Azulado", Emerald: "Verde-esmeralda", Purple: "Roxo", Pink: "Rosa", Rainbow: "Arco-íris", AbsoluteBlack: "Preto absoluto", Iridescent: "Iridescente" },
+  color: { Orange: "Laranja", Blue: "Azul", Red: "Vermelho", Yellow: "Amarelo", Green: "Verde", Purple: "Roxo", Black: "Preto", PureWhite: "Branco puro" },
+  pattern: { None: "Sem padrão", Stripe: "Estria", Dot: "Bolinha", Gradient: "Degradê", Mottled: "Manchado" },
+};
+
+const BANDS = [
+  { max: 5.0, name: "Comum", color: "var(--r-comum)" },
+  { max: 6.6, name: "Incomum", color: "var(--r-incomum)" },
+  { max: 8.3, name: "Raro", color: "var(--r-raro)" },
+  { max: 11.0, name: "Épico", color: "var(--r-epico)" },
+  { max: Infinity, name: "Lendário", color: "var(--r-lendario)" },
+];
+
+const canvas = document.getElementById("tank");
+const ctx = canvas.getContext("2d");
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// Geometria das partes (Path2D em coordenadas fixas do canvas 560x420)
+const bodyPath = new Path2D(
+  "M 130 210 C 155 150 235 125 305 138 C 348 147 376 178 384 210 " +
+  "C 376 242 348 273 305 282 C 235 295 155 270 130 210 Z");
+const tailPath = new Path2D(
+  "M 378 200 C 405 185 432 168 452 152 C 440 172 426 192 422 210 " +
+  "C 426 228 440 248 452 268 C 432 252 405 235 378 220 Q 371 210 378 200 Z");
+const dorsalPath = new Path2D(
+  "M 228 138 C 243 100 283 80 330 92 C 330 107 326 126 318 143 " +
+  "C 290 132 255 132 228 138 Z");
+const pectoralPath = new Path2D(
+  "M 228 244 C 253 250 275 266 285 292 C 268 290 243 282 230 262 Q 224 250 228 244 Z");
+
+const TAIL_BBOX = [372, 148, 84, 124];
+const DORSAL_BBOX = [224, 78, 110, 68];
+const PECTORAL_BBOX = [220, 240, 70, 56];
+const BODY_BBOX = [128, 124, 260, 172];
+const TAIL_JOINT = [380, 210];
+
+let currentSeed = null;
+let currentTraits = null;
+
+// Sub-rolls só visuais (posição de manchas/bolhas) — determinísticos por seed,
+// mas fora do motor: não afetam raridade nem o contrato com o backend.
+function visualRoll(salt) {
+  return roll01(currentSeed, "visual_" + salt);
+}
+
+function drawPattern(part, path, bbox) {
+  if (part.pattern === "None") return;
+  const color = PART_HEX[part.patternColor];
+  const alpha = part.patternOpacity / 100;
+  const size = part.patternSize;
+  const [bx, by, bw, bh] = bbox;
+
+  ctx.save();
+  ctx.clip(path);
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+
+  if (part.pattern === "Stripe") {
+    const width = 3 + size * 0.12;
+    const gap = width * 1.7;
+    ctx.translate(bx + bw / 2, by + bh / 2);
+    ctx.rotate(-0.35);
+    for (let x = -bw; x < bw; x += width + gap)
+      ctx.fillRect(x, -bh, width, bh * 2);
+  } else if (part.pattern === "Dot") {
+    const r = 1.5 + size * 0.07;
+    const step = Math.max(6, r * 3.2);
+    for (let row = 0; row * step < bh + step; row++) {
+      const offset = row % 2 === 0 ? 0 : step / 2;
+      for (let x = bx + offset; x < bx + bw + step; x += step) {
+        ctx.beginPath();
+        ctx.arc(x, by + row * step, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  } else if (part.pattern === "Gradient") {
+    const extent = 0.35 + (size / 100) * 0.65;
+    const grad = ctx.createLinearGradient(0, by, 0, by + bh / extent);
+    grad.addColorStop(0, color + "00");
+    grad.addColorStop(1, color);
+    ctx.fillStyle = grad;
+    ctx.fillRect(bx, by, bw, bh);
+  } else if (part.pattern === "Mottled") {
+    const count = 9;
+    for (let i = 0; i < count; i++) {
+      const cx = bx + visualRoll(`blob${i}x`) * bw;
+      const cy = by + visualRoll(`blob${i}y`) * bh;
+      const r = (3 + size * 0.09) * (0.6 + 0.8 * visualRoll(`blob${i}r`));
+      for (let j = 0; j < 3; j++) {
+        ctx.beginPath();
+        ctx.arc(cx + (j - 1) * r * 0.5, cy + (j % 2) * r * 0.4, r * (1 - j * 0.2), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+  ctx.restore();
+}
+
+function fillPart(path, color) {
+  ctx.fillStyle = PART_HEX[color];
+  ctx.fill(path);
+  ctx.strokeStyle = "rgba(0,0,0,0.25)";
+  ctx.lineWidth = 1.5;
+  ctx.stroke(path);
+}
+
+function drawShimmer(traits, time) {
+  if (traits.shimmerTier === "None") return;
+  const [bx, by, bw] = BODY_BBOX;
+  ctx.save();
+  ctx.clip(bodyPath);
+  ctx.globalAlpha = traits.shimmerOpacity / 100;
+  ctx.globalCompositeOperation = "overlay";
+
+  if (traits.shimmerColor === "Rainbow") {
+    const grad = ctx.createLinearGradient(bx, 0, bx + bw, 0);
+    ["#ff5252", "#ffb142", "#ffe94d", "#5ee07a", "#4dc4ff", "#9c6bff"].forEach((c, i, arr) =>
+      grad.addColorStop(i / (arr.length - 1), c));
+    ctx.fillStyle = grad;
+  } else if (traits.shimmerColor === "Iridescent") {
+    const hue = (time / 30) % 360;
+    const grad = ctx.createLinearGradient(bx, 0, bx + bw, 0);
+    for (let i = 0; i <= 4; i++)
+      grad.addColorStop(i / 4, `hsl(${(hue + i * 45) % 360} 90% 65%)`);
+    ctx.fillStyle = grad;
+  } else {
+    ctx.fillStyle = SHIMMER_HEX[traits.shimmerColor];
+  }
+  ctx.fillRect(...BODY_BBOX);
+  ctx.restore();
+}
+
+function drawBubbles(time) {
+  ctx.save();
+  ctx.fillStyle = "rgba(190,225,235,0.16)";
+  for (let i = 0; i < 5; i++) {
+    const speed = 22 + i * 9;
+    const x = 60 + i * 115 + Math.sin(time / 1300 + i * 2.4) * 10;
+    const y = 440 - (((time / 1000) * speed + i * 130) % 480);
+    ctx.beginPath();
+    ctx.arc(x, y, 2.5 + (i % 3), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawFish(traits, time) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawBubbles(time);
+
+  const bob = reducedMotion ? 0 : Math.sin(time / 900) * 4;
+  const wag = reducedMotion ? 0 : Math.sin(time / 420) * 0.055;
+
+  ctx.save();
+  ctx.translate(0, bob);
+
+  // 1. Cauda (atrás do corpo, com balanço próprio)
+  ctx.save();
+  ctx.translate(TAIL_JOINT[0], TAIL_JOINT[1]);
+  ctx.rotate(wag);
+  ctx.translate(-TAIL_JOINT[0], -TAIL_JOINT[1]);
+  fillPart(tailPath, traits.tail.color);
+  drawPattern(traits.tail, tailPath, TAIL_BBOX);
+  ctx.restore();
+
+  // 2. Dorsal (atrás da borda superior do corpo)
+  fillPart(dorsalPath, traits.dorsal.color);
+  drawPattern(traits.dorsal, dorsalPath, DORSAL_BBOX);
+
+  // 3. Corpo base cinza
+  const bodyGrad = ctx.createLinearGradient(0, BODY_BBOX[1], 0, BODY_BBOX[1] + BODY_BBOX[3]);
+  bodyGrad.addColorStop(0, "#9aa1a9");
+  bodyGrad.addColorStop(0.55, "#7d848d");
+  bodyGrad.addColorStop(1, "#5f666f");
+  ctx.fillStyle = bodyGrad;
+  ctx.fill(bodyPath);
+  ctx.strokeStyle = "rgba(0,0,0,0.3)";
+  ctx.lineWidth = 2;
+  ctx.stroke(bodyPath);
+
+  // 4. Shimmer sobre o corpo (blend overlay)
+  drawShimmer(traits, time);
+
+  // 5. Olho
+  ctx.fillStyle = "#f2f5f7";
+  ctx.beginPath(); ctx.arc(184, 198, 9, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#14181d";
+  ctx.beginPath(); ctx.arc(186, 199, 4.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  ctx.beginPath(); ctx.arc(184, 196.5, 1.6, 0, Math.PI * 2); ctx.fill();
+
+  // 6. Peitoral (na frente do corpo, balanço leve)
+  ctx.save();
+  ctx.translate(228, 246);
+  ctx.rotate(wag * 0.5);
+  ctx.translate(-228, -246);
+  fillPart(pectoralPath, traits.pectoral.color);
+  drawPattern(traits.pectoral, pectoralPath, PECTORAL_BBOX);
+  ctx.restore();
+
+  ctx.restore();
+}
+
+// ---------- UI ----------
+
+const seedInput = document.getElementById("seed");
+const badge = document.getElementById("badge");
+const scoreEl = document.getElementById("score");
+const traitsEl = document.getElementById("traits");
+
+function randomSeed() {
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return BigInt.asUintN(63, new DataView(bytes.buffer).getBigUint64(0));
+}
+
+function bandOf(score) {
+  return BANDS.find(b => score < b.max);
+}
+
+function chip(colorKey) {
+  return `<span class="chip" style="background:${PART_HEX[colorKey]}"></span>`;
+}
+
+function partLine(label, part) {
+  let html = `<div class="trait-line"><span class="part">${label}</span>${chip(part.color)}<span>${PT.color[part.color]}</span>`;
+  if (part.pattern !== "None") {
+    html += `<span class="pat">· ${PT.pattern[part.pattern]} ${chip(part.patternColor)} ` +
+      `${PT.color[part.patternColor]}, tam ${part.patternSize.toFixed(0)}, op ${part.patternOpacity.toFixed(0)}%</span>`;
+  } else {
+    html += `<span class="pat">· sem padrão</span>`;
+  }
+  return html + "</div>";
+}
+
+function render(seed) {
+  currentSeed = seed;
+  currentTraits = generateTraits(seed);
+  seedInput.value = seed.toString();
+
+  const band = bandOf(currentTraits.rarityScore);
+  badge.textContent = band.name;
+  badge.style.background = band.color;
+  scoreEl.textContent = `score ${currentTraits.rarityScore.toFixed(2)}`;
+
+  let shimmerLine;
+  if (currentTraits.shimmerTier === "None") {
+    shimmerLine = `<div class="trait-line"><span class="part">Corpo</span><span>${PT.tier.None}</span></div>`;
+  } else {
+    shimmerLine = `<div class="trait-line"><span class="part">Corpo</span>` +
+      `<span>${PT.tier[currentTraits.shimmerTier]} · ${PT.shimmer[currentTraits.shimmerColor]}, ` +
+      `${currentTraits.shimmerOpacity.toFixed(0)}%</span></div>`;
+  }
+  traitsEl.innerHTML = shimmerLine +
+    partLine("Cauda", currentTraits.tail) +
+    partLine("Nadadeira dorsal", currentTraits.dorsal) +
+    partLine("Barbatana peitoral", currentTraits.pectoral);
+
+  if (reducedMotion) drawFish(currentTraits, 0);
+}
+
+function findSeedWithTier(tier) {
+  for (let i = 0; i < 60000; i++) {
+    const seed = randomSeed();
+    if (tierOf(seed) === tier) return seed;
+  }
+  return null;
+}
+
+document.getElementById("btn-gerar").addEventListener("click", () => {
+  try {
+    render(BigInt(seedInput.value.trim()));
+  } catch {
+    seedInput.value = currentSeed !== null ? currentSeed.toString() : "";
+  }
+});
+seedInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("btn-gerar").click();
+});
+document.getElementById("btn-aleatorio").addEventListener("click", () => render(randomSeed()));
+document.querySelectorAll(".tiers button").forEach(btn =>
+  btn.addEventListener("click", () => {
+    const seed = findSeedWithTier(btn.dataset.tier);
+    if (seed !== null) render(seed);
+  }));
+
+render(randomSeed());
+
+if (!reducedMotion) {
+  (function loop(time) {
+    if (currentTraits) drawFish(currentTraits, time);
+    requestAnimationFrame(loop);
+  })(0);
+}
+</script>
+</body>
+</html>

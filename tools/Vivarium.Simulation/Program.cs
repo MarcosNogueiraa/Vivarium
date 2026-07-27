@@ -1,7 +1,22 @@
+using System.Globalization;
 using Vivarium.Core.Generation;
 
 // Simulação de validação dos pesos (CLAUDE.md, próximo passo 1):
 // gera N seeds, compara distribuição real vs esperada e mostra a curva de rarity score.
+//
+// Modo alternativo: `dump [N]` imprime traits em formato canônico (1 linha por seed),
+// usado pra verificar que ports do motor (ex: o JS do protótipo Canvas) batem com o C#.
+
+if (args.Length >= 1 && args[0] == "dump")
+{
+    int count = args.Length > 1 && int.TryParse(args[1], out var c) ? c : 1000;
+    for (int i = 1; i <= count; i++)
+    {
+        DumpLine(i * 7919L - i);
+        DumpLine(-(i * 104729L + 3));
+    }
+    return;
+}
 
 int n = args.Length > 0 && int.TryParse(args[0], out var parsed) ? parsed : 100_000;
 Console.WriteLine($"Gerando {n:N0} criaturas...\n");
@@ -77,6 +92,25 @@ static void Print<T>(List<CreatureTraits> all, Func<CreatureTraits, T> selector,
         double real = all.Count(t => selector(t)!.Equals(entry.Value)) / (double)all.Count * 100;
         Console.WriteLine($"  {entry.Value,-22} {entry.Weight,6:0.0}%  {real,6:0.00}%");
     }
+}
+
+static void DumpLine(long seed)
+{
+    var t = TraitGenerator.Generate(seed);
+    var inv = CultureInfo.InvariantCulture;
+    var sb = new System.Text.StringBuilder();
+    sb.Append(seed).Append(';').Append(t.ShimmerTier)
+      .Append(';').Append(t.ShimmerColor?.ToString() ?? "-")
+      .Append(';').Append(t.ShimmerOpacity.ToString("F6", inv));
+    foreach (var p in new[] { t.Tail, t.Dorsal, t.Pectoral })
+    {
+        sb.Append(';').Append(p.Color).Append(';').Append(p.Pattern)
+          .Append(';').Append(p.PatternColor?.ToString() ?? "-")
+          .Append(';').Append(p.PatternSize?.ToString("F6", inv) ?? "-")
+          .Append(';').Append(p.PatternOpacity?.ToString("F6", inv) ?? "-");
+    }
+    sb.Append(';').Append(t.RarityScore.ToString("F6", inv));
+    Console.WriteLine(sb.ToString());
 }
 
 static double Percentile(double[] sorted, double p)
