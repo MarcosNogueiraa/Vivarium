@@ -407,7 +407,8 @@ Vale notar: esse nível de desacoplamento (`Habitat` genérico, `CurrencyType` c
 ## 12. Estrutura da solution
 
 - `Vivarium.slnx` — solution (.NET 10)
-- `src/Vivarium.Core` — domínio e motor de geração (sem dependência de web/banco; testável isolado)
+- `src/Vivarium.Core` — domínio e motor de geração (sem dependência de web/banco; testável isolado); entidades do schema da seção 9 em `Domain/`
+- `src/Vivarium.Api` — ASP.NET Core minimal API + EF Core/Npgsql; `Data/VivariumDbContext` (índices, enums como string, seed de CurrencyType/HabitatType/Species) e migration `InitialCreate` em `Data/Migrations`. Endpoints atuais: `GET /health`, `GET /api/creatures/preview/{seed}` (motor sem banco). Connection string `Vivarium` (dev aponta pra localhost; produção via env var `ConnectionStrings__Vivarium` no Neon)
 - `tests/Vivarium.Core.Tests` — xUnit
 - `tools/Vivarium.Simulation` — console de validação estatística dos pesos (`dotnet run --project tools/Vivarium.Simulation [N]`); modo `dump [N]` imprime traits canônicos por seed para verificar ports do motor
 - `prototype/fish-composer.html` — protótipo visual standalone (Canvas); digite um seed ou busque por tier de brilho

@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Vivarium.Api/Vivarium.Api.csproj" />
     <Project Path="src/Vivarium.Core/Vivarium.Core.csproj" />
   </Folder>
   <Folder Name="/tests/">
