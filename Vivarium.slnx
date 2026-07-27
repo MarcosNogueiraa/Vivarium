@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Vivarium.Core/Vivarium.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Vivarium.Core.Tests/Vivarium.Core.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Vivarium.Simulation/Vivarium.Simulation.csproj" />
+  </Folder>
+</Solution>
