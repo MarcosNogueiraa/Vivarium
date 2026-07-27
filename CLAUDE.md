@@ -234,7 +234,18 @@ Campos no `Tank`: `LastTickAt`, `LastHeartbeatAt`, `OnlineGenerationRate`, `Offl
 - Tanque inicial: 3 peixes ativos + fila de geração de 5
 - Upgrade de capacidade: comprado com moeda soft, custo crescente (~1.5x por nível)
 
-### 8.5 Fora do escopo do MVP
+### 8.5 Decisões de implementação do loop (v1) — `Vivarium.Core/Gameplay`
+
+Lógica pura em `HabitatTicker.ProcessTick` (recebe estado + "agora", devolve o que mudou; sem banco/relógio — a API aplica na entidade). Parâmetros em `TickConfig`, defaults de tanque novo em `HabitatDefaults`.
+
+- **Janela do tick dividida por heartbeat**: online do `LastTickAt` até o `LastHeartbeatAt`; se o heartbeat está fresco (< 3 min), a janela inteira é online; sem heartbeat, inteira offline.
+- **Progresso persistido**: campo `GenerationProgressMinutes` no Habitat guarda o resto de minutos efetivos entre ticks (minutos × taxa × fator de manutenção). A cada `GenerationIntervalMinutes` completos, 1 item entra na fila (limitado ao espaço livre).
+- **Fila cheia não acumula estoque**: progresso é clampado em 1 intervalo — ao abrir espaço, sai no máximo 1 item quase pronto, não 5 de uma vez.
+- **Qualidade < 40**: velocidade de geração × 0.5. **Filtro automático**: degradação × 0.5. Fator usa o nível do início da janela (simplificação; tick roda com frequência).
+- **Doença (qualidade < 15)**: 10% de chance por item novo (`IsSick` no GenerationQueueItem). Efeito na coleta (`CreatureCollector`): "desvantagem" — sorteia 2 seeds e fica o de menor rarity score. Reduz potencial sem matar e sem quebrar a derivação seed→traits.
+- **Seed de coleta**: sorteado na coleta via RNG criptográfico (`NewRandomSeed`), nunca na entrada da fila.
+
+### 8.6 Fora do escopo do MVP
 
 - **Alimentação**: cortada do MVP para não duplicar a função de "sink de manutenção" já coberta pela qualidade da água. Candidata a entrar na v2 como boost opcional (não como necessidade punitiva).
 - **Breeding**: fica para v2, depois do motor de geração e mercado estarem validados.
@@ -299,6 +310,7 @@ Habitat
 - GenerationIntervalMinutes (int)
 - OnlineGenerationRate (decimal)
 - OfflineGenerationRate (decimal)
+- GenerationProgressMinutes (decimal) -- resto de progresso entre ticks
 - LastTickAt (datetime)
 - LastHeartbeatAt (datetime)
 - CreatedAt
@@ -324,6 +336,7 @@ GenerationQueueItem
 - SpeciesId (FK -> Species)
 - ReadyAt (datetime)
 - Status (Pending | Collected)
+- IsSick (bool) -- nasceu com qualidade da água crítica; coleta com desvantagem
 
 CreatureInstance
 - Id (PK)

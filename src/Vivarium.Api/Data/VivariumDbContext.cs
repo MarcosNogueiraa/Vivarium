@@ -63,6 +63,7 @@ public class VivariumDbContext(DbContextOptions<VivariumDbContext> options) : Db
         modelBuilder.Entity<Habitat>(e =>
         {
             e.Property(h => h.MaintenanceLevel).HasPrecision(5, 2);
+            e.Property(h => h.GenerationProgressMinutes).HasPrecision(10, 4);
             e.Property(h => h.OnlineGenerationRate).HasPrecision(5, 2);
             e.Property(h => h.OfflineGenerationRate).HasPrecision(5, 2);
             e.HasIndex(h => h.UserId);

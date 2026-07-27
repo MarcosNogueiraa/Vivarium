@@ -23,6 +23,8 @@ public class Habitat
     public int GenerationIntervalMinutes { get; set; }
     public decimal OnlineGenerationRate { get; set; }
     public decimal OfflineGenerationRate { get; set; }
+    /// <summary>Resto de progresso de geração entre ticks (minutos efetivos acumulados).</summary>
+    public decimal GenerationProgressMinutes { get; set; }
     public DateTime LastTickAt { get; set; }
     public DateTime? LastHeartbeatAt { get; set; }
     public DateTime CreatedAt { get; set; }
@@ -60,4 +62,6 @@ public class GenerationQueueItem
     public Species? Species { get; set; }
     public DateTime ReadyAt { get; set; }
     public QueueItemStatus Status { get; set; }
+    /// <summary>Nasceu com a qualidade da água crítica: coleta com desvantagem de raridade.</summary>
+    public bool IsSick { get; set; }
 }
