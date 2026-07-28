@@ -415,6 +415,25 @@ Vale notar: esse nível de desacoplamento (`Habitat` genérico, `CurrencyType` c
 
 ## 11. Próximos passos sugeridos
 
+### Status atual (28/07/2026)
+
+MVP jogável de ponta a ponta, rodando local contra o Neon. Feito:
+- ✅ Motor de geração seed→traits (`Vivarium.Core/Generation`), simulação de pesos e faixas de raridade calibradas
+- ✅ **Traits de movimento** (velocidade/amplitude de cauda e nadadeira; extremos no score com peso 0.5) — seção 5.1
+- ✅ Backend completo (auth JWT, loop de jogo com tick lazy, mercado, loja de itens, transferência direta) — seção 12; **58 testes verdes** (Core + API)
+- ✅ Banco no **Neon** (sa-east-1) com migrations aplicadas; connection string em user-secrets local
+- ✅ Frontend React/Vite: auth, **aquário animado** (peixes nadando, seleção por clique), mercado, loja
+- ✅ **Cauda com onda viajante** (undulação em S via sprite + blit por fatias) em `fishRenderer.js` e no protótipo — 100% renderização, tunável em `MOVEMENT_TUNING`
+- ✅ Ferramentas de dev: `dev.cmd` (sobe API+front+navegador), botões dev de gerar/limpar peixes (só em Development)
+
+Falta pra ir ao ar (depende de contas do usuário):
+- ⏳ **Deploy backend** no Oracle Cloud (Dockerfile pronto; env vars `ConnectionStrings__Vivarium`, `Jwt__Key` forte, `Cors__AllowedOrigins__0`)
+- ⏳ **Deploy frontend** no Cloudflare Pages (build `npm run build`, output `frontend/dist`, env `VITE_API_URL`)
+- ⏳ **Assets do designer** (item 2 abaixo) — trocar as formas procedurais do `fishRenderer.js`/protótipo pelos sprites reais
+- ⏳ Trocar heartbeat por WebSocket/SSE (melhoria pós-MVP, seção 8.3); v2: alimentação e breeding (seção 8.6)
+
+### Passos originais
+
 1. ✅ **(27/07/2026)** Validar a tabela de pesos via simulação — `tools/Vivarium.Simulation`, 100k seeds: distribuição real bate com os pesos (lendário 0.21% vs 0.2% esperado); faixas de exibição recalibradas na seção 5
 2. Fechar com seu amigo de design: 1 corpo base cinza + 8 cores de parte (cauda/dorsal/peitoral) + 4 texturas de padrão (estria, bolinha, degradê, manchado) — esse é o pacote mínimo de assets pro MVP
 3. ✅ **(27/07/2026)** Motor de geração (seed → traits) implementado em `src/Vivarium.Core/Generation` (config v1 hardcoded em `TraitConfigV1`, migra pro banco quando o backend existir), coberto por unit tests em `tests/Vivarium.Core.Tests`
