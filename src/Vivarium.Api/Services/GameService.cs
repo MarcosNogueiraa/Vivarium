@@ -19,6 +19,10 @@ public class GameService(VivariumDbContext db)
     {
         int pending = await db.GenerationQueueItems
             .CountAsync(q => q.HabitatId == habitat.Id && q.Status == QueueItemStatus.Pending);
+        bool hasAutoFilter = await db.UserInventories.AnyAsync(i =>
+            i.UserId == habitat.UserId
+            && i.Quantity > 0
+            && i.ItemDefinition!.Category == ItemCategory.AutoFilter);
 
         var state = new HabitatTickState(
             LastTickAtUtc: habitat.LastTickAt,
@@ -30,7 +34,7 @@ public class GameService(VivariumDbContext db)
             OfflineGenerationRate: habitat.OfflineGenerationRate,
             QueueCap: habitat.QueueCap,
             PendingQueueCount: pending,
-            HasAutoFilter: false); // sistema de itens ainda não implementado
+            HasAutoFilter: hasAutoFilter);
 
         var outcome = HabitatTicker.ProcessTick(state, nowUtc, Random.Shared, TickConfig.Default);
         habitat.LastTickAt = outcome.LastTickAtUtc;

@@ -60,6 +60,7 @@ app.MapGet("/api/creatures/preview/{seed:long}", (long seed) =>
 app.MapAuthEndpoints();
 app.MapGameEndpoints();
 app.MapMarketEndpoints();
+app.MapItemEndpoints();
 
 app.Run();
 

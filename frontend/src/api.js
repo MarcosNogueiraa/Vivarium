@@ -48,4 +48,6 @@ export const api = {
     request("POST", "/api/market/listings", { creatureInstanceId, priceSoft }),
   cancelListing: (id) => request("POST", `/api/market/listings/${id}/cancel`),
   buyListing: (id) => request("POST", `/api/market/listings/${id}/buy`),
+  items: () => request("GET", "/api/items/"),
+  buyItem: (key) => request("POST", `/api/items/${key}/buy`),
 };

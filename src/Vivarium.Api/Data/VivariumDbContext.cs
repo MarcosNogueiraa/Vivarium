@@ -106,6 +106,26 @@ public class VivariumDbContext(DbContextOptions<VivariumDbContext> options) : Db
             e.Property(i => i.PriceSoft).HasPrecision(18, 2);
             e.Property(i => i.PricePremium).HasPrecision(18, 2);
             e.HasIndex(i => i.Key).IsUnique();
+            e.HasData(
+                new ItemDefinition
+                {
+                    Id = 1, Key = "filter_basic", Name = "Filtro",
+                    Category = ItemCategory.Filter,
+                    EffectJson = """{"restoreMaintenance":100}""", PriceSoft = 20m,
+                },
+                new ItemDefinition
+                {
+                    Id = 2, Key = "auto_filter", Name = "Filtro Automático",
+                    Category = ItemCategory.AutoFilter,
+                    EffectJson = """{"autoFilter":true}""", PriceSoft = 500m,
+                },
+                new ItemDefinition
+                {
+                    // Preço dinâmico: PriceSoft é o base; cobra base × 1.5^(capacidade - inicial)
+                    Id = 3, Key = "tank_upgrade", Name = "Expansão do Tanque",
+                    Category = ItemCategory.HabitatUpgrade,
+                    EffectJson = """{"capacityDelta":1}""", PriceSoft = 50m,
+                });
         });
 
         modelBuilder.Entity<UserInventory>(e =>

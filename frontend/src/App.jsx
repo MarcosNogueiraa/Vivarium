@@ -105,6 +105,16 @@ function TankView({ tank, refresh, notify }) {
     }
   }
 
+  async function buyFilter() {
+    try {
+      await api.buyItem("filter_basic");
+      notify("Água restaurada!");
+      await refresh();
+    } catch (err) {
+      notify(err.message);
+    }
+  }
+
   async function sell(creature) {
     const price = window.prompt("Preço em moeda soft:", "50");
     if (!price) return;
@@ -131,6 +141,9 @@ function TankView({ tank, refresh, notify }) {
           <span>{Number(tank.maintenanceLevel).toFixed(0)}</span>
         </div>
         <span className="wallet">🪙 {Number(tank.wallet.SOFT ?? 0).toFixed(0)} soft</span>
+        <button onClick={buyFilter} title="Restaura a qualidade da água pra 100">
+          🧽 Filtro (20)
+        </button>
       </section>
 
       <section>
@@ -223,6 +236,53 @@ function MarketView({ userId, refreshTank, notify }) {
   );
 }
 
+function StoreView({ refreshTank, notify }) {
+  const [items, setItems] = useState(null);
+
+  const refresh = useCallback(async () => {
+    setItems(await api.items());
+  }, []);
+
+  useEffect(() => {
+    refresh().catch((err) => notify(err.message));
+  }, [refresh, notify]);
+
+  async function buy(item) {
+    try {
+      await api.buyItem(item.key);
+      notify(`${item.name} comprado!`);
+      await Promise.all([refresh(), refreshTank()]);
+    } catch (err) {
+      notify(err.message);
+    }
+  }
+
+  const DESCRIPTIONS = {
+    filter_basic: "Restaura a qualidade da água pra 100 na hora.",
+    auto_filter: "Permanente: a água degrada na metade da velocidade.",
+    tank_upgrade: "+1 de capacidade no tanque (preço sobe a cada compra).",
+  };
+
+  if (items === null) return <p className="muted">Carregando loja…</p>;
+
+  return (
+    <div className="grid">
+      {items.map((item) => (
+        <div key={item.key} className="card store-card">
+          <strong>{item.name}</strong>
+          <p className="muted">{DESCRIPTIONS[item.key] ?? ""}</p>
+          <div className="card-row">
+            <span className="price">🪙 {Number(item.price).toFixed(0)}</span>
+            {item.owned
+              ? <span className="muted">Adquirido ✓</span>
+              : <button className="primary" onClick={() => buy(item)}>Comprar</button>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function GameView({ onLogout }) {
   const [tank, setTank] = useState(null);
   const [tab, setTab] = useState("tank");
@@ -263,12 +323,13 @@ function GameView({ onLogout }) {
         <nav className="tabs">
           <button className={tab === "tank" ? "active" : ""} onClick={() => setTab("tank")}>Tanque</button>
           <button className={tab === "market" ? "active" : ""} onClick={() => setTab("market")}>Mercado</button>
+          <button className={tab === "store" ? "active" : ""} onClick={() => setTab("store")}>Loja</button>
         </nav>
         <button onClick={() => { clearToken(); onLogout(); }}>Sair</button>
       </header>
-      {tab === "tank"
-        ? <TankView tank={tank} refresh={refreshTank} notify={notify} />
-        : <MarketView userId={userId} refreshTank={refreshTank} notify={notify} />}
+      {tab === "tank" && <TankView tank={tank} refresh={refreshTank} notify={notify} />}
+      {tab === "market" && <MarketView userId={userId} refreshTank={refreshTank} notify={notify} />}
+      {tab === "store" && <StoreView refreshTank={refreshTank} notify={notify} />}
       {toast && <div className="toast">{toast}</div>}
     </div>
   );
