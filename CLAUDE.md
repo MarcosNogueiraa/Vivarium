@@ -417,11 +417,36 @@ Vale notar: esse nível de desacoplamento (`Habitat` genérico, `CurrencyType` c
 3. ✅ **(27/07/2026)** Motor de geração (seed → traits) implementado em `src/Vivarium.Core/Generation` (config v1 hardcoded em `TraitConfigV1`, migra pro banco quando o backend existir), coberto por unit tests em `tests/Vivarium.Core.Tests`
 4. ✅ **(27/07/2026)** Composição visual em Canvas prototipada em `prototype/fish-composer.html` (arquivo único, abre direto no navegador): 4 camadas (cauda → dorsal → corpo cinza + shimmer via `overlay` → peitoral), padrões (estria/bolinha/degradê/manchado) com tamanho/cor/opacidade dos traits, animação leve (bob + cauda) e iridescente com shift de cor no tempo. Contém um **port JS do motor** (verificado: 2.000 seeds idênticos ao C# via `Vivarium.Simulation dump` + `crosscheck`); o cliente final receberá traits prontos da API — o port é só para o protótipo funcionar sem backend. Formas das partes são placeholder procedural até os assets do designer chegarem.
 
-## 12. Estrutura da solution
+## 12. API — endpoints e decisões (MVP)
+
+**Auth:** JWT Bearer (7 dias, HS256; `Jwt:Key` via appsettings em dev / env var `Jwt__Key` em produção). Senha com PBKDF2-SHA256 (100k iterações, salt aleatório) — sem dependência do ASP.NET Identity. Registro cria automaticamente: carteiras (100 SOFT / 0 PREMIUM — `EconomyDefaults`) e o tanque inicial com `HabitatDefaults`.
+
+**Tick lazy, sem job agendado:** o tick roda dentro de heartbeat/tank/collect (`GameService.ApplyTickAsync`). Auto-coleta VIP acontece no tick quando o tanque está online e há assinatura ativa. No heartbeat, o tick roda ANTES de atualizar `LastHeartbeatAt` (senão um retorno após dias contaria a ausência como tempo online).
+
+**Mercado:** listar tira a criatura do tanque (`HabitatId = null`); cancelar/comprar devolve ao tanque do dono/comprador **se houver espaço** (senão fica fora, `HabitatId null`). Compra roda em transação de banco com revalidação de status e registra `MarketSale` no `TransactionLog` (From=comprador, To=vendedor). Sem taxa de mercado no MVP.
+
+| Método | Rota | Auth | Descrição |
+|---|---|---|---|
+| GET | `/health` | — | status |
+| GET | `/api/creatures/preview/{seed}` | — | traits de qualquer seed (sem banco) |
+| POST | `/api/auth/register` | — | cria user + carteiras + tanque; retorna token |
+| POST | `/api/auth/login` | — | username ou email + senha; retorna token |
+| POST | `/api/game/heartbeat` | ✓ | marca online (janela de 3 min); roda tick |
+| GET | `/api/game/tank` | ✓ | estado completo: fila, criaturas, carteira; roda tick |
+| POST | `/api/game/collect/{queueItemId}` | ✓ | coleta manual (valida pronto/capacidade) |
+| GET | `/api/market/listings?skip&take` | ✓ | listagens ativas |
+| POST | `/api/market/listings` | ✓ | lista criatura própria por preço em SOFT |
+| POST | `/api/market/listings/{id}/cancel` | ✓ | cancela e devolve ao tanque |
+| POST | `/api/market/listings/{id}/buy` | ✓ | compra (transacional + TransactionLog) |
+
+**Testes de integração** (`tests/Vivarium.Api.Tests`): API completa via `WebApplicationFactory` contra SQLite in-memory (Postgres só em staging/produção) — fluxos de auth, coleta, VIP auto-coleta e mercado ponta a ponta.
+
+## 13. Estrutura da solution
 
 - `Vivarium.slnx` — solution (.NET 10)
 - `src/Vivarium.Core` — domínio e motor de geração (sem dependência de web/banco; testável isolado); entidades do schema da seção 9 em `Domain/`
-- `src/Vivarium.Api` — ASP.NET Core minimal API + EF Core/Npgsql; `Data/VivariumDbContext` (índices, enums como string, seed de CurrencyType/HabitatType/Species) e migration `InitialCreate` em `Data/Migrations`. Endpoints atuais: `GET /health`, `GET /api/creatures/preview/{seed}` (motor sem banco). Connection string `Vivarium` (dev aponta pra localhost; produção via env var `ConnectionStrings__Vivarium` no Neon)
+- `src/Vivarium.Api` — ASP.NET Core minimal API + EF Core/Npgsql; `Data/VivariumDbContext` (índices, enums como string, seed de CurrencyType/HabitatType/Species) e migrations em `Data/Migrations`. `Endpoints/` (auth, game, market — ver seção 12), `Services/` (TokenService, PasswordHasher, GameService). Connection string `Vivarium` (dev aponta pra localhost; produção via env var `ConnectionStrings__Vivarium` no Neon)
+- `tests/Vivarium.Api.Tests` — testes de integração da API (WebApplicationFactory + SQLite in-memory)
 - `tests/Vivarium.Core.Tests` — xUnit
 - `tools/Vivarium.Simulation` — console de validação estatística dos pesos (`dotnet run --project tools/Vivarium.Simulation [N]`); modo `dump [N]` imprime traits canônicos por seed para verificar ports do motor
 - `prototype/fish-composer.html` — protótipo visual standalone (Canvas); digite um seed ou busque por tier de brilho

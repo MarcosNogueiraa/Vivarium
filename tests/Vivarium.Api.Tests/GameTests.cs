@@ -1,0 +1,162 @@
+using System.Net;
+using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
+using Vivarium.Core.Domain;
+
+namespace Vivarium.Api.Tests;
+
+public class GameTests : IClassFixture<VivariumApiFactory>
+{
+    private readonly VivariumApiFactory _factory;
+
+    public GameTests(VivariumApiFactory factory) => _factory = factory;
+
+    private async Task<long> HabitatIdOf(long userId)
+    {
+        long id = 0;
+        await _factory.WithDbAsync(async db =>
+            id = (await db.Habitats.FirstAsync(h => h.UserId == userId)).Id);
+        return id;
+    }
+
+    private async Task InserirItemProntoNaFila(long habitatId, bool sick = false)
+    {
+        await _factory.WithDbAsync(db =>
+        {
+            db.GenerationQueueItems.Add(new GenerationQueueItem
+            {
+                HabitatId = habitatId,
+                SpeciesId = 1,
+                ReadyAt = DateTime.UtcNow.AddMinutes(-1),
+                Status = QueueItemStatus.Pending,
+                IsSick = sick,
+            });
+            return Task.CompletedTask;
+        });
+    }
+
+    [Fact]
+    public async Task Heartbeat_MarcaTanqueComoOnline()
+    {
+        var (client, _) = await _factory.RegisterAsync("online1");
+
+        var response = await client.PostAsync("/api/game/heartbeat", null);
+        response.EnsureSuccessStatusCode();
+
+        var tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
+        Assert.True(tank!.Online);
+    }
+
+    [Fact]
+    public async Task Coleta_ItemPronto_CriaCriaturaComSeedERaridade()
+    {
+        var (client, userId) = await _factory.RegisterAsync("coletor1");
+        long habitatId = await HabitatIdOf(userId);
+        await InserirItemProntoNaFila(habitatId);
+
+        var tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
+        var item = Assert.Single(tank!.Queue);
+        Assert.True(item.IsReady);
+
+        var response = await client.PostAsync($"/api/game/collect/{item.Id}", null);
+        response.EnsureSuccessStatusCode();
+        var creature = await response.Content.ReadFromJsonAsync<AuthTests.CreatureDto>();
+
+        Assert.True(creature!.Seed >= 0);
+        Assert.True(creature.RarityScore > 0);
+        Assert.Equal(1, creature.TraitConfigVersion);
+
+        tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
+        Assert.Single(tank!.Creatures);
+        Assert.Empty(tank.Queue);
+    }
+
+    [Fact]
+    public async Task Coleta_TanqueCheio_Retorna400()
+    {
+        var (client, userId) = await _factory.RegisterAsync("cheio1");
+        long habitatId = await HabitatIdOf(userId);
+
+        await _factory.WithDbAsync(db =>
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                db.CreatureInstances.Add(new CreatureInstance
+                {
+                    SpeciesId = 1, OwnerId = userId, HabitatId = habitatId,
+                    Seed = 1000 + i, TraitConfigVersion = 1, RarityScore = 3m,
+                    CreatedAt = DateTime.UtcNow,
+                });
+            }
+            return Task.CompletedTask;
+        });
+        await InserirItemProntoNaFila(habitatId);
+
+        var tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
+        var item = Assert.Single(tank!.Queue);
+
+        var response = await client.PostAsync($"/api/game/collect/{item.Id}", null);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Coleta_ItemJaColetado_Retorna400()
+    {
+        var (client, userId) = await _factory.RegisterAsync("coletor2");
+        long habitatId = await HabitatIdOf(userId);
+        await InserirItemProntoNaFila(habitatId);
+
+        var tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
+        var item = Assert.Single(tank!.Queue);
+
+        (await client.PostAsync($"/api/game/collect/{item.Id}", null)).EnsureSuccessStatusCode();
+        var second = await client.PostAsync($"/api/game/collect/{item.Id}", null);
+        Assert.Equal(HttpStatusCode.BadRequest, second.StatusCode);
+    }
+
+    [Fact]
+    public async Task Vip_Online_ColetaAutomaticamenteNoTick()
+    {
+        var (client, userId) = await _factory.RegisterAsync("vip1");
+        long habitatId = await HabitatIdOf(userId);
+
+        await _factory.WithDbAsync(async db =>
+        {
+            db.VipSubscriptions.Add(new VipSubscription
+            {
+                UserId = userId,
+                StartAt = DateTime.UtcNow.AddDays(-1),
+                EndAt = DateTime.UtcNow.AddDays(30),
+                Status = SubscriptionStatus.Active,
+            });
+            var habitat = await db.Habitats.FirstAsync(h => h.Id == habitatId);
+            habitat.LastHeartbeatAt = DateTime.UtcNow; // online
+        });
+        await InserirItemProntoNaFila(habitatId);
+
+        // O GET do tanque roda o tick lazy; VIP online deve coletar sozinho
+        var tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
+
+        Assert.Empty(tank!.Queue);
+        Assert.Single(tank.Creatures);
+    }
+
+    [Fact]
+    public async Task FreeOnline_NaoColetaAutomaticamente()
+    {
+        var (client, userId) = await _factory.RegisterAsync("free1");
+        long habitatId = await HabitatIdOf(userId);
+
+        await _factory.WithDbAsync(async db =>
+        {
+            var habitat = await db.Habitats.FirstAsync(h => h.Id == habitatId);
+            habitat.LastHeartbeatAt = DateTime.UtcNow;
+        });
+        await InserirItemProntoNaFila(habitatId);
+
+        var tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
+
+        Assert.Single(tank!.Queue);
+        Assert.Empty(tank.Creatures);
+    }
+}

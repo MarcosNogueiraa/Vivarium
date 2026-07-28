@@ -4,6 +4,7 @@
     <Project Path="src/Vivarium.Core/Vivarium.Core.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Vivarium.Api.Tests/Vivarium.Api.Tests.csproj" />
     <Project Path="tests/Vivarium.Core.Tests/Vivarium.Core.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">

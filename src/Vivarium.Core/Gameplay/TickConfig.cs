@@ -23,6 +23,13 @@ public sealed record TickConfig
     public static readonly TickConfig Default = new();
 }
 
+/// <summary>Valores iniciais da economia de um jogador novo.</summary>
+public static class EconomyDefaults
+{
+    public const decimal StartingSoftBalance = 100m;
+    public const decimal StartingPremiumBalance = 0m;
+}
+
 /// <summary>Valores iniciais de um habitat novo (tanque inicial do MVP).</summary>
 public static class HabitatDefaults
 {
