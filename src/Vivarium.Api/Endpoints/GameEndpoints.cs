@@ -10,7 +10,8 @@ namespace Vivarium.Api.Endpoints;
 public static class GameEndpoints
 {
     public record QueueItemDto(long Id, DateTime ReadyAt, bool IsReady, bool IsSick);
-    public record CreatureDto(long Id, int SpeciesId, long Seed, int TraitConfigVersion, decimal RarityScore, DateTime CreatedAt);
+    // Seed como string: 63 bits não cabem num JSON number (double trunca acima de 2^53)
+    public record CreatureDto(long Id, int SpeciesId, string Seed, int TraitConfigVersion, decimal RarityScore, DateTime CreatedAt);
     public record TankResponse(
         bool Online,
         decimal MaintenanceLevel,
@@ -56,10 +57,11 @@ public static class GameEndpoints
                 .OrderBy(q => q.ReadyAt)
                 .Select(q => new QueueItemDto(q.Id, q.ReadyAt, q.ReadyAt <= now, q.IsSick))
                 .ToListAsync();
-            var creatures = await db.CreatureInstances
+            var creatures = (await db.CreatureInstances
                 .Where(c => c.HabitatId == habitat.Id)
-                .Select(c => new CreatureDto(c.Id, c.SpeciesId, c.Seed, c.TraitConfigVersion, c.RarityScore, c.CreatedAt))
-                .ToListAsync();
+                .ToListAsync())
+                .Select(c => new CreatureDto(c.Id, c.SpeciesId, c.Seed.ToString(), c.TraitConfigVersion, c.RarityScore, c.CreatedAt))
+                .ToList();
             var wallet = await db.WalletBalances
                 .Where(w => w.UserId == userId)
                 .Select(w => new { w.CurrencyType!.Code, w.Amount })
@@ -90,7 +92,7 @@ public static class GameEndpoints
 
             await db.SaveChangesAsync();
             return Results.Ok(new CreatureDto(
-                creature.Id, creature.SpeciesId, creature.Seed,
+                creature.Id, creature.SpeciesId, creature.Seed.ToString(),
                 creature.TraitConfigVersion, creature.RarityScore, creature.CreatedAt));
         });
     }

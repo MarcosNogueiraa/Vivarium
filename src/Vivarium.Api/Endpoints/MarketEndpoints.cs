@@ -9,9 +9,10 @@ namespace Vivarium.Api.Endpoints;
 public static class MarketEndpoints
 {
     public record CreateListingRequest(long CreatureInstanceId, decimal PriceSoft);
+    // Seed como string: 63 bits não cabem num JSON number (double trunca acima de 2^53)
     public record ListingDto(
         long Id, decimal PriceSoft, long SellerId, string SellerName,
-        long CreatureId, int SpeciesId, long Seed, int TraitConfigVersion, decimal RarityScore);
+        long CreatureId, int SpeciesId, string Seed, int TraitConfigVersion, decimal RarityScore);
 
     public static void MapMarketEndpoints(this IEndpointRouteBuilder app)
     {
@@ -20,15 +21,23 @@ public static class MarketEndpoints
         group.MapGet("/listings", async (VivariumDbContext db, int skip = 0, int take = 50) =>
         {
             take = Math.Clamp(take, 1, 100);
-            var listings = await db.MarketListings
+            var listings = (await db.MarketListings
                 .Where(m => m.Status == ListingStatus.Active)
                 .OrderByDescending(m => m.CreatedAt)
                 .Skip(Math.Max(0, skip)).Take(take)
+                .Select(m => new
+                {
+                    m.Id, m.PriceSoft, m.SellerId, SellerName = m.Seller!.Username,
+                    CreatureId = m.CreatureInstanceId, m.CreatureInstance!.SpeciesId,
+                    m.CreatureInstance.Seed, m.CreatureInstance.TraitConfigVersion,
+                    m.CreatureInstance.RarityScore,
+                })
+                .ToListAsync())
                 .Select(m => new ListingDto(
-                    m.Id, m.PriceSoft, m.SellerId, m.Seller!.Username,
-                    m.CreatureInstanceId, m.CreatureInstance!.SpeciesId, m.CreatureInstance.Seed,
-                    m.CreatureInstance.TraitConfigVersion, m.CreatureInstance.RarityScore))
-                .ToListAsync();
+                    m.Id, m.PriceSoft, m.SellerId, m.SellerName,
+                    m.CreatureId, m.SpeciesId, m.Seed.ToString(),
+                    m.TraitConfigVersion, m.RarityScore))
+                .ToList();
             return Results.Ok(listings);
         });
 

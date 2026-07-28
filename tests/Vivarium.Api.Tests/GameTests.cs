@@ -62,7 +62,7 @@ public class GameTests : IClassFixture<VivariumApiFactory>
         response.EnsureSuccessStatusCode();
         var creature = await response.Content.ReadFromJsonAsync<AuthTests.CreatureDto>();
 
-        Assert.True(creature!.Seed >= 0);
+        Assert.True(long.Parse(creature!.Seed) >= 0);
         Assert.True(creature.RarityScore > 0);
         Assert.Equal(1, creature.TraitConfigVersion);
 

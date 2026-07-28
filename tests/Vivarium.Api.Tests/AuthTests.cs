@@ -94,5 +94,5 @@ public class AuthTests : IClassFixture<VivariumApiFactory>
         bool Online, decimal MaintenanceLevel, int Capacity, int QueueCap,
         List<QueueItemDto> Queue, List<CreatureDto> Creatures, Dictionary<string, decimal> Wallet);
     public record QueueItemDto(long Id, DateTime ReadyAt, bool IsReady, bool IsSick);
-    public record CreatureDto(long Id, int SpeciesId, long Seed, int TraitConfigVersion, decimal RarityScore, DateTime CreatedAt);
+    public record CreatureDto(long Id, int SpeciesId, string Seed, int TraitConfigVersion, decimal RarityScore, DateTime CreatedAt);
 }

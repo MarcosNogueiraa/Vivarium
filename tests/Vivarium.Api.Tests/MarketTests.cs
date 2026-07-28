@@ -146,5 +146,5 @@ public class MarketTests : IClassFixture<VivariumApiFactory>
     public record CreatedDto(long Id);
     public record ListingDto(
         long Id, decimal PriceSoft, long SellerId, string SellerName,
-        long CreatureId, int SpeciesId, long Seed, int TraitConfigVersion, decimal RarityScore);
+        long CreatureId, int SpeciesId, string Seed, int TraitConfigVersion, decimal RarityScore);
 }
