@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+**/.vs/
+.git/
+.claude/
+prototype/
+tests/
+tools/
