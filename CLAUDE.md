@@ -434,6 +434,7 @@ Vale notar: esse nível de desacoplamento (`Habitat` genérico, `CurrencyType` c
 | POST | `/api/game/heartbeat` | ✓ | marca online (janela de 3 min); roda tick |
 | GET | `/api/game/tank` | ✓ | estado completo: fila, criaturas, carteira; roda tick |
 | POST | `/api/game/collect/{queueItemId}` | ✓ | coleta manual (valida pronto/capacidade) |
+| POST | `/api/game/creatures/{id}/transfer` | ✓ | transferência direta por username (audita `DirectTransfer`; bloqueada se listada) |
 | GET | `/api/market/listings?skip&take` | ✓ | listagens ativas |
 | POST | `/api/market/listings` | ✓ | lista criatura própria por preço em SOFT |
 | POST | `/api/market/listings/{id}/cancel` | ✓ | cancela e devolve ao tanque |
