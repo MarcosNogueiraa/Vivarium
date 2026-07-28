@@ -444,6 +444,11 @@ function GameView({ onLogout }) {
 
   const refreshTank = useCallback(async () => { setTank(await api.tank()); }, []);
 
+  async function devCoins() {
+    try { await api.devCoins(1000); notify("+1000 fichas"); await refreshTank(); }
+    catch (err) { notify(err.message); }
+  }
+
   useEffect(() => {
     try {
       setUserId(Number(JSON.parse(atob(getToken().split(".")[1])).sub));
@@ -472,6 +477,9 @@ function GameView({ onLogout }) {
         </nav>
         <span className="spacer" />
         <span className="wallet-chip"><Coin />{soft.toFixed(0)} <small>soft</small></span>
+        {import.meta.env.DEV && (
+          <button className="dev-btn" onClick={devCoins} title="Só existe em dev">+1000 fichas</button>
+        )}
         <button onClick={() => { clearToken(); onLogout(); }}>Sair</button>
       </header>
 

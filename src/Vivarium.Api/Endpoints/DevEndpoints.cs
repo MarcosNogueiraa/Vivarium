@@ -56,5 +56,30 @@ public static class DevEndpoints
                 .ExecuteDeleteAsync();
             return Results.Ok(new { removed });
         });
+
+        // Credita fichas (moeda soft) no jogador logado, pra teste
+        group.MapPost("/coins", async (long? amount, ClaimsPrincipal principal, VivariumDbContext db) =>
+        {
+            long userId = TokenService.GetUserId(principal);
+            decimal credit = Math.Clamp(amount ?? 1000, 1, 1_000_000);
+
+            int softId = await db.CurrencyTypes.Where(c => c.Code == "SOFT").Select(c => c.Id).FirstAsync();
+            var wallet = await db.WalletBalances
+                .FirstOrDefaultAsync(w => w.UserId == userId && w.CurrencyTypeId == softId);
+            if (wallet is null)
+                return Results.NotFound();
+
+            wallet.Amount += credit;
+            db.TransactionLogs.Add(new TransactionLog
+            {
+                Type = TransactionType.CurrencyPurchase,
+                ToUserId = userId,
+                CurrencyTypeId = softId,
+                Amount = credit,
+                CreatedAt = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync();
+            return Results.Ok(new { credited = credit, balance = wallet.Amount });
+        });
     }
 }

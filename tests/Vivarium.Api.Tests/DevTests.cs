@@ -39,6 +39,18 @@ public class DevTests : IClassFixture<VivariumApiFactory>
     }
 
     [Fact]
+    public async Task Coins_CreditaFichasNoJogador()
+    {
+        var (client, _) = await _factory.RegisterAsync("devcoins1");
+
+        var response = await client.PostAsync("/api/dev/coins?amount=2500", null);
+        response.EnsureSuccessStatusCode();
+
+        var tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
+        Assert.Equal(2600m, tank!.Wallet["SOFT"]); // 100 inicial + 2500
+    }
+
+    [Fact]
     public async Task Clear_RemoveTodosOsPeixesDoTanque()
     {
         var (client, _) = await _factory.RegisterAsync("devclear1");
