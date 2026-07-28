@@ -7,6 +7,13 @@ public sealed record PartTraits(
     double? PatternSize,
     double? PatternOpacity);
 
+/// <summary>Velocidades em 0-100 (normal 50/20); amplitudes em radianos.</summary>
+public sealed record MovementTraits(
+    double TailSpeed,
+    double TailAmplitude,
+    double FinSpeed,
+    double FinAmplitude);
+
 public sealed record CreatureTraits(
     ShimmerTier ShimmerTier,
     ShimmerColor? ShimmerColor,
@@ -14,6 +21,7 @@ public sealed record CreatureTraits(
     PartTraits Tail,
     PartTraits Dorsal,
     PartTraits Pectoral,
+    MovementTraits Movement,
     double RarityScore)
 {
     public PartTraits Part(PartType part) => part switch

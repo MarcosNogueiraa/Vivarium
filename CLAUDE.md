@@ -94,23 +94,24 @@ Onde cada `P_x` é a probabilidade (peso/100) do valor sorteado naquele trait. U
 
 Isso pode ser calculado uma vez na criação do peixe e cacheado no banco (não precisa recalcular a cada exibição).
 
-**Faixas de exibição ao jogador** — calibradas via simulação de 100k seeds (27/07/2026), produzindo a pirâmide 50% / 30% / 15% / 4.8% / 0.2%:
+**Faixas de exibição ao jogador** — recalibradas via simulação de 100k seeds (28/07/2026, já com traits de movimento no score), produzindo a pirâmide 50% / 30% / 15% / 4.8% / 0.2%:
 - Comum: score < 5.0
-- Incomum: 5.0–6.6
-- Raro: 6.6–8.3
-- Épico: 8.3–11.0
-- Lendário: 11.0+
+- Incomum: 5.0–6.7
+- Raro: 6.7–8.4
+- Épico: 8.4–11.2
+- Lendário: 11.2+
 
 > O score mínimo possível é ~2.6 (mesmo o peixe mais comum carrega a informação dos traits base), então as faixas antigas começando em 0 não funcionavam. Recalibrar essas faixas sempre que os pesos do `TraitWeightConfig` mudarem (rodar `dotnet run --project tools/Vivarium.Simulation`).
 
 ### 5.1 Decisões de implementação do score (v1)
 
 - **Base do log:** log10 (`score = Σ -log10(P)` de cada trait sorteado).
-- **Entram no score:** tier de shimmer do corpo; por parte (cauda/dorsal/peitoral): cor base (com probabilidade **já ajustada** pela correlação, quando ativa), tipo de padrão, cor do padrão (paleta renormalizada sem a cor base) e, apenas quando extremos, tamanho e opacidade do padrão.
-- **Não entram:** cor do shimmer dentro do tier (uniforme — a raridade já está capturada pelo tier) e opacidade do shimmer (uniforme na faixa do tier).
+- **Entram no score:** tier de shimmer do corpo; por parte (cauda/dorsal/peitoral): cor base (com probabilidade **já ajustada** pela correlação, quando ativa), tipo de padrão, cor do padrão (paleta renormalizada sem a cor base) e, apenas quando extremos, tamanho e opacidade do padrão; velocidade de cauda e de nadadeira **apenas nos extremos**, com peso reduzido (ver Movimento).
+- **Não entram:** cor do shimmer dentro do tier (uniforme — a raridade já está capturada pelo tier), opacidade do shimmer (uniforme na faixa do tier) e as amplitudes de movimento (uniformes, só estética).
 - **Tamanho do padrão:** normal(média 50, desvio 20) clampada em 0–100; extremos <10 ou >90 têm P≈2.3% cada.
 - **Opacidade do padrão:** uniforme 20–90; extremos <30 ou >80 têm P=1/7 cada.
 - **Mapa de correlação shimmer→cor de parte:** Esmeralda→Verde, Roxo→Roxo, Rosa→Vermelho, Arco-íris→Branco puro, Preto absoluto→Preto, Iridescente→Branco puro (tiers 0–1 não ativam correlação).
+- **Movimento (28/07/2026):** velocidade de cauda e de nadadeira são normal(50,20) clampada em 0–100 (extremos <10 ou >90 ≈4.55% cada). Só os extremos entram no score, com **peso 0.5** (`MovementScoreWeight`) sobre o `-log10(P)` da banda — um extremo vale ≈0.82, metade de um extremo de tamanho de padrão. As amplitudes (cauda 0.20–0.75 rad, nadadeira 0.15–0.75 rad) são uniformes e ficam fora do score. No aquário, a velocidade de nado do peixe é **calculada** dos traits (`swimSpeedOf`: 0.75·cauda + 0.25·nadadeira), então cauda rápida = peixe rápido — coerência visual, não sorteio novo.
 
 ---
 
@@ -183,6 +184,8 @@ long Hash(long seed, string salt)
 ```
 
 O ponto-chave: **um hash por trait**, não um único random state sequencial. Isso evita que mudar a ordem de cálculo dos traits no futuro (ex: adicionar um trait novo no meio do processo) altere o resultado dos traits que já existiam antes dele — cada trait é independente e sempre reproduzível isoladamente.
+
+> **Mecanismo oficial de extensão:** adicionar um trait novo = adicionar um `salt` novo. Como cada trait deriva de `Hash(seed, salt)` isolado, incluir um trait não muda nenhum trait existente (nem o seu hash, nem a ordem). Se o trait novo **não** entrar no rarity score (ou entrar só nos extremos, com peso), os scores dos peixes existentes também não mudam. Foi assim que os traits de movimento (velocidade/amplitude de cauda e nadadeira) entraram em 28/07/2026 sem tocar em nenhum outro trait. Só bumpar `TraitConfigVersion` quando **mudar pesos/algoritmo de um trait já existente**, não ao adicionar trait novo.
 
 ---
 

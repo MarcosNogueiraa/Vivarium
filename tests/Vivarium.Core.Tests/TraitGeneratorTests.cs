@@ -119,6 +119,42 @@ public class TraitGeneratorTests
         Assert.InRange(freqBlack, 0.13, 0.23);
     }
 
+    [Fact]
+    public void Movimento_DentroDosRanges()
+    {
+        Assert.All(ManySeeds().Select(s => TraitGenerator.Generate(s)), t =>
+        {
+            Assert.InRange(t.Movement.TailSpeed, 0, 100);
+            Assert.InRange(t.Movement.FinSpeed, 0, 100);
+            Assert.InRange(t.Movement.TailAmplitude,
+                TraitConfigV1.TailAmplitudeMin, TraitConfigV1.TailAmplitudeMax);
+            Assert.InRange(t.Movement.FinAmplitude,
+                TraitConfigV1.FinAmplitudeMin, TraitConfigV1.FinAmplitudeMax);
+        });
+    }
+
+    [Fact]
+    public void Movimento_ExtremosNaFrequenciaDaNormal()
+    {
+        // <10 ou >90 em normal(50,20) ≈ 4.55% dos peixes por velocidade
+        var all = ManySeeds(20_000).Select(s => TraitGenerator.Generate(s)).ToList();
+        double extremos = all.Count(t =>
+            t.Movement.TailSpeed < TraitConfigV1.MovementSpeedExtremeLow
+            || t.Movement.TailSpeed > TraitConfigV1.MovementSpeedExtremeHigh) / (double)all.Count;
+        Assert.InRange(extremos, 0.035, 0.056);
+    }
+
+    [Fact]
+    public void Movimento_ExtremoAumentaOScoreComPesoReduzido()
+    {
+        // Peixe com velocidade extrema carrega a contribuição 0.5 × -log10(P_banda)
+        var comExtremo = ManySeeds(20_000).Select(s => TraitGenerator.Generate(s))
+            .First(t => t.Movement.TailSpeed < TraitConfigV1.MovementSpeedExtremeLow);
+        // contribuição esperada ≈ 0.5 × -log10(0.02275) ≈ 0.82; o score mínimo sem
+        // movimento é ~2.6, então qualquer extremo deve passar disso
+        Assert.True(comExtremo.RarityScore > 3.4);
+    }
+
     private static IEnumerable<long> ManySeeds(int count = 5_000)
         => Enumerable.Range(1, count).Select(i => (long)i * 7919);
 

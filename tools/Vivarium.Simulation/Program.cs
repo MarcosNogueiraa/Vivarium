@@ -57,6 +57,11 @@ double opacityExtreme = patterned.Count(p => p.PatternOpacity < TraitConfigV1.Pa
 Console.WriteLine($"\n  Tamanho extremo (<10 ou >90): {sizeExtreme:0.00}% dos padrões (esperado ~4.6%)");
 Console.WriteLine($"  Opacidade extrema (<30 ou >80): {opacityExtreme:0.00}% dos padrões (esperado ~28.6%)");
 
+double tailExtreme = all.Count(t => t.Movement.TailSpeed < 10 || t.Movement.TailSpeed > 90) / (double)n * 100;
+double finExtreme = all.Count(t => t.Movement.FinSpeed < 10 || t.Movement.FinSpeed > 90) / (double)n * 100;
+Console.WriteLine($"  Cauda extrema (<10 ou >90): {tailExtreme:0.00}% (esperado ~4.6%)");
+Console.WriteLine($"  Nadadeira extrema (<10 ou >90): {finExtreme:0.00}% (esperado ~4.6%)");
+
 // --- Rarity score ---
 var scores = all.Select(t => t.RarityScore).OrderBy(s => s).ToArray();
 Console.WriteLine("\nRARITY SCORE (percentis)");
@@ -109,6 +114,10 @@ static void DumpLine(long seed)
           .Append(';').Append(p.PatternSize?.ToString("F6", inv) ?? "-")
           .Append(';').Append(p.PatternOpacity?.ToString("F6", inv) ?? "-");
     }
+    sb.Append(';').Append(t.Movement.TailSpeed.ToString("F6", inv))
+      .Append(';').Append(t.Movement.TailAmplitude.ToString("F6", inv))
+      .Append(';').Append(t.Movement.FinSpeed.ToString("F6", inv))
+      .Append(';').Append(t.Movement.FinAmplitude.ToString("F6", inv));
     sb.Append(';').Append(t.RarityScore.ToString("F6", inv));
     Console.WriteLine(sb.ToString());
 }

@@ -90,6 +90,11 @@ export const CONFIG = {
   correlationBoostPoints: 15.0,
   sizeMean: 50.0, sizeStdDev: 20.0,
   opacityMin: 20.0, opacityMax: 90.0,
+  movement: {
+    speedMean: 50.0, speedStdDev: 20.0,
+    tailAmpMin: 0.20, tailAmpMax: 0.75,
+    finAmpMin: 0.15, finAmpMax: 0.75,
+  },
   closestPartColor: {
     Gold: "Yellow", Silver: "PureWhite", Bluish: "Blue", Emerald: "Green",
     Purple: "Purple", Pink: "Red", Rainbow: "PureWhite", AbsoluteBlack: "Black",
@@ -109,11 +114,11 @@ function weightedPick(table, roll) {
   return table[table.length - 1][0];
 }
 
-function normalPick(seed, salt) {
+function normalPick(seed, salt, mean, stdDev) {
   const u1 = 1.0 - roll01(seed, salt);
   const u2 = roll01(seed, salt + "_phase");
   const z = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
-  return Math.min(100, Math.max(0, CONFIG.sizeMean + CONFIG.sizeStdDev * z));
+  return Math.min(100, Math.max(0, mean + stdDev * z));
 }
 
 function applyCorrelation(table, boosted) {
@@ -150,11 +155,19 @@ export function generateTraits(seed) {
 
     const patternPalette = CONFIG.partColors.filter(([value]) => value !== color);
     const patternColor = weightedPick(patternPalette, roll01(seed, partSalt + "_pattern_color"));
-    const size = normalPick(seed, partSalt + "_pattern_size");
+    const size = normalPick(seed, partSalt + "_pattern_size", CONFIG.sizeMean, CONFIG.sizeStdDev);
     const opacity = CONFIG.opacityMin
       + roll01(seed, partSalt + "_pattern_opacity") * (CONFIG.opacityMax - CONFIG.opacityMin);
     return { color, pattern, patternColor, patternSize: size, patternOpacity: opacity };
   }
+
+  const mv = CONFIG.movement;
+  const movement = {
+    tailSpeed: normalPick(seed, "tail_speed", mv.speedMean, mv.speedStdDev),
+    tailAmplitude: mv.tailAmpMin + roll01(seed, "tail_wag_amplitude") * (mv.tailAmpMax - mv.tailAmpMin),
+    finSpeed: normalPick(seed, "fin_speed", mv.speedMean, mv.speedStdDev),
+    finAmplitude: mv.finAmpMin + roll01(seed, "fin_wag_amplitude") * (mv.finAmpMax - mv.finAmpMin),
+  };
 
   return {
     shimmerTier: tier,
@@ -163,5 +176,6 @@ export function generateTraits(seed) {
     tail: generatePart("tail"),
     dorsal: generatePart("dorsal"),
     pectoral: generatePart("pectoral"),
+    movement,
   };
 }

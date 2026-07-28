@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, clearToken, getToken, setToken } from "./api.js";
 import { generateTraits, roll01 } from "./generator.js";
-import { bandOf, drawFish, PT, VIEW_H, VIEW_W } from "./fishRenderer.js";
+import { bandOf, drawFish, PT, swimSpeedOf, VIEW_H, VIEW_W } from "./fishRenderer.js";
 
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -54,11 +54,12 @@ function AquariumCanvas({ creatures, selectedId, onSelect }) {
       for (const c of creaturesRef.current) {
         let s = statesRef.current.get(c.id);
         if (!s) {
-          // posição/velocidade iniciais determinísticas pelo seed (layout estável)
+          // posição inicial determinística pelo seed; velocidade de nado vem
+          // dos traits de movimento (cauda rápida = peixe rápido)
           s = {
             x: 120 + roll01(c.bigSeed, "pos_x") * (W - 240),
             y: 100 + roll01(c.bigSeed, "pos_y") * (H - 200),
-            vx: (roll01(c.bigSeed, "dir") < 0.5 ? -1 : 1) * (26 + roll01(c.bigSeed, "speed") * 34),
+            vx: (roll01(c.bigSeed, "dir") < 0.5 ? -1 : 1) * swimSpeedOf(c.traits),
             phase: roll01(c.bigSeed, "phase") * Math.PI * 2,
           };
           statesRef.current.set(c.id, s);

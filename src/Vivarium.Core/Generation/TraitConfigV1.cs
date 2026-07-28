@@ -72,6 +72,19 @@ public static class TraitConfigV1
     public const double PatternOpacityExtremeLow = 30.0;
     public const double PatternOpacityExtremeHigh = 80.0;
 
+    // Movimento (ranges calibrados visualmente no protótipo):
+    // velocidades 0-100 em normal(50,20); extremos <10 ou >90 entram no score
+    // com peso reduzido. Amplitudes uniformes, só estética (fora do score).
+    public const double MovementSpeedMean = 50.0;
+    public const double MovementSpeedStdDev = 20.0;
+    public const double MovementSpeedExtremeLow = 10.0;
+    public const double MovementSpeedExtremeHigh = 90.0;
+    public const double MovementScoreWeight = 0.5;
+    public const double TailAmplitudeMin = 0.20;
+    public const double TailAmplitudeMax = 0.75;
+    public const double FinAmplitudeMin = 0.15;
+    public const double FinAmplitudeMax = 0.75;
+
     /// <summary>Cor da paleta mais próxima do tom do brilho, para a regra de correlação.</summary>
     public static PartColor ClosestPartColor(ShimmerColor shimmer) => shimmer switch
     {

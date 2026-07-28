@@ -39,7 +39,39 @@ public static class TraitGenerator
         var dorsal = GeneratePart(seed, "dorsal", partColorTable, ref score);
         var pectoral = GeneratePart(seed, "pectoral", partColorTable, ref score);
 
-        return new CreatureTraits(tier, shimmerColor, shimmerOpacity, tail, dorsal, pectoral, score);
+        // Movimento: velocidades em normal(50,20), extremos raros entram no
+        // score com peso reduzido; amplitudes uniformes ficam fora do score
+        double tailSpeed = NormalPick(seed, "tail_speed",
+            TraitConfigV1.MovementSpeedMean, TraitConfigV1.MovementSpeedStdDev);
+        score += MovementExtremeInfo(tailSpeed);
+        double tailAmplitude = TraitConfigV1.TailAmplitudeMin
+            + DeterministicHash.Roll01(seed, "tail_wag_amplitude")
+            * (TraitConfigV1.TailAmplitudeMax - TraitConfigV1.TailAmplitudeMin);
+
+        double finSpeed = NormalPick(seed, "fin_speed",
+            TraitConfigV1.MovementSpeedMean, TraitConfigV1.MovementSpeedStdDev);
+        score += MovementExtremeInfo(finSpeed);
+        double finAmplitude = TraitConfigV1.FinAmplitudeMin
+            + DeterministicHash.Roll01(seed, "fin_wag_amplitude")
+            * (TraitConfigV1.FinAmplitudeMax - TraitConfigV1.FinAmplitudeMin);
+
+        var movement = new MovementTraits(tailSpeed, tailAmplitude, finSpeed, finAmplitude);
+
+        return new CreatureTraits(tier, shimmerColor, shimmerOpacity, tail, dorsal, pectoral, movement, score);
+    }
+
+    private static double MovementExtremeInfo(double speed)
+    {
+        double probability;
+        if (speed < TraitConfigV1.MovementSpeedExtremeLow)
+            probability = NormalCdf(TraitConfigV1.MovementSpeedExtremeLow,
+                TraitConfigV1.MovementSpeedMean, TraitConfigV1.MovementSpeedStdDev);
+        else if (speed > TraitConfigV1.MovementSpeedExtremeHigh)
+            probability = 1 - NormalCdf(TraitConfigV1.MovementSpeedExtremeHigh,
+                TraitConfigV1.MovementSpeedMean, TraitConfigV1.MovementSpeedStdDev);
+        else
+            return 0;
+        return TraitConfigV1.MovementScoreWeight * SelfInformation(probability);
     }
 
     private static PartTraits GeneratePart(
@@ -59,11 +91,14 @@ public static class TraitGenerator
         var (patternColor, patternColorP) = WeightedTable.Pick(patternPalette, DeterministicHash.Roll01(seed, partSalt + "_pattern_color"));
         score += SelfInformation(patternColorP);
 
-        double size = NormalPick(seed, partSalt + "_pattern_size");
+        double size = NormalPick(seed, partSalt + "_pattern_size",
+            TraitConfigV1.PatternSizeMean, TraitConfigV1.PatternSizeStdDev);
         if (size < TraitConfigV1.PatternSizeExtremeLow)
-            score += SelfInformation(NormalCdf(TraitConfigV1.PatternSizeExtremeLow));
+            score += SelfInformation(NormalCdf(TraitConfigV1.PatternSizeExtremeLow,
+                TraitConfigV1.PatternSizeMean, TraitConfigV1.PatternSizeStdDev));
         else if (size > TraitConfigV1.PatternSizeExtremeHigh)
-            score += SelfInformation(1 - NormalCdf(TraitConfigV1.PatternSizeExtremeHigh));
+            score += SelfInformation(1 - NormalCdf(TraitConfigV1.PatternSizeExtremeHigh,
+                TraitConfigV1.PatternSizeMean, TraitConfigV1.PatternSizeStdDev));
 
         double opacity = TraitConfigV1.PatternOpacityMin
             + DeterministicHash.Roll01(seed, partSalt + "_pattern_opacity")
@@ -96,18 +131,18 @@ public static class TraitGenerator
     }
 
     /// <summary>Normal(mean, sd) determinística via Box-Muller, clampada em [0,100].</summary>
-    private static double NormalPick(long seed, string salt)
+    private static double NormalPick(long seed, string salt, double mean, double stdDev)
     {
         double u1 = 1.0 - DeterministicHash.Roll01(seed, salt);          // (0,1] evita log(0)
         double u2 = DeterministicHash.Roll01(seed, salt + "_phase");
         double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-        return Math.Clamp(TraitConfigV1.PatternSizeMean + TraitConfigV1.PatternSizeStdDev * z, 0, 100);
+        return Math.Clamp(mean + stdDev * z, 0, 100);
     }
 
-    /// <summary>CDF da normal(mean, sd) do tamanho de padrão (aprox. Abramowitz-Stegun 7.1.26).</summary>
-    private static double NormalCdf(double x)
+    /// <summary>CDF da normal(mean, sd) (aprox. Abramowitz-Stegun 7.1.26).</summary>
+    private static double NormalCdf(double x, double mean, double stdDev)
     {
-        double z = (x - TraitConfigV1.PatternSizeMean) / (TraitConfigV1.PatternSizeStdDev * Math.Sqrt(2.0));
+        double z = (x - mean) / (stdDev * Math.Sqrt(2.0));
         return 0.5 * (1.0 + Erf(z));
     }
 

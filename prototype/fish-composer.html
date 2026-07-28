@@ -148,7 +148,7 @@
     <div class="traits" id="traits"></div>
 
     <div class="movement">
-      <label>Movimento (calibração manual — não afeta o sorteio)</label>
+      <label>Movimento (sorteado do seed — ajuste pra testar)</label>
       <div class="slider-row">
         <span>Vel. cauda</span>
         <input type="range" id="mv-tail-speed" min="0" max="100" step="1" value="50">
@@ -280,6 +280,12 @@ const CONFIG = {
   correlationBoostPoints: 15.0,
   sizeMean: 50.0, sizeStdDev: 20.0, sizeExtremeLow: 10.0, sizeExtremeHigh: 90.0,
   opacityMin: 20.0, opacityMax: 90.0, opacityExtremeLow: 30.0, opacityExtremeHigh: 80.0,
+  movement: {
+    speedMean: 50.0, speedStdDev: 20.0, speedExtremeLow: 10.0, speedExtremeHigh: 90.0,
+    scoreWeight: 0.5,
+    tailAmpMin: 0.20, tailAmpMax: 0.75,
+    finAmpMin: 0.15, finAmpMax: 0.75,
+  },
   closestPartColor: {
     Gold: "Yellow", Silver: "PureWhite", Bluish: "Blue", Emerald: "Green",
     Purple: "Purple", Pink: "Red", Rainbow: "PureWhite", AbsoluteBlack: "Black",
@@ -309,16 +315,16 @@ function erf(x) {
   return sign * y;
 }
 
-function normalCdf(x) {
-  const z = (x - CONFIG.sizeMean) / (CONFIG.sizeStdDev * Math.sqrt(2.0));
+function normalCdf(x, mean, stdDev) {
+  const z = (x - mean) / (stdDev * Math.sqrt(2.0));
   return 0.5 * (1.0 + erf(z));
 }
 
-function normalPick(seed, salt) {
+function normalPick(seed, salt, mean, stdDev) {
   const u1 = 1.0 - roll01(seed, salt);
   const u2 = roll01(seed, salt + "_phase");
   const z = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
-  return Math.min(100, Math.max(0, CONFIG.sizeMean + CONFIG.sizeStdDev * z));
+  return Math.min(100, Math.max(0, mean + stdDev * z));
 }
 
 function applyCorrelation(table, boosted) {
@@ -365,9 +371,11 @@ function generateTraits(seed) {
     const [patternColor, patternColorP] = weightedPick(patternPalette, roll01(seed, partSalt + "_pattern_color"));
     score += selfInfo(patternColorP);
 
-    const size = normalPick(seed, partSalt + "_pattern_size");
-    if (size < CONFIG.sizeExtremeLow) score += selfInfo(normalCdf(CONFIG.sizeExtremeLow));
-    else if (size > CONFIG.sizeExtremeHigh) score += selfInfo(1 - normalCdf(CONFIG.sizeExtremeHigh));
+    const size = normalPick(seed, partSalt + "_pattern_size", CONFIG.sizeMean, CONFIG.sizeStdDev);
+    if (size < CONFIG.sizeExtremeLow)
+      score += selfInfo(normalCdf(CONFIG.sizeExtremeLow, CONFIG.sizeMean, CONFIG.sizeStdDev));
+    else if (size > CONFIG.sizeExtremeHigh)
+      score += selfInfo(1 - normalCdf(CONFIG.sizeExtremeHigh, CONFIG.sizeMean, CONFIG.sizeStdDev));
 
     const opacity = CONFIG.opacityMin
       + roll01(seed, partSalt + "_pattern_opacity") * (CONFIG.opacityMax - CONFIG.opacityMin);
@@ -384,7 +392,31 @@ function generateTraits(seed) {
   const dorsal = generatePart("dorsal");
   const pectoral = generatePart("pectoral");
 
-  return { shimmerTier: tier, shimmerColor, shimmerOpacity, tail, dorsal, pectoral, rarityScore: score };
+  // Movimento: velocidades em normal(50,20), extremos entram no score com
+  // peso reduzido; amplitudes uniformes ficam fora do score (mesma ordem do C#)
+  const mv = CONFIG.movement;
+  function movementExtremeInfo(speed) {
+    let probability;
+    if (speed < mv.speedExtremeLow)
+      probability = normalCdf(mv.speedExtremeLow, mv.speedMean, mv.speedStdDev);
+    else if (speed > mv.speedExtremeHigh)
+      probability = 1 - normalCdf(mv.speedExtremeHigh, mv.speedMean, mv.speedStdDev);
+    else
+      return 0;
+    return mv.scoreWeight * selfInfo(probability);
+  }
+
+  const tailSpeed = normalPick(seed, "tail_speed", mv.speedMean, mv.speedStdDev);
+  score += movementExtremeInfo(tailSpeed);
+  const tailAmplitude = mv.tailAmpMin + roll01(seed, "tail_wag_amplitude") * (mv.tailAmpMax - mv.tailAmpMin);
+
+  const finSpeed = normalPick(seed, "fin_speed", mv.speedMean, mv.speedStdDev);
+  score += movementExtremeInfo(finSpeed);
+  const finAmplitude = mv.finAmpMin + roll01(seed, "fin_wag_amplitude") * (mv.finAmpMax - mv.finAmpMin);
+
+  const movement = { tailSpeed, tailAmplitude, finSpeed, finAmplitude };
+
+  return { shimmerTier: tier, shimmerColor, shimmerOpacity, tail, dorsal, pectoral, movement, rarityScore: score };
 }
 
 function tierOf(seed) {
@@ -433,9 +465,9 @@ const PT = {
 
 const BANDS = [
   { max: 5.0, name: "Comum", color: "var(--r-comum)" },
-  { max: 6.6, name: "Incomum", color: "var(--r-incomum)" },
-  { max: 8.3, name: "Raro", color: "var(--r-raro)" },
-  { max: 11.0, name: "Épico", color: "var(--r-epico)" },
+  { max: 6.7, name: "Incomum", color: "var(--r-incomum)" },
+  { max: 8.4, name: "Raro", color: "var(--r-raro)" },
+  { max: 11.2, name: "Épico", color: "var(--r-epico)" },
   { max: Infinity, name: "Lendário", color: "var(--r-lendario)" },
 ];
 
@@ -670,6 +702,7 @@ function render(seed) {
   currentSeed = seed;
   currentTraits = generateTraits(seed);
   seedInput.value = seed.toString();
+  syncMovementFromTraits(currentTraits.movement);
 
   const band = bandOf(currentTraits.rarityScore);
   badge.textContent = band.name;
@@ -720,6 +753,18 @@ const mvSliders = {
   finSpeed: [document.getElementById("mv-fin-speed"), document.getElementById("out-fin-speed"), 0],
   finAmp: [document.getElementById("mv-fin-amp"), document.getElementById("out-fin-amp"), 2],
 };
+
+function syncMovementFromTraits(m) {
+  movement.tailSpeed = m.tailSpeed;
+  movement.tailAmp = m.tailAmplitude;
+  movement.finSpeed = m.finSpeed;
+  movement.finAmp = m.finAmplitude;
+  for (const [key, [slider, output, decimals]] of Object.entries(mvSliders)) {
+    slider.value = movement[key];
+    output.textContent = movement[key].toFixed(decimals);
+  }
+  updateMovementReadout();
+}
 
 function updateMovementReadout() {
   const tailMs = periodOf(movement.tailSpeed, MOVEMENT_TUNING.tailPeriodMax, MOVEMENT_TUNING.tailPeriodMin);

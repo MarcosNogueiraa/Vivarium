@@ -25,9 +25,9 @@ export const PT = {
 // Faixas calibradas via simulação (CLAUDE.md seção 5)
 export const BANDS = [
   { max: 5.0, name: "Comum", color: "#93a7b0" },
-  { max: 6.6, name: "Incomum", color: "#57b876" },
-  { max: 8.3, name: "Raro", color: "#4d8fe0" },
-  { max: 11.0, name: "Épico", color: "#a86ce4" },
+  { max: 6.7, name: "Incomum", color: "#57b876" },
+  { max: 8.4, name: "Raro", color: "#4d8fe0" },
+  { max: 11.2, name: "Épico", color: "#a86ce4" },
   { max: Infinity, name: "Lendário", color: "#f0b93b" },
 ];
 export const bandOf = (score) => BANDS.find((b) => score < b.max);
@@ -50,6 +50,22 @@ const PECTORAL_BBOX = [220, 240, 70, 56];
 const BODY_BBOX = [128, 124, 260, 172];
 const TAIL_JOINT = [380, 210];
 const PECTORAL_JOINT = [228, 246];
+
+// Mapeamento visual dos traits de movimento (velocidade 0-100 vem do motor)
+export const MOVEMENT_TUNING = {
+  tailPeriodMax: 260, tailPeriodMin: 40,   // v=0 → Max (lenta), v=100 → Min (rápida)
+  finPeriodMax: 260, finPeriodMin: 40,
+  swimBase: 12, swimRange: 70, swimTailWeight: 0.75,
+};
+
+const periodOf = (speed, max, min) => max - (speed / 100) * (max - min);
+
+/** Velocidade de nado em px/s, calculada dos traits (cauda rápida = peixe rápido). */
+export function swimSpeedOf(traits) {
+  const w = MOVEMENT_TUNING.swimTailWeight;
+  const factor = w * (traits.movement.tailSpeed / 100) + (1 - w) * (traits.movement.finSpeed / 100);
+  return MOVEMENT_TUNING.swimBase + factor * MOVEMENT_TUNING.swimRange;
+}
 
 function drawPattern(ctx, seed, part, path, bbox) {
   if (part.pattern === "None") return;
@@ -143,11 +159,17 @@ function drawShimmer(ctx, traits, time) {
  * o nado quando há vários peixes na tela.
  */
 export function drawFish(ctx, seed, traits, time = 0, phase = 0) {
-  const wag = time === 0 ? 0 : Math.sin(time / 160 + phase) * 0.16;
+  const m = traits.movement;
+  const tailWag = time === 0 ? 0
+    : Math.sin(time / periodOf(m.tailSpeed, MOVEMENT_TUNING.tailPeriodMax, MOVEMENT_TUNING.tailPeriodMin) + phase)
+      * m.tailAmplitude;
+  const finWag = time === 0 ? 0
+    : Math.sin(time / periodOf(m.finSpeed, MOVEMENT_TUNING.finPeriodMax, MOVEMENT_TUNING.finPeriodMin) + phase * 1.7)
+      * m.finAmplitude;
 
   ctx.save();
   ctx.translate(TAIL_JOINT[0], TAIL_JOINT[1]);
-  ctx.rotate(wag);
+  ctx.rotate(tailWag);
   ctx.translate(-TAIL_JOINT[0], -TAIL_JOINT[1]);
   fillPart(ctx, tailPath, traits.tail.color);
   drawPattern(ctx, seed, traits.tail, tailPath, TAIL_BBOX);
@@ -177,7 +199,7 @@ export function drawFish(ctx, seed, traits, time = 0, phase = 0) {
 
   ctx.save();
   ctx.translate(PECTORAL_JOINT[0], PECTORAL_JOINT[1]);
-  ctx.rotate(wag * 0.7);
+  ctx.rotate(finWag);
   ctx.translate(-PECTORAL_JOINT[0], -PECTORAL_JOINT[1]);
   fillPart(ctx, pectoralPath, traits.pectoral.color);
   drawPattern(ctx, seed, traits.pectoral, pectoralPath, PECTORAL_BBOX);
