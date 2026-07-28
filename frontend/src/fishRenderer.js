@@ -59,9 +59,11 @@ export const MOVEMENT_TUNING = {
   // "viaja" da base (u=0) à ponta (u=1), formando a curva em S. ampBase é o
   // deslocamento na ponta em px (multiplicado pela amplitude sorteada do peixe).
   // jointX/len definem o eixo ao longo do qual a onda viaja.
-  tailWave: { ampBase: 34, waveNumber: 3.2, exp: 1.4, strips: 28, jointX: 380, len: 78 },
-  dorsalWave: { ampBase: 10, waveNumber: 2.2, exp: 1.1, strips: 20, jointX: 224, len: 110 },
-  pectoralWave: { ampBase: 14, waveNumber: 2.0, exp: 1.2, strips: 18, jointX: 220, len: 72 },
+  tailWave: { ampBase: 34, waveNumber: 3.2, exp: 1.4, strips: 28, jointX: 380, len: 78, yBias: 0 },
+  // dorsal: baixa 3px (afunda a base no corpo, que é desenhado por cima) e onda
+  // pequena, pra a borda de baixo nunca subir e abrir vão com o corpo
+  dorsalWave: { ampBase: 4, waveNumber: 2.2, exp: 1.1, strips: 20, jointX: 224, len: 110, yBias: 3 },
+  pectoralWave: { ampBase: 14, waveNumber: 2.0, exp: 1.2, strips: 18, jointX: 220, len: 72, yBias: 0 },
   spriteMargin: 3,
 };
 
@@ -165,8 +167,9 @@ function getPartSprite(seed, name, part, path, bbox) {
  */
 function wavyBlit(ctx, sprite, cfg, ampTip, period, time, phaseArg) {
   const { canvas, ox, oy } = sprite;
+  const yBias = cfg.yBias ?? 0;
   if (time === 0 || ampTip === 0) {
-    ctx.drawImage(canvas, ox, oy);
+    ctx.drawImage(canvas, ox, oy + yBias);
     return;
   }
   const basePhase = time / period + phaseArg;
@@ -175,7 +178,7 @@ function wavyBlit(ctx, sprite, cfg, ampTip, period, time, phaseArg) {
     const sx = i * stripW;
     const u = Math.min(1, Math.max(0, (ox + sx + stripW / 2 - cfg.jointX) / cfg.len));
     const amp = ampTip * Math.pow(u, cfg.exp);
-    const offset = amp * Math.sin(basePhase - cfg.waveNumber * u);
+    const offset = yBias + amp * Math.sin(basePhase - cfg.waveNumber * u);
     // +1 de largura pra sobrepor as fatias e não deixar costura
     ctx.drawImage(canvas, sx, 0, stripW + 1, canvas.height, ox + sx, oy + offset, stripW + 1, canvas.height);
   }
