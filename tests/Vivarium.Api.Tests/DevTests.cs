@@ -37,4 +37,28 @@ public class DevTests : IClassFixture<VivariumApiFactory>
         var sixth = await client.PostAsync("/api/dev/spawn", null);
         Assert.Equal(HttpStatusCode.BadRequest, sixth.StatusCode);
     }
+
+    [Fact]
+    public async Task Clear_RemoveTodosOsPeixesDoTanque()
+    {
+        var (client, _) = await _factory.RegisterAsync("devclear1");
+
+        // gera e coleta 2 peixes
+        for (int i = 0; i < 2; i++)
+        {
+            (await client.PostAsync("/api/dev/spawn", null)).EnsureSuccessStatusCode();
+            var tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
+            var ready = tank!.Queue.First(q => q.IsReady);
+            (await client.PostAsync($"/api/game/collect/{ready.Id}", null)).EnsureSuccessStatusCode();
+        }
+
+        var before = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
+        Assert.Equal(2, before!.Creatures.Count);
+
+        var response = await client.PostAsync("/api/dev/clear", null);
+        response.EnsureSuccessStatusCode();
+
+        var after = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
+        Assert.Empty(after!.Creatures);
+    }
 }

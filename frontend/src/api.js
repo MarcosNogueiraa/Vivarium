@@ -51,6 +51,7 @@ export const api = {
   items: () => request("GET", "/api/items/"),
   buyItem: (key) => request("POST", `/api/items/${key}/buy`),
   devSpawn: () => request("POST", "/api/dev/spawn"),
+  devClear: () => request("POST", "/api/dev/clear"),
   transferCreature: (id, toUsername) =>
     request("POST", `/api/game/creatures/${id}/transfer`, { toUsername }),
 };

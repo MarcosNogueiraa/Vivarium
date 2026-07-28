@@ -230,6 +230,17 @@ function TankView({ tank, refresh, notify }) {
     }
   }
 
+  async function devClear() {
+    try {
+      const { removed } = await api.devClear();
+      setSelectedId(null);
+      notify(`${removed} peixe(s) removido(s).`);
+      await refresh();
+    } catch (err) {
+      notify(err.message);
+    }
+  }
+
   async function buyFilter() {
     try {
       await api.buyItem("filter_basic");
@@ -308,7 +319,14 @@ function TankView({ tank, refresh, notify }) {
       </section>
 
       <section>
-        <h2>Tanque ({tank.creatures.length}/{tank.capacity})</h2>
+        <h2>
+          Tanque ({tank.creatures.length}/{tank.capacity})
+          {import.meta.env.DEV && tank.creatures.length > 0 && (
+            <button className="dev-btn" onClick={devClear} title="Só existe em dev">
+              🧹 Limpar peixes (dev)
+            </button>
+          )}
+        </h2>
         <div className="aquarium-wrap">
           <AquariumCanvas
             creatures={tank.creatures}

@@ -42,5 +42,19 @@ public static class DevEndpoints
             await db.SaveChangesAsync();
             return Results.Ok(new { pending = pending + 1 });
         });
+
+        // Remove todos os peixes do tanque do jogador (não toca em criaturas
+        // listadas no mercado — essas estão fora do tanque, HabitatId null)
+        group.MapPost("/clear", async (ClaimsPrincipal principal, VivariumDbContext db, GameService game) =>
+        {
+            var habitat = await game.FindHabitatAsync(TokenService.GetUserId(principal));
+            if (habitat is null)
+                return Results.NotFound();
+
+            int removed = await db.CreatureInstances
+                .Where(c => c.HabitatId == habitat.Id)
+                .ExecuteDeleteAsync();
+            return Results.Ok(new { removed });
+        });
     }
 }
