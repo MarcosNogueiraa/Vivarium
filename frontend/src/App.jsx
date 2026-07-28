@@ -1,7 +1,119 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, clearToken, getToken, setToken } from "./api.js";
-import { generateTraits } from "./generator.js";
+import { generateTraits, roll01 } from "./generator.js";
 import { bandOf, drawFish, PT, VIEW_H, VIEW_W } from "./fishRenderer.js";
+
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// Centro aproximado do peixe nas coordenadas do renderizador (pra girar/espelhar)
+const FISH_CX = 290;
+const FISH_CY = 210;
+
+function AquariumCanvas({ creatures, selectedId, onSelect }) {
+  const W = 960;
+  const H = 480;
+  const SCALE = 0.34;
+  const canvasRef = useRef(null);
+  const statesRef = useRef(new Map());
+  const creaturesRef = useRef([]);
+  const selectedRef = useRef(null);
+
+  creaturesRef.current = useMemo(
+    () => creatures.map((c) => {
+      const bigSeed = BigInt(c.seed);
+      return { ...c, bigSeed, traits: generateTraits(bigSeed) };
+    }),
+    [creatures],
+  );
+  selectedRef.current = selectedId;
+
+  useEffect(() => {
+    const ctx = canvasRef.current.getContext("2d");
+    let raf;
+    let last = performance.now();
+
+    function frame(now) {
+      const dt = reducedMotion ? 0 : Math.min((now - last) / 1000, 0.1);
+      last = now;
+      const time = reducedMotion ? 0 : now;
+
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+
+      // bolhas subindo
+      ctx.fillStyle = "rgba(190,225,235,0.14)";
+      for (let i = 0; i < 7; i++) {
+        const speed = 20 + i * 8;
+        const bx = 70 + i * 130 + Math.sin(time / 1400 + i * 2.1) * 12;
+        const by = H + 20 - (((time / 1000) * speed + i * 160) % (H + 60));
+        ctx.beginPath();
+        ctx.arc(bx, by, 2 + (i % 3), 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      for (const c of creaturesRef.current) {
+        let s = statesRef.current.get(c.id);
+        if (!s) {
+          // posição/velocidade iniciais determinísticas pelo seed (layout estável)
+          s = {
+            x: 120 + roll01(c.bigSeed, "pos_x") * (W - 240),
+            y: 100 + roll01(c.bigSeed, "pos_y") * (H - 200),
+            vx: (roll01(c.bigSeed, "dir") < 0.5 ? -1 : 1) * (26 + roll01(c.bigSeed, "speed") * 34),
+            phase: roll01(c.bigSeed, "phase") * Math.PI * 2,
+          };
+          statesRef.current.set(c.id, s);
+        }
+
+        s.x += s.vx * dt;
+        if (s.x < 90) { s.x = 90; s.vx = Math.abs(s.vx); }
+        if (s.x > W - 90) { s.x = W - 90; s.vx = -Math.abs(s.vx); }
+        const y = s.y + Math.sin(time / 900 + s.phase) * 7;
+
+        if (c.id === selectedRef.current) {
+          ctx.save();
+          ctx.strokeStyle = "rgba(63,198,218,0.8)";
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.ellipse(s.x, y + 34, 62, 16, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        ctx.save();
+        ctx.translate(s.x, y);
+        // sprite nativo olha pra esquerda: espelha quando nada pra direita
+        ctx.scale(s.vx > 0 ? -SCALE : SCALE, SCALE);
+        ctx.translate(-FISH_CX, -FISH_CY);
+        drawFish(ctx, c.bigSeed, c.traits, time, s.phase);
+        ctx.restore();
+      }
+
+      if (!reducedMotion) raf = requestAnimationFrame(frame);
+    }
+
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  function handleClick(e) {
+    const rect = canvasRef.current.getBoundingClientRect();
+    const px = (e.clientX - rect.left) * (W / rect.width);
+    const py = (e.clientY - rect.top) * (H / rect.height);
+    const hit = creaturesRef.current.find((c) => {
+      const s = statesRef.current.get(c.id);
+      return s && Math.abs(px - s.x) < 70 && Math.abs(py - s.y) < 55;
+    });
+    onSelect(hit ? hit.id : null);
+  }
+
+  return (
+    <canvas
+      ref={canvasRef} width={W} height={H}
+      className="aquarium" onClick={handleClick}
+      role="img" aria-label="Aquário com seus peixes"
+    />
+  );
+}
 
 const HEARTBEAT_MS = 60_000; // CLAUDE.md 8.3
 const TANK_REFRESH_MS = 30_000;
@@ -96,6 +208,9 @@ function AuthView({ onAuthed }) {
 }
 
 function TankView({ tank, refresh, notify }) {
+  const [selectedId, setSelectedId] = useState(null);
+  const selected = tank.creatures.find((c) => c.id === selectedId) ?? null;
+
   async function collect(itemId) {
     try {
       await api.collect(itemId);
@@ -130,6 +245,20 @@ function TankView({ tank, refresh, notify }) {
     try {
       await api.createListing(creature.id, Number(price));
       notify("Peixe listado no mercado.");
+      setSelectedId(null);
+      await refresh();
+    } catch (err) {
+      notify(err.message);
+    }
+  }
+
+  async function transfer(creature) {
+    const toUsername = window.prompt("Transferir para qual jogador (username)?");
+    if (!toUsername) return;
+    try {
+      await api.transferCreature(creature.id, toUsername.trim());
+      notify(`Transferido para ${toUsername.trim()}.`);
+      setSelectedId(null);
       await refresh();
     } catch (err) {
       notify(err.message);
@@ -179,19 +308,30 @@ function TankView({ tank, refresh, notify }) {
 
       <section>
         <h2>Tanque ({tank.creatures.length}/{tank.capacity})</h2>
-        {tank.creatures.length === 0 && <p className="muted">Tanque vazio. Colete da fila!</p>}
-        <div className="grid">
-          {tank.creatures.map((c) => (
-            <div key={c.id} className="card">
-              <FishCanvas seed={c.seed} />
-              <ShimmerLabel seed={c.seed} />
-              <div className="card-row">
-                <RarityBadge score={Number(c.rarityScore)} />
-                <button onClick={() => sell(c)}>Vender</button>
-              </div>
-            </div>
-          ))}
+        <div className="aquarium-wrap">
+          <AquariumCanvas
+            creatures={tank.creatures}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+          />
+          {tank.creatures.length === 0 && (
+            <p className="muted aquarium-empty">Tanque vazio. Colete da fila!</p>
+          )}
         </div>
+        {selected ? (
+          <div className="selected-bar">
+            <RarityBadge score={Number(selected.rarityScore)} />
+            <ShimmerLabel seed={selected.seed} />
+            <span className="muted mono">seed {selected.seed}</span>
+            <span className="spacer" />
+            <button onClick={() => sell(selected)}>Vender no mercado</button>
+            <button onClick={() => transfer(selected)}>Transferir</button>
+          </div>
+        ) : (
+          tank.creatures.length > 0 && (
+            <p className="muted">Clique num peixe pra ver detalhes, vender ou transferir.</p>
+          )
+        )}
       </section>
     </>
   );

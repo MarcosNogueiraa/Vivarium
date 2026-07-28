@@ -82,6 +82,24 @@ input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
 .dev-btn { margin-left: 12px; font-size: 0.75rem; border-style: dashed; }
 
+.aquarium-wrap {
+  position: relative;
+  background: linear-gradient(180deg, #0d3244 0%, #092331 60%, #071b26 100%);
+  border: 1px solid var(--line); border-radius: 12px;
+  overflow: hidden; margin-bottom: 10px;
+}
+.aquarium { display: block; width: 100%; height: auto; cursor: pointer; }
+.aquarium-empty {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+}
+.selected-bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--panel); border: 1px solid var(--accent); border-radius: 8px;
+  padding: 10px 14px;
+}
+.selected-bar .spacer { flex: 1; }
+.mono { font-family: ui-monospace, Consolas, monospace; font-size: 0.8rem; }
+
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
   background: var(--panel); border: 1px solid var(--accent); border-radius: 8px;

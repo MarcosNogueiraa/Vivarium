@@ -48,6 +48,8 @@ const TAIL_BBOX = [372, 148, 84, 124];
 const DORSAL_BBOX = [224, 78, 110, 68];
 const PECTORAL_BBOX = [220, 240, 70, 56];
 const BODY_BBOX = [128, 124, 260, 172];
+const TAIL_JOINT = [380, 210];
+const PECTORAL_JOINT = [228, 246];
 
 function drawPattern(ctx, seed, part, path, bbox) {
   if (part.pattern === "None") return;
@@ -135,10 +137,21 @@ function drawShimmer(ctx, traits, time) {
   ctx.restore();
 }
 
-/** Desenha o peixe inteiro. `seed` (BigInt) só é usado pra manchas determinísticas. */
-export function drawFish(ctx, seed, traits, time = 0) {
+/**
+ * Desenha o peixe inteiro. `seed` (BigInt) só é usado pra manchas determinísticas;
+ * `time` anima cauda/peitoral e o shimmer iridescente; `phase` dessincroniza
+ * o nado quando há vários peixes na tela.
+ */
+export function drawFish(ctx, seed, traits, time = 0, phase = 0) {
+  const wag = time === 0 ? 0 : Math.sin(time / 420 + phase) * 0.055;
+
+  ctx.save();
+  ctx.translate(TAIL_JOINT[0], TAIL_JOINT[1]);
+  ctx.rotate(wag);
+  ctx.translate(-TAIL_JOINT[0], -TAIL_JOINT[1]);
   fillPart(ctx, tailPath, traits.tail.color);
   drawPattern(ctx, seed, traits.tail, tailPath, TAIL_BBOX);
+  ctx.restore();
 
   fillPart(ctx, dorsalPath, traits.dorsal.color);
   drawPattern(ctx, seed, traits.dorsal, dorsalPath, DORSAL_BBOX);
@@ -162,6 +175,11 @@ export function drawFish(ctx, seed, traits, time = 0) {
   ctx.fillStyle = "rgba(255,255,255,0.85)";
   ctx.beginPath(); ctx.arc(184, 196.5, 1.6, 0, Math.PI * 2); ctx.fill();
 
+  ctx.save();
+  ctx.translate(PECTORAL_JOINT[0], PECTORAL_JOINT[1]);
+  ctx.rotate(wag * 0.5);
+  ctx.translate(-PECTORAL_JOINT[0], -PECTORAL_JOINT[1]);
   fillPart(ctx, pectoralPath, traits.pectoral.color);
   drawPattern(ctx, seed, traits.pectoral, pectoralPath, PECTORAL_BBOX);
+  ctx.restore();
 }
