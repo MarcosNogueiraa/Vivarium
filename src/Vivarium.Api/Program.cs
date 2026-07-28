@@ -62,6 +62,9 @@ app.MapGameEndpoints();
 app.MapMarketEndpoints();
 app.MapItemEndpoints();
 
+if (app.Environment.IsDevelopment())
+    app.MapDevEndpoints();
+
 app.Run();
 
 // Exposto pros testes de integração (WebApplicationFactory)

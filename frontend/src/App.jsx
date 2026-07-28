@@ -105,6 +105,15 @@ function TankView({ tank, refresh, notify }) {
     }
   }
 
+  async function devSpawn() {
+    try {
+      await api.devSpawn();
+      await refresh();
+    } catch (err) {
+      notify(err.message);
+    }
+  }
+
   async function buyFilter() {
     try {
       await api.buyItem("filter_basic");
@@ -147,7 +156,14 @@ function TankView({ tank, refresh, notify }) {
       </section>
 
       <section>
-        <h2>Fila de geração ({tank.queue.length}/{tank.queueCap})</h2>
+        <h2>
+          Fila de geração ({tank.queue.length}/{tank.queueCap})
+          {import.meta.env.DEV && (
+            <button className="dev-btn" onClick={devSpawn} title="Só existe em dev">
+              🐣 Gerar peixe (dev)
+            </button>
+          )}
+        </h2>
         {tank.queue.length === 0 && <p className="muted">Nada na fila ainda — os peixes surgem com o tempo.</p>}
         <div className="queue">
           {tank.queue.map((item) => (

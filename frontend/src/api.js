@@ -50,4 +50,5 @@ export const api = {
   buyListing: (id) => request("POST", `/api/market/listings/${id}/buy`),
   items: () => request("GET", "/api/items/"),
   buyItem: (key) => request("POST", `/api/items/${key}/buy`),
+  devSpawn: () => request("POST", "/api/dev/spawn"),
 };
