@@ -259,3 +259,159 @@ export function drawFish(ctx, seed, traits, time = 0, phase = 0) {
 
   ctx.imageSmoothingEnabled = prevSmoothing;
 }
+
+// ==================== Ambiente do aquário ====================
+// Cena imersiva: profundidade de água, raios de luz cáustica, plantas, substrato,
+// partículas e vidro. Deterministic por índice → layout estável entre frames.
+
+const hash01 = (n) => {
+  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+};
+
+// Clumps de plantas (posições fixas). back = atrás dos peixes, front = na frente.
+const PLANTS_BACK = [
+  { x: 0.08, h: 210, blades: 6, hue: 168 },
+  { x: 0.30, h: 150, blades: 5, hue: 150 },
+  { x: 0.62, h: 240, blades: 7, hue: 172 },
+  { x: 0.86, h: 180, blades: 6, hue: 158 },
+];
+const PLANTS_FRONT = [
+  { x: 0.19, h: 130, blades: 5, hue: 150 },
+  { x: 0.74, h: 160, blades: 6, hue: 164 },
+];
+
+function drawPlantClump(ctx, baseX, baseY, clump, time, alpha, sat, light) {
+  const { h, blades, hue } = clump;
+  for (let b = 0; b < blades; b++) {
+    const t = blades > 1 ? b / (blades - 1) : 0.5;
+    const bh = h * (0.55 + 0.5 * hash01(baseX * 0.7 + b * 3.1));
+    const lean = (t - 0.5) * bh * 0.5;
+    const sway = Math.sin(time / 1300 + baseX * 0.02 + b * 0.8) * (10 + bh * 0.06);
+    const cx = baseX + lean;
+    ctx.beginPath();
+    ctx.moveTo(baseX + lean * 0.2, baseY);
+    ctx.quadraticCurveTo(cx + sway * 0.5, baseY - bh * 0.55, cx * 1 + lean * 0.4 + sway, baseY - bh);
+    ctx.lineWidth = 6 * (1 - t * 0.4);
+    ctx.lineCap = "round";
+    ctx.strokeStyle = `hsla(${hue + b * 4}, ${sat}%, ${light}%, ${alpha})`;
+    ctx.stroke();
+  }
+}
+
+/** Fundo: gradiente de água, raios de luz, plantas de trás, substrato. */
+export function drawTankBackground(ctx, W, H, time) {
+  // 1. Profundidade da água
+  const water = ctx.createLinearGradient(0, 0, 0, H);
+  water.addColorStop(0, "#0e4d5b");
+  water.addColorStop(0.35, "#0a3543");
+  water.addColorStop(0.72, "#072530");
+  water.addColorStop(1, "#03151c");
+  ctx.fillStyle = water;
+  ctx.fillRect(0, 0, W, H);
+
+  // 2. Brilho da superfície + linha d'água ondulando
+  const surf = ctx.createLinearGradient(0, 0, 0, 70);
+  surf.addColorStop(0, "rgba(150, 240, 235, 0.22)");
+  surf.addColorStop(1, "rgba(150, 240, 235, 0)");
+  ctx.fillStyle = surf;
+  ctx.fillRect(0, 0, W, 70);
+
+  // 3. Raios de luz cáustica (diagonais, oscilando)
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  const beams = 4;
+  for (let i = 0; i < beams; i++) {
+    const sway = Math.sin(time / 4200 + i * 1.4) * 34;
+    const x = (i + 0.5) * (W / beams) + sway;
+    const grad = ctx.createLinearGradient(x, 0, x + 70, H * 0.92);
+    grad.addColorStop(0, `rgba(130, 235, 224, ${0.10 + 0.04 * Math.sin(time / 3000 + i)})`);
+    grad.addColorStop(1, "rgba(130, 235, 224, 0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(x - 26, 0);
+    ctx.lineTo(x + 26, 0);
+    ctx.lineTo(x + 130, H * 0.92);
+    ctx.lineTo(x + 10, H * 0.92);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // 4. Plantas de trás (silhueta escura, atrás dos peixes)
+  for (const clump of PLANTS_BACK)
+    drawPlantClump(ctx, clump.x * W, H - 30, clump, time, 0.5, 42, 24);
+
+  // 5. Substrato (areia/cascalho)
+  const bandH = 52;
+  const sub = ctx.createLinearGradient(0, H - bandH, 0, H);
+  sub.addColorStop(0, "rgba(12, 46, 44, 0)");
+  sub.addColorStop(0.35, "#0c302e");
+  sub.addColorStop(1, "#123a34");
+  ctx.fillStyle = sub;
+  ctx.fillRect(0, H - bandH, W, bandH);
+  for (let i = 0; i < 46; i++) {
+    const px = hash01(i * 3.3 + 1) * W;
+    const py = H - hash01(i * 3.3 + 2) * bandH * 0.7;
+    const r = 1.5 + hash01(i * 3.3 + 3) * 4;
+    const l = 26 + hash01(i * 3.3 + 4) * 22;
+    ctx.fillStyle = `hsl(${160 + hash01(i) * 20}, 24%, ${l}%)`;
+    ctx.beginPath();
+    ctx.ellipse(px, py, r, r * 0.72, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/** Frente: plantas da frente, partículas suspensas, bolhas, vinheta de vidro. */
+export function drawTankForeground(ctx, W, H, time) {
+  // Plantas da frente (um pouco mais claras)
+  for (const clump of PLANTS_FRONT)
+    drawPlantClump(ctx, clump.x * W, H - 26, clump, time, 0.62, 46, 32);
+
+  // Partículas em suspensão (detritos finos subindo devagar)
+  ctx.save();
+  ctx.fillStyle = "rgba(200, 235, 240, 0.5)";
+  for (let i = 0; i < 44; i++) {
+    const speed = 5 + hash01(i * 2.1) * 12;
+    const px = (hash01(i * 2.7) * W + Math.sin(time / 2600 + i) * 16 + W) % W;
+    const py = H - (((time / 1000) * speed + hash01(i * 1.9) * H) % (H + 20));
+    ctx.globalAlpha = 0.12 + hash01(i) * 0.22;
+    ctx.beginPath();
+    ctx.arc(px, py, 0.6 + hash01(i * 5.1) * 1.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Bolhas (colunas subindo, oscilando)
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (let i = 0; i < 9; i++) {
+    const col = hash01(i * 4.2) * W;
+    const speed = 34 + hash01(i * 4.6) * 30;
+    const bx = col + Math.sin(time / 900 + i * 2.3) * 10;
+    const by = H - (((time / 1000) * speed + hash01(i * 3.3) * H) % (H + 40));
+    const r = 1.6 + hash01(i * 2.2) * 3;
+    ctx.strokeStyle = "rgba(180, 240, 245, 0.35)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(bx, by, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(200, 245, 250, 0.10)";
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Vinheta + escurecimento das bordas (sensação de olhar pra dentro do vidro)
+  const vg = ctx.createRadialGradient(W / 2, H * 0.46, H * 0.28, W / 2, H * 0.5, H * 0.92);
+  vg.addColorStop(0, "rgba(0, 0, 0, 0)");
+  vg.addColorStop(1, "rgba(1, 12, 16, 0.6)");
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Reflexo de vidro no topo (leve faixa clara)
+  const glass = ctx.createLinearGradient(0, 0, W * 0.4, H * 0.35);
+  glass.addColorStop(0, "rgba(200, 245, 250, 0.06)");
+  glass.addColorStop(1, "rgba(200, 245, 250, 0)");
+  ctx.fillStyle = glass;
+  ctx.fillRect(0, 0, W, H * 0.4);
+}
