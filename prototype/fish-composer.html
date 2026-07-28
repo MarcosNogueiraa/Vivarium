@@ -79,6 +79,15 @@
   .tiers { display: flex; gap: 6px; flex-wrap: wrap; }
   .tiers button { font-size: 0.78rem; padding: 5px 10px; }
 
+  .movement { border-top: 1px solid var(--line); padding-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+  .slider-row { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; }
+  .slider-row > span { color: var(--muted); width: 110px; flex-shrink: 0; font-size: 0.8rem; }
+  .slider-row input[type="range"] { flex: 1; accent-color: var(--accent); }
+  .slider-row output { font-family: var(--mono); font-variant-numeric: tabular-nums; width: 44px; text-align: right; }
+  .mv-readout { color: var(--muted); font-family: var(--mono); font-size: 0.78rem; }
+  .presets { display: flex; gap: 6px; }
+  .presets button { font-size: 0.78rem; padding: 5px 10px; }
+
   .badge-row { display: flex; align-items: center; gap: 10px; }
   .badge {
     padding: 3px 12px; border-radius: 999px;
@@ -137,6 +146,36 @@
     </div>
 
     <div class="traits" id="traits"></div>
+
+    <div class="movement">
+      <label>Movimento (calibração manual — não afeta o sorteio)</label>
+      <div class="slider-row">
+        <span>Vel. cauda</span>
+        <input type="range" id="mv-tail-speed" min="0" max="100" step="1" value="50">
+        <output id="out-tail-speed">50</output>
+      </div>
+      <div class="slider-row">
+        <span>Amp. cauda</span>
+        <input type="range" id="mv-tail-amp" min="0.20" max="1.40" step="0.01" value="0.75">
+        <output id="out-tail-amp">0.75</output>
+      </div>
+      <div class="slider-row">
+        <span>Vel. nadadeira</span>
+        <input type="range" id="mv-fin-speed" min="0" max="100" step="1" value="50">
+        <output id="out-fin-speed">50</output>
+      </div>
+      <div class="slider-row">
+        <span>Amp. nadadeira</span>
+        <input type="range" id="mv-fin-amp" min="0.15" max="1.00" step="0.01" value="0.50">
+        <output id="out-fin-amp">0.50</output>
+      </div>
+      <div class="mv-readout" id="mv-readout"></div>
+      <div class="presets">
+        <button data-preset="slow">Extremo lento</button>
+        <button data-preset="mid">Médio</button>
+        <button data-preset="fast">Extremo rápido</button>
+      </div>
+    </div>
   </aside>
 </main>
 
@@ -355,6 +394,27 @@ function tierOf(seed) {
 
 // ---------- Renderização ----------
 
+// Mapeamento velocidade (0-100) → período da batida e nado do peixe.
+// Edite aqui pra calibrar; quando os ranges forem aprovados, viram config do motor.
+const MOVEMENT_TUNING = {
+  tailPeriodMax: 260, tailPeriodMin: 40,   // v=0 → Max (lenta), v=100 → Min (rápida)
+  finPeriodMax: 260,  finPeriodMin: 40,
+  swimBase: 12, swimRange: 70, swimTailWeight: 0.75,
+};
+
+// Estado dos sliders de calibração (não vem do seed — ferramenta visual)
+const movement = { tailSpeed: 50, tailAmp: 0.75, finSpeed: 50, finAmp: 0.5 };
+
+function periodOf(speed, max, min) {
+  return max - (speed / 100) * (max - min);
+}
+
+function swimSpeedOf() {
+  const w = MOVEMENT_TUNING.swimTailWeight;
+  const factor = w * (movement.tailSpeed / 100) + (1 - w) * (movement.finSpeed / 100);
+  return MOVEMENT_TUNING.swimBase + factor * MOVEMENT_TUNING.swimRange;
+}
+
 const PART_HEX = {
   Orange: "#e8813a", Blue: "#3d84dc", Red: "#d94f4f", Yellow: "#ecc94b",
   Green: "#4fae6e", Purple: "#925cd1", Black: "#23272e", PureWhite: "#f2f5f7",
@@ -517,7 +577,12 @@ function drawFish(traits, time) {
   drawBubbles(time);
 
   const bob = reducedMotion ? 0 : Math.sin(time / 900) * 4;
-  const wag = reducedMotion ? 0 : Math.sin(time / 160) * 0.16;
+  const tailWag = reducedMotion ? 0
+    : Math.sin(time / periodOf(movement.tailSpeed, MOVEMENT_TUNING.tailPeriodMax, MOVEMENT_TUNING.tailPeriodMin))
+      * movement.tailAmp;
+  const finWag = reducedMotion ? 0
+    : Math.sin(time / periodOf(movement.finSpeed, MOVEMENT_TUNING.finPeriodMax, MOVEMENT_TUNING.finPeriodMin) + 1.7)
+      * movement.finAmp;
 
   ctx.save();
   ctx.translate(0, bob);
@@ -525,7 +590,7 @@ function drawFish(traits, time) {
   // 1. Cauda (atrás do corpo, com balanço próprio)
   ctx.save();
   ctx.translate(TAIL_JOINT[0], TAIL_JOINT[1]);
-  ctx.rotate(wag);
+  ctx.rotate(tailWag);
   ctx.translate(-TAIL_JOINT[0], -TAIL_JOINT[1]);
   fillPart(tailPath, traits.tail.color);
   drawPattern(traits.tail, tailPath, TAIL_BBOX);
@@ -560,7 +625,7 @@ function drawFish(traits, time) {
   // 6. Peitoral (na frente do corpo, balanço leve)
   ctx.save();
   ctx.translate(228, 246);
-  ctx.rotate(wag * 0.5);
+  ctx.rotate(finWag);
   ctx.translate(-228, -246);
   fillPart(pectoralPath, traits.pectoral.color);
   drawPattern(traits.pectoral, pectoralPath, PECTORAL_BBOX);
@@ -646,6 +711,46 @@ seedInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") document.getElementById("btn-gerar").click();
 });
 document.getElementById("btn-aleatorio").addEventListener("click", () => render(randomSeed()));
+
+// ---------- Painel de calibração de movimento ----------
+
+const mvSliders = {
+  tailSpeed: [document.getElementById("mv-tail-speed"), document.getElementById("out-tail-speed"), 0],
+  tailAmp: [document.getElementById("mv-tail-amp"), document.getElementById("out-tail-amp"), 2],
+  finSpeed: [document.getElementById("mv-fin-speed"), document.getElementById("out-fin-speed"), 0],
+  finAmp: [document.getElementById("mv-fin-amp"), document.getElementById("out-fin-amp"), 2],
+};
+
+function updateMovementReadout() {
+  const tailMs = periodOf(movement.tailSpeed, MOVEMENT_TUNING.tailPeriodMax, MOVEMENT_TUNING.tailPeriodMin);
+  const finMs = periodOf(movement.finSpeed, MOVEMENT_TUNING.finPeriodMax, MOVEMENT_TUNING.finPeriodMin);
+  document.getElementById("mv-readout").textContent =
+    `período cauda ${tailMs.toFixed(0)}ms · nadadeira ${finMs.toFixed(0)}ms · nado ${swimSpeedOf().toFixed(0)} px/s`;
+}
+
+for (const [key, [slider, output, decimals]] of Object.entries(mvSliders)) {
+  slider.addEventListener("input", () => {
+    movement[key] = Number(slider.value);
+    output.textContent = movement[key].toFixed(decimals);
+    updateMovementReadout();
+  });
+}
+
+// Presets mexem só nas velocidades (na geração real, amplitude é uniforme — extremo raro é de velocidade)
+const MV_PRESETS = { slow: 5, mid: 50, fast: 95 };
+document.querySelectorAll(".presets button").forEach(btn =>
+  btn.addEventListener("click", () => {
+    const speed = MV_PRESETS[btn.dataset.preset];
+    for (const key of ["tailSpeed", "finSpeed"]) {
+      movement[key] = speed;
+      const [slider, output, decimals] = mvSliders[key];
+      slider.value = speed;
+      output.textContent = speed.toFixed(decimals);
+    }
+    updateMovementReadout();
+  }));
+
+updateMovementReadout();
 document.querySelectorAll(".tiers button").forEach(btn =>
   btn.addEventListener("click", () => {
     const seed = findSeedWithTier(btn.dataset.tier);
