@@ -143,7 +143,7 @@ function drawShimmer(ctx, traits, time) {
  * o nado quando há vários peixes na tela.
  */
 export function drawFish(ctx, seed, traits, time = 0, phase = 0) {
-  const wag = time === 0 ? 0 : Math.sin(time / 420 + phase) * 0.055;
+  const wag = time === 0 ? 0 : Math.sin(time / 160 + phase) * 0.16;
 
   ctx.save();
   ctx.translate(TAIL_JOINT[0], TAIL_JOINT[1]);
@@ -177,7 +177,7 @@ export function drawFish(ctx, seed, traits, time = 0, phase = 0) {
 
   ctx.save();
   ctx.translate(PECTORAL_JOINT[0], PECTORAL_JOINT[1]);
-  ctx.rotate(wag * 0.5);
+  ctx.rotate(wag * 0.7);
   ctx.translate(-PECTORAL_JOINT[0], -PECTORAL_JOINT[1]);
   fillPart(ctx, pectoralPath, traits.pectoral.color);
   drawPattern(ctx, seed, traits.pectoral, pectoralPath, PECTORAL_BBOX);

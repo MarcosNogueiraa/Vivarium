@@ -517,7 +517,7 @@ function drawFish(traits, time) {
   drawBubbles(time);
 
   const bob = reducedMotion ? 0 : Math.sin(time / 900) * 4;
-  const wag = reducedMotion ? 0 : Math.sin(time / 420) * 0.055;
+  const wag = reducedMotion ? 0 : Math.sin(time / 160) * 0.16;
 
   ctx.save();
   ctx.translate(0, bob);
