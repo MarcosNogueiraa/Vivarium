@@ -48,14 +48,21 @@ const TAIL_BBOX = [372, 148, 84, 124];
 const DORSAL_BBOX = [224, 78, 110, 68];
 const PECTORAL_BBOX = [220, 240, 70, 56];
 const BODY_BBOX = [128, 124, 260, 172];
-const TAIL_JOINT = [380, 210];
-const PECTORAL_JOINT = [228, 246];
 
 // Mapeamento visual dos traits de movimento (velocidade 0-100 vem do motor)
 export const MOVEMENT_TUNING = {
   tailPeriodMax: 260, tailPeriodMin: 40,   // v=0 → Max (lenta), v=100 → Min (rápida)
   finPeriodMax: 260, finPeriodMin: 40,
   swimBase: 12, swimRange: 70, swimTailWeight: 0.75,
+
+  // Onda viajante por parte: fatias verticais deslocadas por uma senoide que
+  // "viaja" da base (u=0) à ponta (u=1), formando a curva em S. ampBase é o
+  // deslocamento na ponta em px (multiplicado pela amplitude sorteada do peixe).
+  // jointX/len definem o eixo ao longo do qual a onda viaja.
+  tailWave: { ampBase: 34, waveNumber: 3.2, exp: 1.4, strips: 28, jointX: 380, len: 78 },
+  dorsalWave: { ampBase: 10, waveNumber: 2.2, exp: 1.1, strips: 20, jointX: 224, len: 110 },
+  pectoralWave: { ampBase: 14, waveNumber: 2.0, exp: 1.2, strips: 18, jointX: 220, len: 72 },
+  spriteMargin: 3,
 };
 
 const periodOf = (speed, max, min) => max - (speed / 100) * (max - min);
@@ -127,6 +134,53 @@ function fillPart(ctx, path, color) {
   ctx.stroke(path);
 }
 
+// Rasteriza a parte (fill + padrão) uma vez num canvas offscreen e cacheia por
+// seed+nome. A onda viajante depois só reposiciona fatias desse sprite — o padrão
+// acompanha de graça, sem redesenhar por frame.
+const spriteCache = new Map();
+
+function getPartSprite(seed, name, part, path, bbox) {
+  const key = `${seed}:${name}`;
+  const cached = spriteCache.get(key);
+  if (cached) return cached;
+
+  const M = MOVEMENT_TUNING.spriteMargin;
+  const [bx, by, bw, bh] = bbox;
+  const canvas = document.createElement("canvas");
+  canvas.width = bw + 2 * M;
+  canvas.height = bh + 2 * M;
+  const sctx = canvas.getContext("2d");
+  sctx.translate(-bx + M, -by + M); // ponto absoluto (X,Y) → (X-bx+M, Y-by+M)
+  fillPart(sctx, path, part.color);
+  drawPattern(sctx, seed, part, path, bbox);
+
+  const sprite = { canvas, ox: bx - M, oy: by - M };
+  spriteCache.set(key, sprite);
+  return sprite;
+}
+
+/**
+ * Blita o sprite em fatias verticais, cada coluna deslocada por uma onda que
+ * viaja de jointX (u=0) até jointX+len (u=1). ampTip = deslocamento na ponta (px).
+ */
+function wavyBlit(ctx, sprite, cfg, ampTip, period, time, phaseArg) {
+  const { canvas, ox, oy } = sprite;
+  if (time === 0 || ampTip === 0) {
+    ctx.drawImage(canvas, ox, oy);
+    return;
+  }
+  const basePhase = time / period + phaseArg;
+  const stripW = canvas.width / cfg.strips;
+  for (let i = 0; i < cfg.strips; i++) {
+    const sx = i * stripW;
+    const u = Math.min(1, Math.max(0, (ox + sx + stripW / 2 - cfg.jointX) / cfg.len));
+    const amp = ampTip * Math.pow(u, cfg.exp);
+    const offset = amp * Math.sin(basePhase - cfg.waveNumber * u);
+    // +1 de largura pra sobrepor as fatias e não deixar costura
+    ctx.drawImage(canvas, sx, 0, stripW + 1, canvas.height, ox + sx, oy + offset, stripW + 1, canvas.height);
+  }
+}
+
 function drawShimmer(ctx, traits, time) {
   if (traits.shimmerTier === "None") return;
   const [bx, , bw] = BODY_BBOX;
@@ -160,23 +214,21 @@ function drawShimmer(ctx, traits, time) {
  */
 export function drawFish(ctx, seed, traits, time = 0, phase = 0) {
   const m = traits.movement;
-  const tailWag = time === 0 ? 0
-    : Math.sin(time / periodOf(m.tailSpeed, MOVEMENT_TUNING.tailPeriodMax, MOVEMENT_TUNING.tailPeriodMin) + phase)
-      * m.tailAmplitude;
-  const finWag = time === 0 ? 0
-    : Math.sin(time / periodOf(m.finSpeed, MOVEMENT_TUNING.finPeriodMax, MOVEMENT_TUNING.finPeriodMin) + phase * 1.7)
-      * m.finAmplitude;
+  const tailPeriod = periodOf(m.tailSpeed, MOVEMENT_TUNING.tailPeriodMax, MOVEMENT_TUNING.tailPeriodMin);
+  const finPeriod = periodOf(m.finSpeed, MOVEMENT_TUNING.finPeriodMax, MOVEMENT_TUNING.finPeriodMin);
 
-  ctx.save();
-  ctx.translate(TAIL_JOINT[0], TAIL_JOINT[1]);
-  ctx.rotate(tailWag);
-  ctx.translate(-TAIL_JOINT[0], -TAIL_JOINT[1]);
-  fillPart(ctx, tailPath, traits.tail.color);
-  drawPattern(ctx, seed, traits.tail, tailPath, TAIL_BBOX);
-  ctx.restore();
+  const prevSmoothing = ctx.imageSmoothingEnabled;
+  ctx.imageSmoothingEnabled = true;
 
-  fillPart(ctx, dorsalPath, traits.dorsal.color);
-  drawPattern(ctx, seed, traits.dorsal, dorsalPath, DORSAL_BBOX);
+  // Cauda: onda viajante (a estrela do efeito), fase e período do tailSpeed
+  wavyBlit(ctx, getPartSprite(seed, "tail", traits.tail, tailPath, TAIL_BBOX),
+    MOVEMENT_TUNING.tailWave, MOVEMENT_TUNING.tailWave.ampBase * m.tailAmplitude,
+    tailPeriod, time, phase);
+
+  // Dorsal: flutter sutil ondulando junto com o corpo (fase da cauda)
+  wavyBlit(ctx, getPartSprite(seed, "dorsal", traits.dorsal, dorsalPath, DORSAL_BBOX),
+    MOVEMENT_TUNING.dorsalWave, MOVEMENT_TUNING.dorsalWave.ampBase * m.tailAmplitude,
+    tailPeriod, time, phase);
 
   const bodyGrad = ctx.createLinearGradient(0, BODY_BBOX[1], 0, BODY_BBOX[1] + BODY_BBOX[3]);
   bodyGrad.addColorStop(0, "#9aa1a9");
@@ -197,11 +249,10 @@ export function drawFish(ctx, seed, traits, time = 0, phase = 0) {
   ctx.fillStyle = "rgba(255,255,255,0.85)";
   ctx.beginPath(); ctx.arc(184, 196.5, 1.6, 0, Math.PI * 2); ctx.fill();
 
-  ctx.save();
-  ctx.translate(PECTORAL_JOINT[0], PECTORAL_JOINT[1]);
-  ctx.rotate(finWag);
-  ctx.translate(-PECTORAL_JOINT[0], -PECTORAL_JOINT[1]);
-  fillPart(ctx, pectoralPath, traits.pectoral.color);
-  drawPattern(ctx, seed, traits.pectoral, pectoralPath, PECTORAL_BBOX);
-  ctx.restore();
+  // Peitoral: flutter sutil, período e fase próprios do finSpeed
+  wavyBlit(ctx, getPartSprite(seed, "pectoral", traits.pectoral, pectoralPath, PECTORAL_BBOX),
+    MOVEMENT_TUNING.pectoralWave, MOVEMENT_TUNING.pectoralWave.ampBase * m.finAmplitude,
+    finPeriod, time, phase * 1.7);
+
+  ctx.imageSmoothingEnabled = prevSmoothing;
 }

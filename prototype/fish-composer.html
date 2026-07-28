@@ -169,6 +169,16 @@
         <input type="range" id="mv-fin-amp" min="0.15" max="0.75" step="0.01" value="0.50">
         <output id="out-fin-amp">0.50</output>
       </div>
+      <div class="slider-row">
+        <span>Ondulação</span>
+        <input type="range" id="mv-wave-amp" min="0" max="2" step="0.05" value="1">
+        <output id="out-wave-amp">1.00</output>
+      </div>
+      <div class="slider-row">
+        <span>Curvatura (S)</span>
+        <input type="range" id="mv-wave-curve" min="0.3" max="3" step="0.05" value="1">
+        <output id="out-wave-curve">1.00</output>
+      </div>
       <div class="mv-readout" id="mv-readout"></div>
       <div class="presets">
         <button data-preset="slow">Extremo lento</button>
@@ -432,7 +442,17 @@ const MOVEMENT_TUNING = {
   tailPeriodMax: 260, tailPeriodMin: 40,   // v=0 → Max (lenta), v=100 → Min (rápida)
   finPeriodMax: 260,  finPeriodMin: 40,
   swimBase: 12, swimRange: 70, swimTailWeight: 0.75,
+
+  // Onda viajante: fatias verticais deslocadas por senoide que viaja da base
+  // (u=0) à ponta (u=1). ampBase = deslocamento na ponta em px × amplitude do peixe.
+  tailWave: { ampBase: 34, waveNumber: 3.2, exp: 1.4, strips: 28, jointX: 380, len: 78 },
+  dorsalWave: { ampBase: 10, waveNumber: 2.2, exp: 1.1, strips: 20, jointX: 224, len: 110 },
+  pectoralWave: { ampBase: 14, waveNumber: 2.0, exp: 1.2, strips: 18, jointX: 220, len: 72 },
+  spriteMargin: 3,
 };
+
+// Escala global dos sliders de calibração (Ondulação × amplitude, Curvatura × waveNumber)
+const WAVE_GLOBAL = { ampScale: 1, curveScale: 1 };
 
 // Estado dos sliders de calibração (não vem do seed — ferramenta visual)
 const movement = { tailSpeed: 50, tailAmp: 0.55, finSpeed: 50, finAmp: 0.5 };
@@ -472,7 +492,7 @@ const BANDS = [
 ];
 
 const canvas = document.getElementById("tank");
-const ctx = canvas.getContext("2d");
+let ctx = canvas.getContext("2d"); // let: getPartSprite troca temporariamente pro offscreen
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // Geometria das partes (Path2D em coordenadas fixas do canvas 560x420)
@@ -564,6 +584,52 @@ function fillPart(path, color) {
   ctx.stroke(path);
 }
 
+// Rasteriza a parte (fill + padrão) 1× num canvas offscreen, cacheada por seed+nome.
+const spriteCache = new Map();
+
+function getPartSprite(name, part, path, bbox) {
+  const key = `${currentSeed}:${name}`;
+  const cached = spriteCache.get(key);
+  if (cached) return cached;
+
+  const M = MOVEMENT_TUNING.spriteMargin;
+  const [bx, by, bw, bh] = bbox;
+  const sc = document.createElement("canvas");
+  sc.width = bw + 2 * M;
+  sc.height = bh + 2 * M;
+  const sctx = sc.getContext("2d");
+  // fillPart/drawPattern usam o ctx de módulo; renderiza no offscreen trocando ctx
+  const realCtx = ctx;
+  ctx = sctx;
+  ctx.translate(-bx + M, -by + M);
+  fillPart(path, part.color);
+  drawPattern(part, path, bbox);
+  ctx = realCtx;
+
+  const sprite = { canvas: sc, ox: bx - M, oy: by - M };
+  spriteCache.set(key, sprite);
+  return sprite;
+}
+
+function wavyBlit(sprite, cfg, ampTip, period, time, phaseArg) {
+  const { canvas: sc, ox, oy } = sprite;
+  if (time === 0 || ampTip === 0) {
+    ctx.drawImage(sc, ox, oy);
+    return;
+  }
+  const basePhase = time / period + phaseArg;
+  const waveNumber = cfg.waveNumber * WAVE_GLOBAL.curveScale;
+  const strips = cfg.strips;
+  const stripW = sc.width / strips;
+  for (let i = 0; i < strips; i++) {
+    const sx = i * stripW;
+    const u = Math.min(1, Math.max(0, (ox + sx + stripW / 2 - cfg.jointX) / cfg.len));
+    const amp = ampTip * Math.pow(u, cfg.exp);
+    const offset = amp * Math.sin(basePhase - waveNumber * u);
+    ctx.drawImage(sc, sx, 0, stripW + 1, sc.height, ox + sx, oy + offset, stripW + 1, sc.height);
+  }
+}
+
 function drawShimmer(traits, time) {
   if (traits.shimmerTier === "None") return;
   const [bx, by, bw] = BODY_BBOX;
@@ -609,28 +675,24 @@ function drawFish(traits, time) {
   drawBubbles(time);
 
   const bob = reducedMotion ? 0 : Math.sin(time / 900) * 4;
-  const tailWag = reducedMotion ? 0
-    : Math.sin(time / periodOf(movement.tailSpeed, MOVEMENT_TUNING.tailPeriodMax, MOVEMENT_TUNING.tailPeriodMin))
-      * movement.tailAmp;
-  const finWag = reducedMotion ? 0
-    : Math.sin(time / periodOf(movement.finSpeed, MOVEMENT_TUNING.finPeriodMax, MOVEMENT_TUNING.finPeriodMin) + 1.7)
-      * movement.finAmp;
+  const animTime = reducedMotion ? 0 : time;
+  const tailPeriod = periodOf(movement.tailSpeed, MOVEMENT_TUNING.tailPeriodMax, MOVEMENT_TUNING.tailPeriodMin);
+  const finPeriod = periodOf(movement.finSpeed, MOVEMENT_TUNING.finPeriodMax, MOVEMENT_TUNING.finPeriodMin);
+  const A = WAVE_GLOBAL.ampScale;
 
+  ctx.imageSmoothingEnabled = true;
   ctx.save();
   ctx.translate(0, bob);
 
-  // 1. Cauda (atrás do corpo, com balanço próprio)
-  ctx.save();
-  ctx.translate(TAIL_JOINT[0], TAIL_JOINT[1]);
-  ctx.rotate(tailWag);
-  ctx.translate(-TAIL_JOINT[0], -TAIL_JOINT[1]);
-  fillPart(tailPath, traits.tail.color);
-  drawPattern(traits.tail, tailPath, TAIL_BBOX);
-  ctx.restore();
+  // 1. Cauda (atrás do corpo) — onda viajante
+  wavyBlit(getPartSprite("tail", traits.tail, tailPath, TAIL_BBOX),
+    MOVEMENT_TUNING.tailWave, MOVEMENT_TUNING.tailWave.ampBase * movement.tailAmp * A,
+    tailPeriod, animTime, 0);
 
-  // 2. Dorsal (atrás da borda superior do corpo)
-  fillPart(dorsalPath, traits.dorsal.color);
-  drawPattern(traits.dorsal, dorsalPath, DORSAL_BBOX);
+  // 2. Dorsal — flutter sutil junto com o corpo (fase da cauda)
+  wavyBlit(getPartSprite("dorsal", traits.dorsal, dorsalPath, DORSAL_BBOX),
+    MOVEMENT_TUNING.dorsalWave, MOVEMENT_TUNING.dorsalWave.ampBase * movement.tailAmp * A,
+    tailPeriod, animTime, 0);
 
   // 3. Corpo base cinza
   const bodyGrad = ctx.createLinearGradient(0, BODY_BBOX[1], 0, BODY_BBOX[1] + BODY_BBOX[3]);
@@ -654,14 +716,10 @@ function drawFish(traits, time) {
   ctx.fillStyle = "rgba(255,255,255,0.85)";
   ctx.beginPath(); ctx.arc(184, 196.5, 1.6, 0, Math.PI * 2); ctx.fill();
 
-  // 6. Peitoral (na frente do corpo, balanço leve)
-  ctx.save();
-  ctx.translate(228, 246);
-  ctx.rotate(finWag);
-  ctx.translate(-228, -246);
-  fillPart(pectoralPath, traits.pectoral.color);
-  drawPattern(traits.pectoral, pectoralPath, PECTORAL_BBOX);
-  ctx.restore();
+  // 6. Peitoral (na frente do corpo) — flutter sutil próprio (fase do finSpeed)
+  wavyBlit(getPartSprite("pectoral", traits.pectoral, pectoralPath, PECTORAL_BBOX),
+    MOVEMENT_TUNING.pectoralWave, MOVEMENT_TUNING.pectoralWave.ampBase * movement.finAmp * A,
+    finPeriod, animTime, 1.7);
 
   ctx.restore();
 }
@@ -780,6 +838,20 @@ for (const [key, [slider, output, decimals]] of Object.entries(mvSliders)) {
     updateMovementReadout();
   });
 }
+
+// Sliders globais da onda (Ondulação × amplitude, Curvatura × waveNumber)
+const waveAmpSlider = document.getElementById("mv-wave-amp");
+const waveAmpOut = document.getElementById("out-wave-amp");
+waveAmpSlider.addEventListener("input", () => {
+  WAVE_GLOBAL.ampScale = Number(waveAmpSlider.value);
+  waveAmpOut.textContent = WAVE_GLOBAL.ampScale.toFixed(2);
+});
+const waveCurveSlider = document.getElementById("mv-wave-curve");
+const waveCurveOut = document.getElementById("out-wave-curve");
+waveCurveSlider.addEventListener("input", () => {
+  WAVE_GLOBAL.curveScale = Number(waveCurveSlider.value);
+  waveCurveOut.textContent = WAVE_GLOBAL.curveScale.toFixed(2);
+});
 
 // Presets mexem só nas velocidades (na geração real, amplitude é uniforme — extremo raro é de velocidade)
 const MV_PRESETS = { slow: 5, mid: 50, fast: 95 };
