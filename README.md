@@ -17,6 +17,10 @@ dotnet run --project tools/Vivarium.Simulation
 # API em dev (precisa de Postgres local ou docker compose up db)
 dotnet run --project src/Vivarium.Api
 
+# Frontend em dev (proxy automático pra API local)
+npm install --prefix frontend
+npm run dev --prefix frontend
+
 # Stack completa em containers (API :8080 + Postgres :5432)
 docker compose up --build
 ```
@@ -44,3 +48,4 @@ Produção usa Neon.tech: definir `ConnectionStrings__Vivarium` como env var.
 | `tests/Vivarium.Api.Tests` | Integração da API (SQLite in-memory) |
 | `tools/Vivarium.Simulation` | Validação estatística dos pesos (`dump` verifica ports do motor) |
 | `prototype/` | Compositor visual em Canvas (standalone) |
+| `frontend/` | React + Vite: auth, tanque e mercado (deploy: Cloudflare Pages) |
