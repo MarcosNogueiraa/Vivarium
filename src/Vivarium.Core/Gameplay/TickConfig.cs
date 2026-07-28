@@ -20,6 +20,16 @@ public sealed record TickConfig
     public decimal SickMaintenanceThreshold { get; init; } = 15m;
     public double SickChance { get; init; } = 0.10;
 
+    // --- Farm de moedas (renda passiva por raridade) ---
+    // coinsPorHora(score) = IncomeBasePerHour * exp(IncomeGrowth * (score - IncomeRefScore))
+    public double IncomeBasePerHour { get; init; } = 3.0;
+    public double IncomeGrowth { get; init; } = 0.49;
+    public double IncomeRefScore { get; init; } = 4.0;
+    /// <summary>Fator água na renda: (maint/100)^IncomeWaterExp. Água suja corta a renda.</summary>
+    public double IncomeWaterExp { get; init; } = 0.7;
+    /// <summary>Teto de minutos offline que rendem (8h) — evita acúmulo infinito.</summary>
+    public decimal IncomeOfflineCapMinutes { get; init; } = 480m;
+
     public static readonly TickConfig Default = new();
 }
 

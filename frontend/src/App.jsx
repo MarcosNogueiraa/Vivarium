@@ -12,7 +12,7 @@ const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const FISH_CX = 290;
 const FISH_CY = 210;
 
-function AquariumCanvas({ creatures, selectedId, onSelect, interactive = true, ambient = false }) {
+function AquariumCanvas({ creatures, selectedId, onSelect, interactive = true, ambient = false, quality = 100 }) {
   const W = 960;
   const H = 480;
   const SCALE = 0.34;
@@ -20,6 +20,7 @@ function AquariumCanvas({ creatures, selectedId, onSelect, interactive = true, a
   const statesRef = useRef(new Map());
   const creaturesRef = useRef([]);
   const selectedRef = useRef(null);
+  const qualityRef = useRef(100);
 
   creaturesRef.current = useMemo(
     () => creatures.map((c) => {
@@ -29,6 +30,7 @@ function AquariumCanvas({ creatures, selectedId, onSelect, interactive = true, a
     [creatures],
   );
   selectedRef.current = selectedId;
+  qualityRef.current = quality;
 
   useEffect(() => {
     const ctx = canvasRef.current.getContext("2d");
@@ -40,8 +42,11 @@ function AquariumCanvas({ creatures, selectedId, onSelect, interactive = true, a
       last = now;
       const time = reducedMotion ? 1 : now; // 1 (não 0) pra o ambiente aparecer estático
 
+      const q = qualityRef.current;
+      const speedFactor = 0.5 + 0.5 * (q / 100); // água suja → peixes mais lentos
+
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      drawTankBackground(ctx, W, H, time);
+      drawTankBackground(ctx, W, H, time, q);
 
       for (const c of creaturesRef.current) {
         let s = statesRef.current.get(c.id);
@@ -55,7 +60,7 @@ function AquariumCanvas({ creatures, selectedId, onSelect, interactive = true, a
           statesRef.current.set(c.id, s);
         }
 
-        s.x += s.vx * dt;
+        s.x += s.vx * dt * speedFactor;
         if (s.x < 90) { s.x = 90; s.vx = Math.abs(s.vx); }
         if (s.x > W - 90) { s.x = W - 90; s.vx = -Math.abs(s.vx); }
         const y = s.y + Math.sin(time / 900 + s.phase) * 7;
@@ -80,7 +85,7 @@ function AquariumCanvas({ creatures, selectedId, onSelect, interactive = true, a
         ctx.restore();
       }
 
-      drawTankForeground(ctx, W, H, time);
+      drawTankForeground(ctx, W, H, time, q);
 
       if (!reducedMotion) raf = requestAnimationFrame(frame);
     }
@@ -279,6 +284,9 @@ function TankView({ tank, refresh, notify }) {
             <span className="led" />{tank.online ? "Online" : "Offline"}
           </span>
           <span className="spacer" style={{ flex: 1 }} />
+          <span className="income-chip" title="Moedas por hora que seu tanque farma (já com o efeito da água)">
+            <Coin />+{Number(tank.coinsPerHour ?? 0).toFixed(1)}<small>/h</small>
+          </span>
           <span className="water-gauge">
             <span className="label">Água</span>
             <span className="water-track">
@@ -289,7 +297,10 @@ function TankView({ tank, refresh, notify }) {
           <button onClick={buyFilter} title="Restaura a qualidade da água pra 100">Filtro · 20</button>
         </div>
 
-        <AquariumCanvas creatures={tank.creatures} selectedId={selectedId} onSelect={setSelectedId} />
+        <AquariumCanvas
+          creatures={tank.creatures} selectedId={selectedId}
+          onSelect={setSelectedId} quality={Number(tank.maintenanceLevel)}
+        />
 
         {tank.creatures.length === 0 && (
           <div className="tank-empty">

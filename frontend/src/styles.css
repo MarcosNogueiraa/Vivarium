@@ -243,6 +243,16 @@ input:focus {
 .status-pill.off .led { background: var(--faint); }
 @keyframes pulse { 50% { opacity: 0.45; } }
 
+.income-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 13px; border-radius: 999px;
+  background: rgba(255, 207, 107, 0.10); border: 1px solid rgba(255, 207, 107, 0.26);
+  backdrop-filter: blur(8px);
+  font-size: 0.82rem; font-weight: 700; color: var(--gold);
+  font-variant-numeric: tabular-nums;
+}
+.income-chip small { font-weight: 600; opacity: 0.7; }
+
 .water-gauge {
   display: inline-flex; align-items: center; gap: 10px;
   padding: 7px 14px; border-radius: 999px;

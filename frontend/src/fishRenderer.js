@@ -269,6 +269,21 @@ const hash01 = (n) => {
   return x - Math.floor(x);
 };
 
+// Interpolação de cor hex → hex (pra água limpa → turva conforme a qualidade)
+function hexToRgb(h) {
+  const n = parseInt(h.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function mixHex(a, b, t) {
+  const ca = hexToRgb(a), cb = hexToRgb(b);
+  const r = Math.round(ca[0] + (cb[0] - ca[0]) * t);
+  const g = Math.round(ca[1] + (cb[1] - ca[1]) * t);
+  const bl = Math.round(ca[2] + (cb[2] - ca[2]) * t);
+  return `rgb(${r}, ${g}, ${bl})`;
+}
+// Fator de sujeira 0 (água limpa) → 1 (água podre) a partir da qualidade 0-100
+const murkOf = (quality) => Math.min(1, Math.max(0, 1 - quality / 100));
+
 // Clumps de plantas (posições fixas). back = atrás dos peixes, front = na frente.
 const PLANTS_BACK = [
   { x: 0.08, h: 210, blades: 6, hue: 168 },
@@ -300,15 +315,23 @@ function drawPlantClump(ctx, baseX, baseY, clump, time, alpha, sat, light) {
 }
 
 /** Fundo: gradiente de água, raios de luz, plantas de trás, substrato. */
-export function drawTankBackground(ctx, W, H, time) {
-  // 1. Profundidade da água
+export function drawTankBackground(ctx, W, H, time, quality = 100) {
+  const murk = murkOf(quality);
+
+  // 1. Profundidade da água — limpa (teal) → turva (verde-podre) conforme a sujeira
   const water = ctx.createLinearGradient(0, 0, 0, H);
-  water.addColorStop(0, "#0e4d5b");
-  water.addColorStop(0.35, "#0a3543");
-  water.addColorStop(0.72, "#072530");
-  water.addColorStop(1, "#03151c");
+  water.addColorStop(0, mixHex("#0e4d5b", "#2f4420", murk));
+  water.addColorStop(0.35, mixHex("#0a3543", "#243714", murk));
+  water.addColorStop(0.72, mixHex("#072530", "#182611", murk));
+  water.addColorStop(1, mixHex("#03151c", "#0d160a", murk));
   ctx.fillStyle = water;
   ctx.fillRect(0, 0, W, H);
+
+  // Névoa verde (aumenta com a sujeira)
+  if (murk > 0.02) {
+    ctx.fillStyle = `rgba(90, 130, 45, ${0.28 * murk})`;
+    ctx.fillRect(0, 0, W, H);
+  }
 
   // 2. Brilho da superfície + linha d'água ondulando
   const surf = ctx.createLinearGradient(0, 0, 0, 70);
@@ -317,15 +340,16 @@ export function drawTankBackground(ctx, W, H, time) {
   ctx.fillStyle = surf;
   ctx.fillRect(0, 0, W, 70);
 
-  // 3. Raios de luz cáustica (diagonais, oscilando)
+  // 3. Raios de luz cáustica (diagonais, oscilando) — água suja bloqueia a luz
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
+  const clarity = 1 - murk * 0.8;
   const beams = 4;
   for (let i = 0; i < beams; i++) {
     const sway = Math.sin(time / 4200 + i * 1.4) * 34;
     const x = (i + 0.5) * (W / beams) + sway;
     const grad = ctx.createLinearGradient(x, 0, x + 70, H * 0.92);
-    grad.addColorStop(0, `rgba(130, 235, 224, ${0.10 + 0.04 * Math.sin(time / 3000 + i)})`);
+    grad.addColorStop(0, `rgba(130, 235, 224, ${(0.10 + 0.04 * Math.sin(time / 3000 + i)) * clarity})`);
     grad.addColorStop(1, "rgba(130, 235, 224, 0)");
     ctx.fillStyle = grad;
     ctx.beginPath();
@@ -362,11 +386,40 @@ export function drawTankBackground(ctx, W, H, time) {
   }
 }
 
-/** Frente: plantas da frente, partículas suspensas, bolhas, vinheta de vidro. */
-export function drawTankForeground(ctx, W, H, time) {
+/** Frente: plantas da frente, partículas suspensas, bolhas, sujeira, vinheta de vidro. */
+export function drawTankForeground(ctx, W, H, time, quality = 100) {
+  const murk = murkOf(quality);
+
   // Plantas da frente (um pouco mais claras)
   for (const clump of PLANTS_FRONT)
     drawPlantClump(ctx, clump.x * W, H - 26, clump, time, 0.62, 46, 32);
+
+  // Algas/sujeira flutuando (mais e mais verdes conforme a água piora)
+  if (murk > 0.05) {
+    ctx.save();
+    const flakes = Math.round(murk * 60);
+    for (let i = 0; i < flakes; i++) {
+      const drift = Math.sin(time / 2000 + i * 1.3) * 24;
+      const px = (hash01(i * 1.7) * W + drift + W) % W;
+      const py = (hash01(i * 2.3) * H + (time / 1000) * (3 + hash01(i) * 6)) % H;
+      const r = 1 + hash01(i * 3.1) * 3.5;
+      ctx.globalAlpha = 0.18 + hash01(i * 4.4) * 0.34 * murk;
+      ctx.fillStyle = `hsl(${80 + hash01(i) * 40}, ${40 + murk * 30}%, ${28 + hash01(i * 2) * 16}%)`;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // Película de algas nas bordas do vidro
+    const edge = ctx.createLinearGradient(0, 0, 0, H);
+    edge.addColorStop(0, `rgba(70, 110, 40, ${0.22 * murk})`);
+    edge.addColorStop(0.15, "rgba(70, 110, 40, 0)");
+    edge.addColorStop(0.85, "rgba(60, 95, 35, 0)");
+    edge.addColorStop(1, `rgba(50, 85, 30, ${0.3 * murk})`);
+    ctx.fillStyle = edge;
+    ctx.fillRect(0, 0, W, H);
+  }
 
   // Partículas em suspensão (detritos finos subindo devagar)
   ctx.save();

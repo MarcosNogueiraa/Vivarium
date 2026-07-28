@@ -64,6 +64,7 @@ public class VivariumDbContext(DbContextOptions<VivariumDbContext> options) : Db
         {
             e.Property(h => h.MaintenanceLevel).HasPrecision(5, 2);
             e.Property(h => h.GenerationProgressMinutes).HasPrecision(10, 4);
+            e.Property(h => h.CoinAccrual).HasPrecision(18, 6);
             e.Property(h => h.OnlineGenerationRate).HasPrecision(5, 2);
             e.Property(h => h.OfflineGenerationRate).HasPrecision(5, 2);
             e.HasIndex(h => h.UserId);

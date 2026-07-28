@@ -20,7 +20,8 @@ public static class GameEndpoints
         int QueueCap,
         IReadOnlyList<QueueItemDto> Queue,
         IReadOnlyList<CreatureDto> Creatures,
-        Dictionary<string, decimal> Wallet);
+        Dictionary<string, decimal> Wallet,
+        decimal CoinsPerHour);
 
     public static void MapGameEndpoints(this IEndpointRouteBuilder app)
     {
@@ -67,6 +68,7 @@ public static class GameEndpoints
                 .Where(w => w.UserId == userId)
                 .Select(w => new { w.CurrencyType!.Code, w.Amount })
                 .ToDictionaryAsync(x => x.Code, x => x.Amount);
+            var coinsPerHour = await game.CoinsPerHourAsync(habitat);
 
             return Results.Ok(new TankResponse(
                 HabitatTicker.IsOnline(habitat.LastHeartbeatAt, now, TickConfig.Default),
@@ -75,7 +77,8 @@ public static class GameEndpoints
                 habitat.QueueCap,
                 queue,
                 creatures,
-                wallet));
+                wallet,
+                coinsPerHour));
         });
 
         // Transferência direta entre contas (negociação externa é responsabilidade

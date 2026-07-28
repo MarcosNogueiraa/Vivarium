@@ -18,7 +18,10 @@ public sealed record TickOutcome(
     DateTime LastTickAtUtc,
     decimal MaintenanceLevel,
     decimal GenerationProgressMinutes,
-    IReadOnlyList<bool> SpawnSickFlags)
+    IReadOnlyList<bool> SpawnSickFlags,
+    decimal OnlineMinutes,
+    decimal OfflineMinutes,
+    decimal MaintenanceAtStart)
 {
     public int SpawnCount => SpawnSickFlags.Count;
 }
@@ -35,7 +38,8 @@ public static class HabitatTicker
     public static TickOutcome ProcessTick(HabitatTickState state, DateTime nowUtc, Random rng, TickConfig config)
     {
         if (nowUtc <= state.LastTickAtUtc)
-            return new TickOutcome(state.LastTickAtUtc, state.MaintenanceLevel, state.GenerationProgressMinutes, []);
+            return new TickOutcome(state.LastTickAtUtc, state.MaintenanceLevel, state.GenerationProgressMinutes,
+                [], 0, 0, state.MaintenanceLevel);
 
         decimal elapsedMinutes = (decimal)(nowUtc - state.LastTickAtUtc).TotalMinutes;
 
@@ -74,6 +78,7 @@ public static class HabitatTicker
         for (int i = 0; i < spawn; i++)
             sickFlags[i] = sickEligible && rng.NextDouble() < config.SickChance;
 
-        return new TickOutcome(nowUtc, newMaintenance, progress, sickFlags);
+        return new TickOutcome(nowUtc, newMaintenance, progress, sickFlags,
+            onlineMinutes, offlineMinutes, state.MaintenanceLevel);
     }
 }

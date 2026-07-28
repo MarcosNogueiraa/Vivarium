@@ -25,6 +25,8 @@ public class Habitat
     public decimal OfflineGenerationRate { get; set; }
     /// <summary>Resto de progresso de geração entre ticks (minutos efetivos acumulados).</summary>
     public decimal GenerationProgressMinutes { get; set; }
+    /// <summary>Fração de moedas farmadas ainda não creditada (credita inteiros, guarda o resto).</summary>
+    public decimal CoinAccrual { get; set; }
     public DateTime LastTickAt { get; set; }
     public DateTime? LastHeartbeatAt { get; set; }
     public DateTime CreatedAt { get; set; }

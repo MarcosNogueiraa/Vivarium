@@ -248,7 +248,20 @@ Lógica pura em `HabitatTicker.ProcessTick` (recebe estado + "agora", devolve o 
 - **Doença (qualidade < 15)**: 10% de chance por item novo (`IsSick` no GenerationQueueItem). Efeito na coleta (`CreatureCollector`): "desvantagem" — sorteia 2 seeds e fica o de menor rarity score. Reduz potencial sem matar e sem quebrar a derivação seed→traits.
 - **Seed de coleta**: sorteado na coleta via RNG criptográfico (`NewRandomSeed`), nunca na entrada da fila.
 
-### 8.6 Fora do escopo do MVP
+### 8.6 Economia — farm de moedas por raridade (28/07/2026)
+
+Renda passiva: cada peixe no tanque farma soft continuamente, escalado pela raridade. Lógica pura em `Vivarium.Core/Gameplay/IncomeCalculator.cs`; parâmetros em `TickConfig`; acumulada no tick preguiçoso (`GameService.ApplyTickAsync`) e **creditada automática** na carteira (idle puro, sem clique).
+
+- **Fórmula:** `coinsPorHora(score) = IncomeBasePerHour · exp(IncomeGrowth · (score − IncomeRefScore))` — base 3, growth 0.49, ref 4. Comum ~3/h, raro ~16/h, épico ~48/h, lendário 100/h+ (score 13 ≈ 245/h). O gap enorme faz o lendário (~0.2% dos peixes) ser cobiçado e caro no mercado.
+- **Fator água:** `(maint/100)^0.7` — água cheia rende 100%, 40 → 53%, 15 → 26%, 0 → 0%. Degradar a água corta a renda.
+- **Online/offline:** reusa `OnlineGenerationRate`/`OfflineGenerationRate` (1.0/0.45). Offline farma a 45% **com teto de 8h** (`IncomeOfflineCapMinutes=480`) — creditado no primeiro tick após login. Lembrar (8.3): trocar de aba/minimizar continua online; só navegador fechado = offline.
+- **Sustentabilidade:** água degrada 3/h; Filtro (20 soft) ≈ 20h de água → upkeep ~1 soft/h. 3 comuns ≈ +8/h líquido. Progresso lento e positivo; upgrades e lendários são metas de longo prazo.
+- **Acúmulo:** campo `Habitat.CoinAccrual` guarda a fração; credita moedas inteiras à carteira. Renda passiva **não** vai pro `TransactionLog` (inundaria a auditoria). `/api/game/tank` devolve `coinsPerHour` (já com fator água) pra UI mostrar "+X/h".
+- **Anti-cheat:** tudo server-side; renda limitada por tempo real decorrido (`LastTickAt` avança a cada tick → spam de refresh não multiplica); água/raridade lidas do banco; `DateTime.UtcNow` do servidor. Ver `[[anti-cheat-economia]]` na memória.
+
+**Efeitos da água no cliente (só visual):** peixes ficam mais lentos (`speedFactor = 0.5 + 0.5·maint/100`) e a água **esverdeia e suja** conforme piora — `drawTankBackground`/`drawTankForeground` recebem `quality` e interpolam pro verde-turvo, reduzem a luz e adicionam algas/sujeira flutuando e película nas bordas.
+
+### 8.7 Fora do escopo do MVP
 
 - **Alimentação**: cortada do MVP para não duplicar a função de "sink de manutenção" já coberta pela qualidade da água. Candidata a entrar na v2 como boost opcional (não como necessidade punitiva).
 - **Breeding**: fica para v2, depois do motor de geração e mercado estarem validados.
