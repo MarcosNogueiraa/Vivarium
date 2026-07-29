@@ -377,6 +377,13 @@ input:focus {
 .income-chip .of-potential { color: var(--muted); font-weight: 500; font-size: 0.74rem; }
 
 /* Lista de peixes do tanque */
+.collapse-btn {
+  width: 26px; height: 26px; padding: 0; border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(3, 18, 24, 0.5); border: 1px solid var(--line); color: var(--muted);
+}
+.collapse-btn .chevron { display: inline-block; transition: transform 0.2s ease; transform: rotate(-90deg); font-size: 0.8rem; line-height: 1; }
+.collapse-btn .chevron.open { transform: rotate(0deg); }
 .fish-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
 .fish-row {
   --tier: var(--r-comum);

@@ -484,6 +484,8 @@ function AuthView({ onAuthed }) {
 function TankView({ tank, refresh, notify }) {
   const [selectedId, setSelectedId] = useState(null);
   const [showGuide, setShowGuide] = useState(false);
+  const [listOpen, setListOpen] = useState(() => localStorage.getItem("tankListOpen") !== "false");
+  const toggleList = () => setListOpen((v) => { localStorage.setItem("tankListOpen", String(!v)); return !v; });
   const selected = tank.creatures.find((c) => c.id === selectedId) ?? null;
   const lowWater = Number(tank.maintenanceLevel) < 40;
 
@@ -619,11 +621,16 @@ function TankView({ tank, refresh, notify }) {
       {tank.creatures.length > 0 && (
         <section>
           <div className="section-head">
+            <button className="collapse-btn" onClick={toggleList} aria-expanded={listOpen}
+              title={listOpen ? "Recolher lista" : "Expandir lista"}>
+              <span className={`chevron${listOpen ? " open" : ""}`}>▾</span>
+            </button>
             <span className="eyebrow">Peixes no tanque</span>
             <span className="count">{tank.creatures.length}/{tank.capacity}</span>
             <span className="spacer" />
-            <span className="faint" style={{ fontSize: "0.82rem" }}>clique para detalhes</span>
+            {listOpen && <span className="faint" style={{ fontSize: "0.82rem" }}>clique para detalhes</span>}
           </div>
+          {listOpen && (
           <div className="fish-list">
             {tank.creatures.map((c) => {
               const traits = generateTraits(BigInt(c.seed));
@@ -648,6 +655,7 @@ function TankView({ tank, refresh, notify }) {
               );
             })}
           </div>
+          )}
         </section>
       )}
 
