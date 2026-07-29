@@ -1,13 +1,18 @@
+using Vivarium.Core.Generation;
+
 namespace Vivarium.Core.Gameplay;
 
+/// <summary>Entrada por peixe pro cálculo de renda: raridade + cor da cauda (pra sinergia).</summary>
+public readonly record struct FishIncome(decimal RarityScore, PartColor TailColor);
+
 /// <summary>
-/// Renda passiva de moedas (soft) por raridade dos peixes. Lógica pura: recebe os
-/// scores e o estado da janela, devolve quanto foi ganho. Toda renda é calculada
-/// aqui e no servidor — o cliente nunca envia valor (anti-cheat).
+/// Renda passiva de moedas (soft) por raridade + sinergia de cor. Lógica pura:
+/// recebe os peixes e o estado da janela, devolve quanto foi ganho. Toda renda é
+/// calculada aqui e no servidor — o cliente nunca envia valor (anti-cheat).
 /// </summary>
 public static class IncomeCalculator
 {
-    /// <summary>Moedas por hora que um peixe rende, exponencial na raridade.</summary>
+    /// <summary>Moedas por hora que um peixe rende (base), exponencial na raridade.</summary>
     public static double CoinsPerHour(decimal rarityScore, TickConfig config)
         => config.IncomeBasePerHour
            * Math.Exp(config.IncomeGrowth * ((double)rarityScore - config.IncomeRefScore));
@@ -19,13 +24,30 @@ public static class IncomeCalculator
         return Math.Pow(q, config.IncomeWaterExp);
     }
 
-    /// <summary>Soma das taxas/hora dos peixes já com o fator água (pra exibir "+X/h").</summary>
-    public static decimal TankRatePerHour(IEnumerable<decimal> rarityScores, decimal maintenanceLevel, TickConfig config)
+    /// <summary>Multiplicador de sinergia pra N peixes da mesma cor: 1 + s·(N-1), com teto.</summary>
+    public static double SynergyMultiplier(int sameColorCount, TickConfig config)
+        => 1.0 + Math.Min(config.SynergyMaxBonus, config.SynergyPerMatch * Math.Max(0, sameColorCount - 1));
+
+    /// <summary>Renda/hora de cada peixe (base × sinergia), já agrupada por cor de cauda.</summary>
+    private static double[] PerFishRates(IReadOnlyList<FishIncome> fish, TickConfig config)
+    {
+        var counts = new Dictionary<PartColor, int>();
+        foreach (var f in fish)
+            counts[f.TailColor] = counts.GetValueOrDefault(f.TailColor) + 1;
+
+        var rates = new double[fish.Count];
+        for (int i = 0; i < fish.Count; i++)
+            rates[i] = CoinsPerHour(fish[i].RarityScore, config) * SynergyMultiplier(counts[fish[i].TailColor], config);
+        return rates;
+    }
+
+    /// <summary>Soma das taxas/hora dos peixes (raridade + sinergia) já com o fator água.</summary>
+    public static decimal TankRatePerHour(IReadOnlyList<FishIncome> fish, decimal maintenanceLevel, TickConfig config)
     {
         double water = WaterFactor(maintenanceLevel, config);
         double total = 0;
-        foreach (var s in rarityScores)
-            total += CoinsPerHour(s, config);
+        foreach (var r in PerFishRates(fish, config))
+            total += r;
         return (decimal)(total * water);
     }
 
@@ -35,7 +57,7 @@ public static class IncomeCalculator
     /// frequência; ausência longa é dominada pelo teto offline).
     /// </summary>
     public static decimal Accrue(
-        IEnumerable<decimal> rarityScores,
+        IReadOnlyList<FishIncome> fish,
         decimal maintenanceLevel,
         decimal onlineMinutes,
         decimal offlineMinutes,
@@ -50,8 +72,8 @@ public static class IncomeCalculator
 
         double water = WaterFactor(maintenanceLevel, config);
         double perHour = 0;
-        foreach (var s in rarityScores)
-            perHour += CoinsPerHour(s, config);
+        foreach (var r in PerFishRates(fish, config))
+            perHour += r;
 
         return (decimal)(perHour * water) * (effectiveMinutes / 60m);
     }

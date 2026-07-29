@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Vivarium.Api.Data;
 using Vivarium.Core.Domain;
 using Vivarium.Core.Gameplay;
+using Vivarium.Core.Generation;
 
 namespace Vivarium.Api.Services;
 
@@ -23,6 +24,7 @@ public class GameService(VivariumDbContext db)
             i.UserId == habitat.UserId
             && i.Quantity > 0
             && i.ItemDefinition!.Category == ItemCategory.AutoFilter);
+        var fish = await TankFishAsync(habitat);
 
         var state = new HabitatTickState(
             LastTickAtUtc: habitat.LastTickAt,
@@ -34,16 +36,17 @@ public class GameService(VivariumDbContext db)
             OfflineGenerationRate: habitat.OfflineGenerationRate,
             QueueCap: habitat.QueueCap,
             PendingQueueCount: pending,
-            HasAutoFilter: hasAutoFilter);
+            HasAutoFilter: hasAutoFilter,
+            ActiveFishCount: fish.Count);
 
         var outcome = HabitatTicker.ProcessTick(state, nowUtc, Random.Shared, TickConfig.Default);
         habitat.LastTickAt = outcome.LastTickAtUtc;
         habitat.MaintenanceLevel = outcome.MaintenanceLevel;
         habitat.GenerationProgressMinutes = outcome.GenerationProgressMinutes;
 
-        // Farm de moedas: renda passiva por raridade (server-side, limitada por tempo
-        // real decorrido + teto offline; cliente nunca envia valor).
-        await AccrueIncomeAsync(habitat, outcome);
+        // Farm de moedas: renda passiva por raridade + sinergia (server-side, limitada
+        // por tempo real decorrido + teto offline; cliente nunca envia valor).
+        await AccrueIncomeAsync(habitat, outcome, fish);
 
         if (outcome.SpawnCount > 0)
         {
@@ -72,20 +75,28 @@ public class GameService(VivariumDbContext db)
         }
     }
 
-    private async Task AccrueIncomeAsync(Habitat habitat, TickOutcome outcome)
+    /// <summary>Peixes ativos do tanque como entrada de renda (raridade + cor de cauda pra sinergia).</summary>
+    private async Task<List<FishIncome>> TankFishAsync(Habitat habitat)
+    {
+        var rows = await db.CreatureInstances
+            .Where(c => c.HabitatId == habitat.Id)
+            .Select(c => new { c.Seed, c.RarityScore })
+            .ToListAsync();
+        var list = new List<FishIncome>(rows.Count);
+        foreach (var r in rows)
+            list.Add(new FishIncome(r.RarityScore, TraitGenerator.Generate(r.Seed).Tail.Color));
+        return list;
+    }
+
+    private async Task AccrueIncomeAsync(Habitat habitat, TickOutcome outcome, IReadOnlyList<FishIncome> fish)
     {
         if (outcome.OnlineMinutes <= 0 && outcome.OfflineMinutes <= 0)
             return;
-
-        var scores = await db.CreatureInstances
-            .Where(c => c.HabitatId == habitat.Id)
-            .Select(c => c.RarityScore)
-            .ToListAsync();
-        if (scores.Count == 0)
+        if (fish.Count == 0)
             return;
 
         decimal earned = IncomeCalculator.Accrue(
-            scores, outcome.MaintenanceAtStart,
+            fish, outcome.MaintenanceAtStart,
             outcome.OnlineMinutes, outcome.OfflineMinutes,
             habitat.OnlineGenerationRate, habitat.OfflineGenerationRate,
             TickConfig.Default);
@@ -104,14 +115,11 @@ public class GameService(VivariumDbContext db)
         // Renda passiva não vai pro TransactionLog (inundaria a auditoria); mercado/transferência continuam logados.
     }
 
-    /// <summary>Taxa de renda atual do tanque (moedas/hora), já com o fator água — pra UI.</summary>
+    /// <summary>Taxa de renda atual do tanque (moedas/hora), já com água + sinergia — pra UI.</summary>
     public async Task<decimal> CoinsPerHourAsync(Habitat habitat)
     {
-        var scores = await db.CreatureInstances
-            .Where(c => c.HabitatId == habitat.Id)
-            .Select(c => c.RarityScore)
-            .ToListAsync();
-        return IncomeCalculator.TankRatePerHour(scores, habitat.MaintenanceLevel, TickConfig.Default);
+        var fish = await TankFishAsync(habitat);
+        return IncomeCalculator.TankRatePerHour(fish, habitat.MaintenanceLevel, TickConfig.Default);
     }
 
     public Task<bool> HasActiveVipAsync(long userId, DateTime nowUtc)

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, clearToken, getToken, setToken } from "./api.js";
-import { coinsPerHourOf, generateTraits, rarityBreakdown, roll01 } from "./generator.js";
+import { coinsPerHourOf, generateTraits, rarityBreakdown, roll01, synergyMultiplier } from "./generator.js";
 import {
   BANDS, bandOf, drawFish, drawTankBackground, drawTankForeground,
-  PT, swimSpeedOf, VIEW_H, VIEW_W,
+  PART_HEX, PT, swimSpeedOf, VIEW_H, VIEW_W,
 } from "./fishRenderer.js";
 
 const PART_PT = { tail: "Cauda", dorsal: "Nadadeira dorsal", pectoral: "Barbatana peitoral" };
@@ -38,6 +38,19 @@ function ageOf(createdAt) {
   const h = mins / 60;
   if (h < 24) return `${Math.floor(h)} h`;
   return `${Math.floor(h / 24)} d`;
+}
+
+// Sinergia de cor de cauda no tanque: grupos de 2+ com o bônus resultante.
+function tankSynergy(creatures) {
+  const counts = {};
+  for (const c of creatures) {
+    const color = generateTraits(BigInt(c.seed)).tail.color;
+    counts[color] = (counts[color] || 0) + 1;
+  }
+  return Object.entries(counts)
+    .filter(([, n]) => n >= 2)
+    .map(([color, n]) => ({ color, n, bonus: synergyMultiplier(n) - 1 }))
+    .sort((a, b) => b.n - a.n);
 }
 
 // Estimativa do próximo peixe na fila a partir do progresso de geração.
@@ -475,7 +488,17 @@ function TankView({ tank, refresh, notify }) {
   const lowWater = Number(tank.maintenanceLevel) < 40;
 
   const current = Number(tank.coinsPerHour ?? 0);
-  const potential = tank.creatures.reduce((s, c) => s + coinsPerHourOf(Number(c.rarityScore)), 0);
+  const synergy = tankSynergy(tank.creatures);
+  // potencial já com sinergia, a água cheia (pra comparar com o atual da API)
+  const colorCounts = {};
+  for (const c of tank.creatures) {
+    const col = generateTraits(BigInt(c.seed)).tail.color;
+    colorCounts[col] = (colorCounts[col] || 0) + 1;
+  }
+  const potential = tank.creatures.reduce((s, c) => {
+    const col = generateTraits(BigInt(c.seed)).tail.color;
+    return s + coinsPerHourOf(Number(c.rarityScore), synergyMultiplier(colorCounts[col]));
+  }, 0);
   const nextFish = nextFishEta(tank);
 
   async function collect(itemId) {
@@ -571,6 +594,16 @@ function TankView({ tank, refresh, notify }) {
         )}
       </div>
 
+      {synergy.length > 0 && (
+        <div className="synergy-bar glass">
+          <span className="eyebrow">Sinergia de cor</span>
+          {synergy.map((g) => (
+            <span key={g.color} className="synergy-chip" style={{ "--tier": PART_HEX[g.color] }}>
+              <span className="dot-color" /> {PT.color[g.color]} ×{g.n} <em>+{(g.bonus * 100).toFixed(0)}%</em>
+            </span>
+          ))}
+        </div>
+      )}
       {tank.creatures.length > 0 && !selected && (
         <p className="hint">Clique num peixe para ver os detalhes, guardar, vender ou transferir.</p>
       )}

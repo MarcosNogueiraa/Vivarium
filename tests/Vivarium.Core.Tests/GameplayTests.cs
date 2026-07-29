@@ -7,23 +7,26 @@ public class HabitatTickerTests
     private static readonly DateTime T0 = new(2026, 7, 27, 12, 0, 0, DateTimeKind.Utc);
     private static readonly TickConfig Config = TickConfig.Default;
 
+    // Intervalo fixo em 15 nos testes (validam a lógica do tick, não o default do jogo).
     private static HabitatTickState Estado(
         DateTime? heartbeat = null,
         decimal maintenance = 100m,
         decimal progress = 0m,
         int pending = 0,
-        bool autoFilter = false)
+        bool autoFilter = false,
+        int fishCount = 0)
         => new(
             LastTickAtUtc: T0,
             LastHeartbeatAtUtc: heartbeat,
             MaintenanceLevel: maintenance,
             GenerationProgressMinutes: progress,
-            GenerationIntervalMinutes: HabitatDefaults.GenerationIntervalMinutes,
+            GenerationIntervalMinutes: 15,
             OnlineGenerationRate: HabitatDefaults.OnlineGenerationRate,
             OfflineGenerationRate: HabitatDefaults.OfflineGenerationRate,
             QueueCap: HabitatDefaults.QueueCap,
             PendingQueueCount: pending,
-            HasAutoFilter: autoFilter);
+            HasAutoFilter: autoFilter,
+            ActiveFishCount: fishCount);
 
     [Fact]
     public void JanelaInteiraOnline_GeraNaTaxaCheia()
@@ -86,6 +89,18 @@ public class HabitatTickerTests
             Estado(heartbeat: now, maintenance: 100m, autoFilter: true), now, new Random(1), Config);
 
         Assert.Equal(98.5m, outcome.MaintenanceLevel);
+    }
+
+    [Fact]
+    public void DegradacaoEscalaComOsPeixes()
+    {
+        // Sem peixes: 60 min → -3 (100→97). Com 10 peixes: fator 1+0.1×10=2 → -6 (100→94).
+        var now = T0.AddMinutes(60);
+        var vazio = HabitatTicker.ProcessTick(Estado(heartbeat: now, maintenance: 100m), now, new Random(1), Config);
+        var cheio = HabitatTicker.ProcessTick(Estado(heartbeat: now, maintenance: 100m, fishCount: 10), now, new Random(1), Config);
+
+        Assert.Equal(97m, vazio.MaintenanceLevel);
+        Assert.Equal(94m, cheio.MaintenanceLevel);
     }
 
     [Fact]

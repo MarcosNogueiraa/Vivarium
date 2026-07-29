@@ -97,7 +97,8 @@ export const CONFIG = {
     finAmpMin: 0.15, finAmpMax: 0.75,
   },
   // Renda por peixe — espelha IncomeCalculator/TickConfig (manter em sincronia)
-  income: { base: 3.0, growth: 0.49, ref: 4.0 },
+  income: { base: 2.0, growth: 0.49, ref: 4.0 },
+  synergy: { perMatch: 0.15, maxBonus: 0.80 },
   closestPartColor: {
     Gold: "Yellow", Silver: "PureWhite", Bluish: "Blue", Emerald: "Green",
     Purple: "Purple", Pink: "Red", Rainbow: "PureWhite", AbsoluteBlack: "Black",
@@ -186,9 +187,15 @@ export function generateTraits(seed) {
 // ---------- Produção e breakdown de raridade (só display; motor é a fonte) ----------
 
 /** Moedas/hora que o peixe rende a água cheia (espelha IncomeCalculator.CoinsPerHour). */
-export function coinsPerHourOf(rarityScore) {
+export function coinsPerHourOf(rarityScore, synergyMult = 1) {
   const i = CONFIG.income;
-  return i.base * Math.exp(i.growth * (rarityScore - i.ref));
+  return i.base * Math.exp(i.growth * (rarityScore - i.ref)) * synergyMult;
+}
+
+/** Multiplicador de sinergia pra N peixes da mesma cor de cauda (espelha o servidor). */
+export function synergyMultiplier(sameColorCount) {
+  const s = CONFIG.synergy;
+  return 1 + Math.min(s.maxBonus, s.perMatch * Math.max(0, sameColorCount - 1));
 }
 
 function erf(x) {

@@ -1,4 +1,5 @@
 using System.Globalization;
+using Vivarium.Core.Gameplay;
 using Vivarium.Core.Generation;
 
 // Simulação de validação dos pesos (CLAUDE.md, próximo passo 1):
@@ -15,6 +16,12 @@ if (args.Length >= 1 && args[0] == "dump")
         DumpLine(i * 7919L - i);
         DumpLine(-(i * 104729L + 3));
     }
+    return;
+}
+
+if (args.Length >= 1 && args[0] == "economy")
+{
+    EconomyReport();
     return;
 }
 
@@ -120,6 +127,62 @@ static void DumpLine(long seed)
       .Append(';').Append(t.Movement.FinAmplitude.ToString("F6", inv));
     sb.Append(';').Append(t.RarityScore.ToString("F6", inv));
     Console.WriteLine(sb.ToString());
+}
+
+static void EconomyReport()
+{
+    var cfg = TickConfig.Default;
+    int interval = HabitatDefaults.GenerationIntervalMinutes;
+
+    // Probabilidade de lendário (score >= 11.2) por peixe coletado
+    int N = 200_000, leg = 0;
+    var rng = new Random(7);
+    for (int i = 0; i < N; i++)
+        if ((double)TraitGenerator.Generate(rng.NextInt64()).RarityScore >= 11.2) leg++;
+    double p = leg / (double)N;
+
+    Console.WriteLine($"Geração: 1 peixe / {interval} min = {60.0 / interval:0.0}/h online");
+    Console.WriteLine($"P(lendário, score>=11.2) = {p * 100:0.000}%\n");
+    Console.WriteLine("Cadência de lendário por perfil (coleta online contínua):");
+    foreach (var (name, hrs) in new[] { ("casual 2h/dia", 2.0), ("ativo 8h/dia", 8.0), ("dedicado 16h/dia", 16.0) })
+    {
+        double perWeek = (60.0 / interval) * hrs * 7;
+        double legPerWeek = perWeek * p;
+        Console.WriteLine($"  {name,-16}: {perWeek,4:0} peixes/sem → {legPerWeek:0.00} lendário/sem"
+            + (legPerWeek > 0 ? $" (~1 a cada {7 / legPerWeek:0} dias)" : ""));
+    }
+
+    Console.WriteLine("\nRenda líquida/h (água cheia; upkeep = manter a água a 100 sem auto-filtro):");
+    ReportTank("3 comuns (cores variadas)", MakeTank(3, 4m, false), cfg);
+    ReportTank("3 comuns MESMA cor", MakeTank(3, 4m, true), cfg);
+    ReportTank("6 incomuns MESMA cor", MakeTank(6, 5.8m, true), cfg);
+    ReportTank("10 raros variados", MakeTank(10, 7.5m, false), cfg);
+    ReportTank("10 raros MESMA cor", MakeTank(10, 7.5m, true), cfg);
+    ReportTank("25 raros variados", MakeTank(25, 7.5m, false), cfg);
+    ReportTank("25 raros MESMA cor", MakeTank(25, 7.5m, true), cfg);
+    ReportTank("1 lendário (score 12)", MakeTank(1, 12m, false), cfg);
+
+    Console.WriteLine("\nPreço do upgrade de tanque (base 50 × 1.5^(cap-3)):");
+    for (int cap = 3; cap <= 9; cap++)
+        Console.Write($"  cap {cap}->{cap + 1}: {Math.Ceiling(50 * Math.Pow(1.5, cap - 3)):0}");
+    Console.WriteLine();
+}
+
+static List<FishIncome> MakeTank(int n, decimal score, bool sameColor)
+{
+    var colors = Enum.GetValues<PartColor>();
+    var list = new List<FishIncome>(n);
+    for (int i = 0; i < n; i++)
+        list.Add(new FishIncome(score, sameColor ? PartColor.Blue : colors[i % colors.Length]));
+    return list;
+}
+
+static void ReportTank(string label, List<FishIncome> tank, TickConfig cfg)
+{
+    decimal gross = IncomeCalculator.TankRatePerHour(tank, 100m, cfg);
+    double degPerHour = (double)(cfg.DegradationPerMinute * 60m) * (1 + (double)cfg.DegradationPerFishFactor * tank.Count);
+    double upkeep = degPerHour * 0.2; // ~20 soft por 100 pontos de água (filtro)
+    Console.WriteLine($"  {label,-26}: bruto {gross,7:0.0}/h   upkeep {upkeep,5:0.0}/h   líquido {(double)gross - upkeep,7:0.0}/h");
 }
 
 static double Percentile(double[] sorted, double p)
