@@ -504,7 +504,15 @@ Falta pra ir ao ar (depende de contas do usuário):
 
 **Itens do MVP** (seed via migration `SeedItemDefinitions`): `filter_basic` (20 soft, restaura água pra 100 — tick roda antes, pra degradação pendente ser aplicada primeiro), `auto_filter` (500 soft, permanente via UserInventory, tick lê e degrada na metade), `tank_upgrade` (base 50 soft, +1 capacidade, preço = base × 1.5^(capacidade − 3) — seção 8.4). Filtro e upgrade aplicam na hora (sem inventário); só o auto_filter fica em UserInventory.
 
-**Testes de integração** (`tests/Vivarium.Api.Tests`): API completa via `WebApplicationFactory` contra SQLite in-memory (Postgres só em staging/produção) — fluxos de auth, coleta, VIP auto-coleta e mercado ponta a ponta.
+**Testes de integração** (`tests/Vivarium.Api.Tests`): API completa via `WebApplicationFactory` contra SQLite in-memory (Postgres só em staging/produção) — fluxos de auth, coleta, VIP auto-coleta, mercado, renda, mochila ponta a ponta.
+
+### 12.1 Hardening / anti-cheat (auditoria 28–29/07/2026)
+
+- **Concorrência otimista (`xmin`)** em `Habitat`, `WalletBalance`, `MarketListing`, `CreatureInstance` (condicional a `Database.IsNpgsql()` — SQLite dos testes não tem `xmin`; migration `AddConcurrencyTokens` é no-op de DDL). Fecha: compra dupla da mesma listagem (criação de dinheiro), double-list, corrida de preço de item, double-credit de renda. Endpoints tratam `DbUpdateConcurrencyException`: tick recarrega e segue (renda fica exatamente-uma-vez); ações do usuário retornam 409.
+- **Limbo eliminado:** coletar/comprar/receber com tanque cheio vai pra **mochila** (8.7), nunca mais some. Compra bloqueia antes de cobrar se comprador sem espaço.
+- **Rate limiting:** global 300/min por usuário/IP + `auth` 10/min por IP (config `RateLimiting:*`). Atrás de proxy exige `UseForwardedHeaders` no deploy pra ver o IP real.
+- **Validação:** email via `MailAddress.TryCreate`; username `[A-Za-z0-9_-]`, 3–32.
+- **Deferidos (documentados, não feitos):** JWT sem revogação (validade 7d); taxa de mercado como sink; `window.prompt`→modais; teto de listagens por usuário; multi-conta (soft sem cash-out limita o dano).
 
 ## 13. Estrutura da solution
 
