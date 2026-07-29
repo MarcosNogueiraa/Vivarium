@@ -22,6 +22,22 @@ public class VivariumDbContext(DbContextOptions<VivariumDbContext> options) : Db
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // Concorrência otimista nas linhas de dinheiro/posse/estado: evita
+        // corrida (compra dupla da mesma listagem, double-credit de renda,
+        // preço de item). xmin é coluna de sistema do Postgres — no SQLite dos
+        // testes não existe, por isso é condicional ao provider.
+        if (Database.IsNpgsql())
+        {
+            // Mapeia a coluna de sistema xmin do Postgres como token de concorrência.
+            foreach (var type in new[]
+                     { typeof(Habitat), typeof(WalletBalance), typeof(MarketListing), typeof(CreatureInstance) })
+            {
+                modelBuilder.Entity(type).Property<uint>("xmin")
+                    .HasColumnName("xmin").HasColumnType("xid")
+                    .ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
+            }
+        }
+
         modelBuilder.Entity<User>(e =>
         {
             e.Property(u => u.Username).HasMaxLength(32);

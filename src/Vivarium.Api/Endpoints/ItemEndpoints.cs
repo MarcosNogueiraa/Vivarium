@@ -84,7 +84,14 @@ public static class ItemEndpoints
                 CreatedAt = now,
             });
 
-            await db.SaveChangesAsync();
+            try
+            {
+                await db.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return Results.Conflict(new { error = "Compra concorrente — tente de novo." });
+            }
             return Results.Ok(new
             {
                 paid = price,

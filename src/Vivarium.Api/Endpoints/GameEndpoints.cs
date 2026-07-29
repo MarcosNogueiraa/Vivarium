@@ -36,9 +36,18 @@ public static class GameEndpoints
 
             // Tick primeiro, com o heartbeat antigo: senão um retorno após dias
             // contaria a ausência inteira como tempo online.
-            await game.ApplyTickAsync(habitat, now);
-            habitat.LastHeartbeatAt = now;
-            await db.SaveChangesAsync();
+            try
+            {
+                await game.ApplyTickAsync(habitat, now);
+                habitat.LastHeartbeatAt = now;
+                await db.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // Outro request ticou primeiro; o próximo heartbeat regrava. A janela
+                // desta chamada foi descartada (LastTickAt não avançou) e será coberta
+                // no próximo tick — renda continua exatamente-uma-vez.
+            }
 
             return Results.Ok(new { online = true, maintenanceLevel = habitat.MaintenanceLevel });
         });
@@ -51,8 +60,17 @@ public static class GameEndpoints
             if (habitat is null)
                 return Results.NotFound();
 
-            await game.ApplyTickAsync(habitat, now);
-            await db.SaveChangesAsync();
+            try
+            {
+                await game.ApplyTickAsync(habitat, now);
+                await db.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // Outro request ticou primeiro; recarrega o estado atual e segue.
+                db.ChangeTracker.Clear();
+                habitat = (await game.FindHabitatAsync(userId))!;
+            }
 
             var queue = await db.GenerationQueueItems
                 .Where(q => q.HabitatId == habitat.Id && q.Status == QueueItemStatus.Pending)
@@ -117,7 +135,14 @@ public static class GameEndpoints
                 CreatureInstanceId = creature.Id,
                 CreatedAt = DateTime.UtcNow,
             });
-            await db.SaveChangesAsync();
+            try
+            {
+                await db.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return Results.Conflict(new { error = "O peixe mudou de estado — atualize e tente de novo." });
+            }
             return Results.Ok(new { transferredTo = target.Username });
         });
 
@@ -134,7 +159,14 @@ public static class GameEndpoints
             if (creature is null)
                 return Results.BadRequest(new { error });
 
-            await db.SaveChangesAsync();
+            try
+            {
+                await db.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return Results.Conflict(new { error = "Operação concorrente — tente de novo." });
+            }
             return Results.Ok(new CreatureDto(
                 creature.Id, creature.SpeciesId, creature.Seed.ToString(),
                 creature.TraitConfigVersion, creature.RarityScore, creature.CreatedAt));

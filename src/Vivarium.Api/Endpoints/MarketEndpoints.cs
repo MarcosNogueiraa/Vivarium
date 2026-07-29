@@ -65,7 +65,14 @@ public static class MarketEndpoints
                 CreatedAt = DateTime.UtcNow,
             };
             db.MarketListings.Add(listing);
-            await db.SaveChangesAsync();
+            try
+            {
+                await db.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return Results.Conflict(new { error = "Esse peixe mudou de estado — atualize e tente de novo." });
+            }
             return Results.Ok(new { listing.Id });
         });
 
@@ -84,7 +91,14 @@ public static class MarketEndpoints
             listing.Status = ListingStatus.Cancelled;
             listing.ResolvedAt = DateTime.UtcNow;
             await ReturnToOwnerTankIfSpaceAsync(db, listing.CreatureInstance!, userId);
-            await db.SaveChangesAsync();
+            try
+            {
+                await db.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return Results.Conflict(new { error = "A listagem mudou — atualize e tente de novo." });
+            }
             return Results.Ok();
         });
 
@@ -134,8 +148,17 @@ public static class MarketEndpoints
                 CreatedAt = now,
             });
 
-            await db.SaveChangesAsync();
-            await transaction.CommitAsync();
+            try
+            {
+                await db.SaveChangesAsync();
+                await transaction.CommitAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // Concorrência: outro comprador levou a listagem (ou o saldo mudou).
+                // A transação é descartada (rollback) — nada é cobrado nem transferido.
+                return Results.Conflict(new { error = "Essa listagem acabou de ser comprada ou alterada." });
+            }
             return Results.Ok(new { creatureId = creature.Id, paid = listing.PriceSoft });
         });
     }

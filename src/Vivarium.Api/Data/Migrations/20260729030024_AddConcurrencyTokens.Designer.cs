@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Vivarium.Api.Data;
@@ -11,9 +12,11 @@ using Vivarium.Api.Data;
 namespace Vivarium.Api.Data.Migrations
 {
     [DbContext(typeof(VivariumDbContext))]
-    partial class VivariumDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260729030024_AddConcurrencyTokens")]
+    partial class AddConcurrencyTokens
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
