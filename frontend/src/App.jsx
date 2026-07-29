@@ -25,6 +25,10 @@ function factorLabel(f) {
       return `Opacidade ${f.value} do padrão (${PART_PT[f.part].toLowerCase()})`;
     case "speedExtreme":
       return `${f.part === "tail" ? "Cauda" : "Nadadeira"} ${f.value}`;
+    case "samePattern":
+      return `Conjunto: mesmo padrão em ${f.value} partes`;
+    case "sameColor":
+      return `Conjunto: mesma cor em ${f.value} partes`;
     default:
       return f.key;
   }
@@ -366,7 +370,7 @@ function FishDetail({ creature, onClose, children }) {
               <div className="bd-row" key={i}>
                 <span className="bd-label">{factorLabel(f)}</span>
                 <span className="bd-bar"><span style={{ width: `${(f.points / maxPoints) * 100}%` }} /></span>
-                <span className="bd-prob mono">{f.probPct < 1 ? f.probPct.toFixed(1) : f.probPct.toFixed(0)}%</span>
+                <span className="bd-prob mono">{f.probPct == null ? "—" : `${f.probPct < 1 ? f.probPct.toFixed(1) : f.probPct.toFixed(0)}%`}</span>
                 <span className="bd-points mono">+{f.points.toFixed(2)}</span>
               </div>
             ))}
@@ -380,7 +384,7 @@ function FishDetail({ creature, onClose, children }) {
   );
 }
 
-const RARITY_RANGES = ["menos de 5.0", "5.0 – 6.7", "6.7 – 8.4", "8.4 – 11.2", "11.2 ou mais"];
+const RARITY_RANGES = ["menos de 5.4", "5.4 – 7.5", "7.5 – 9.8", "9.8 – 14.0", "14.0 ou mais"];
 
 function RarityGuide({ onClose }) {
   useEffect(() => {

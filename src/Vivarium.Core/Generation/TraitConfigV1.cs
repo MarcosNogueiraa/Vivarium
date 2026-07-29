@@ -48,14 +48,31 @@ public static class TraitConfigV1
         new(PartColor.PureWhite, 1.0),
     ];
 
+    // Padrões mais raros no geral (None domina mais); novos padrões com pesos
+    // baixos (raros = valiosos). Ocelo/Mármore são a caça top.
     public static readonly IReadOnlyList<WeightedValue<PatternType>> PatternTypes =
     [
-        new(PatternType.None, 65.0),
-        new(PatternType.Stripe, 15.0),
-        new(PatternType.Dot, 15.0),
-        new(PatternType.Gradient, 4.0),
-        new(PatternType.Mottled, 1.0),
+        new(PatternType.None, 76.0),
+        new(PatternType.Stripe, 8.0),
+        new(PatternType.Dot, 8.0),
+        new(PatternType.Scales, 3.0),
+        new(PatternType.Rays, 1.6),
+        new(PatternType.Chevron, 1.2),
+        new(PatternType.Net, 0.9),
+        new(PatternType.Gradient, 0.6),
+        new(PatternType.Mottled, 0.35),
+        new(PatternType.Ocellus, 0.2),
+        new(PatternType.Marble, 0.05),
     ];
+
+    /// <summary>Corpo (shimmer) é a área de destaque: sua contribuição no score é multiplicada.</summary>
+    public const double ShimmerScoreWeight = 2.5;
+
+    // Bônus de conjunto coeso (correlação entre as 3 partes), somado ao score.
+    public const double SamePattern2Bonus = 1.0;   // mesmo padrão (≠None) em 2 partes
+    public const double SamePattern3Bonus = 2.5;   // ...nas 3
+    public const double SameColor2Bonus = 0.8;     // mesma cor de base em 2 partes
+    public const double SameColor3Bonus = 2.0;     // ...nas 3 (monocromático)
 
     /// <summary>Pontos percentuais somados à cor correlacionada quando o corpo é Tier 2+.</summary>
     public const double CorrelationBoostPoints = 15.0;

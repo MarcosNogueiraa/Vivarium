@@ -85,8 +85,12 @@ export const CONFIG = {
     ["Green", 14.0], ["Purple", 6.0], ["Black", 3.0], ["PureWhite", 1.0],
   ],
   patternTypes: [
-    ["None", 65.0], ["Stripe", 15.0], ["Dot", 15.0], ["Gradient", 4.0], ["Mottled", 1.0],
+    ["None", 76.0], ["Stripe", 8.0], ["Dot", 8.0], ["Scales", 3.0], ["Rays", 1.6],
+    ["Chevron", 1.2], ["Net", 0.9], ["Gradient", 0.6], ["Mottled", 0.35],
+    ["Ocellus", 0.2], ["Marble", 0.05],
   ],
+  shimmerScoreWeight: 2.5,
+  setBonus: { samePattern2: 1.0, samePattern3: 2.5, sameColor2: 0.8, sameColor3: 2.0 },
   correlationBoostPoints: 15.0,
   sizeMean: 50.0, sizeStdDev: 20.0, sizeExtremeLow: 10.0, sizeExtremeHigh: 90.0,
   opacityMin: 20.0, opacityMax: 90.0, opacityExtremeLow: 30.0, opacityExtremeHigh: 80.0,
@@ -233,8 +237,9 @@ export function rarityBreakdown(seed) {
   const push = (key, part, value, prob) =>
     factors.push({ key, part, value, probPct: prob * 100, points: selfInfo(prob) });
 
+  // Corpo é destaque: contribuição do tier multiplicada por shimmerScoreWeight.
   const [tier, tierP] = pickProb(CONFIG.shimmerTiers, roll01(seed, "body_shimmer"));
-  push("shimmerTier", null, tier, tierP);
+  factors.push({ key: "shimmerTier", part: null, value: tier, probPct: tierP * 100, points: CONFIG.shimmerScoreWeight * selfInfo(tierP) });
 
   let shimmerColor = null;
   if (tier !== "None") {
@@ -246,11 +251,14 @@ export function rarityBreakdown(seed) {
     : null;
   const colorTable = applyCorrelation(CONFIG.partColors, boosted);
 
+  const partColors = [], partPatterns = [];
   for (const part of ["tail", "dorsal", "pectoral"]) {
     const [color, colorP] = pickProb(colorTable, roll01(seed, part + "_color"));
     push("partColor", part, color, colorP);
+    partColors.push(color);
     const [pattern, patternP] = pickProb(CONFIG.patternTypes, roll01(seed, part + "_pattern"));
     push("patternType", part, pattern, patternP);
+    partPatterns.push(pattern);
     if (pattern === "None") continue;
 
     const patternPalette = CONFIG.partColors.filter(([v]) => v !== color);
@@ -280,6 +288,22 @@ export function rarityBreakdown(seed) {
     if (prob !== null)
       factors.push({ key: "speedExtreme", part: which, value, probPct: prob * 100, points: mv.scoreWeight * selfInfo(prob) });
   }
+
+  // Bônus de conjunto coeso (mesmo padrão / mesma cor entre partes)
+  const sb = CONFIG.setBonus;
+  const maxGroup = (arr) => {
+    const counts = {};
+    let max = 0;
+    for (const v of arr) { counts[v] = (counts[v] || 0) + 1; max = Math.max(max, counts[v]); }
+    return max;
+  };
+  const nonNone = partPatterns.filter((p) => p !== "None");
+  const patMatch = nonNone.length ? maxGroup(nonNone) : 0;
+  if (patMatch === 3) factors.push({ key: "samePattern", part: null, value: "3", probPct: null, points: sb.samePattern3 });
+  else if (patMatch === 2) factors.push({ key: "samePattern", part: null, value: "2", probPct: null, points: sb.samePattern2 });
+  const colMatch = maxGroup(partColors);
+  if (colMatch === 3) factors.push({ key: "sameColor", part: null, value: "3", probPct: null, points: sb.sameColor3 });
+  else if (colMatch === 2) factors.push({ key: "sameColor", part: null, value: "2", probPct: null, points: sb.sameColor2 });
 
   const total = factors.reduce((s, f) => s + f.points, 0);
   factors.sort((a, b) => b.points - a.points);

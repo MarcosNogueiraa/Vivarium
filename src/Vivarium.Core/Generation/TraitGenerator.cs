@@ -15,8 +15,9 @@ public static class TraitGenerator
         // Acumula -log10(P) de cada trait sorteado; soma final = RarityScore.
         double score = 0;
 
+        // Corpo é a área de destaque: contribuição do tier multiplicada por ShimmerScoreWeight.
         var (tier, tierP) = WeightedTable.Pick(TraitConfigV1.ShimmerTiers, DeterministicHash.Roll01(seed, "body_shimmer"));
-        score += SelfInformation(tierP);
+        score += TraitConfigV1.ShimmerScoreWeight * SelfInformation(tierP);
 
         ShimmerColor? shimmerColor = null;
         double shimmerOpacity = 0;
@@ -38,6 +39,9 @@ public static class TraitGenerator
         var tail = GeneratePart(seed, "tail", partColorTable, ref score);
         var dorsal = GeneratePart(seed, "dorsal", partColorTable, ref score);
         var pectoral = GeneratePart(seed, "pectoral", partColorTable, ref score);
+
+        // Bônus de conjunto coeso: mesmo padrão (≠None) / mesma cor entre as partes.
+        score += SetBonus(tail, dorsal, pectoral);
 
         // Movimento: velocidades em normal(50,20), extremos raros entram no
         // score com peso reduzido; amplitudes uniformes ficam fora do score
@@ -110,6 +114,27 @@ public static class TraitGenerator
             score += SelfInformation((TraitConfigV1.PatternOpacityMax - TraitConfigV1.PatternOpacityExtremeHigh) / opacityRange);
 
         return new PartTraits(color, pattern, patternColor, size, opacity);
+    }
+
+    /// <summary>Bônus por conjunto coeso: mesmo padrão (≠None) ou mesma cor de base entre as 3 partes.</summary>
+    private static double SetBonus(PartTraits tail, PartTraits dorsal, PartTraits pectoral)
+    {
+        double bonus = 0;
+
+        // Padrões iguais (ignorando None): maior grupo de partes com o mesmo padrão.
+        var patterns = new[] { tail.Pattern, dorsal.Pattern, pectoral.Pattern }
+            .Where(p => p != PatternType.None).ToArray();
+        int patMatch = patterns.Length == 0 ? 0 : patterns.GroupBy(p => p).Max(g => g.Count());
+        if (patMatch == 3) bonus += TraitConfigV1.SamePattern3Bonus;
+        else if (patMatch == 2) bonus += TraitConfigV1.SamePattern2Bonus;
+
+        // Cores de base iguais: maior grupo de partes com a mesma cor.
+        int colMatch = new[] { tail.Color, dorsal.Color, pectoral.Color }
+            .GroupBy(c => c).Max(g => g.Count());
+        if (colMatch == 3) bonus += TraitConfigV1.SameColor3Bonus;
+        else if (colMatch == 2) bonus += TraitConfigV1.SameColor2Bonus;
+
+        return bonus;
     }
 
     private static double SelfInformation(double probability) => -Math.Log10(probability);

@@ -41,6 +41,12 @@ public enum PatternType
     Dot,
     Gradient,
     Mottled,
+    Scales,     // escamas
+    Chevron,    // ziguezague
+    Net,        // rede/reticulado
+    Rays,       // raios de nadadeira
+    Ocellus,    // ocelo / olho-falso (raro)
+    Marble,     // mármore / veios (raro)
 }
 
 public enum PartType

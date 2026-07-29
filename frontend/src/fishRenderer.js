@@ -19,15 +19,18 @@ export const PT = {
   tier: { None: "Sem brilho", Subtle: "Brilho sutil", Vibrant: "Brilho vibrante", Rare: "Brilho raro", Legendary: "Brilho lendário" },
   shimmer: { Gold: "Dourado", Silver: "Prateado", Bluish: "Azulado", Emerald: "Verde-esmeralda", Purple: "Roxo", Pink: "Rosa", Rainbow: "Arco-íris", AbsoluteBlack: "Preto absoluto", Iridescent: "Iridescente" },
   color: { Orange: "Laranja", Blue: "Azul", Red: "Vermelho", Yellow: "Amarelo", Green: "Verde", Purple: "Roxo", Black: "Preto", PureWhite: "Branco puro" },
-  pattern: { None: "Sem padrão", Stripe: "Estria", Dot: "Bolinha", Gradient: "Degradê", Mottled: "Manchado" },
+  pattern: {
+    None: "Sem padrão", Stripe: "Estria", Dot: "Bolinha", Gradient: "Degradê", Mottled: "Manchado",
+    Scales: "Escamas", Chevron: "Ziguezague", Net: "Rede", Rays: "Raios", Ocellus: "Ocelo", Marble: "Mármore",
+  },
 };
 
 // Faixas calibradas via simulação (CLAUDE.md seção 5)
 export const BANDS = [
-  { max: 5.0, name: "Comum", color: "#93a7b0" },
-  { max: 6.7, name: "Incomum", color: "#57b876" },
-  { max: 8.4, name: "Raro", color: "#4d8fe0" },
-  { max: 11.2, name: "Épico", color: "#a86ce4" },
+  { max: 5.4, name: "Comum", color: "#93a7b0" },
+  { max: 7.5, name: "Incomum", color: "#57b876" },
+  { max: 9.8, name: "Raro", color: "#4d8fe0" },
+  { max: 14.0, name: "Épico", color: "#a86ce4" },
   { max: Infinity, name: "Lendário", color: "#f0b93b" },
 ];
 export const bandOf = (score) => BANDS.find((b) => score < b.max);
@@ -124,6 +127,80 @@ function drawPattern(ctx, seed, part, path, bbox) {
         ctx.fill();
       }
     }
+  } else if (part.pattern === "Scales") {
+    const r = 4 + size * 0.09;
+    const stepX = r * 1.8, stepY = r * 1.05;
+    ctx.lineWidth = Math.max(1, r * 0.16);
+    ctx.strokeStyle = color;
+    for (let row = 0, y = by; y < by + bh + stepY; row++, y += stepY) {
+      const off = row % 2 ? stepX / 2 : 0;
+      for (let x = bx + off; x < bx + bw + stepX; x += stepX) {
+        ctx.beginPath();
+        ctx.arc(x, y, r, Math.PI * 0.15, Math.PI * 0.85);
+        ctx.stroke();
+      }
+    }
+  } else if (part.pattern === "Chevron") {
+    const amp = 5 + size * 0.07;
+    const wl = amp * 1.8;
+    ctx.lineWidth = Math.max(1.5, 2 + size * 0.03);
+    ctx.strokeStyle = color;
+    ctx.lineJoin = "round";
+    for (let y = by; y < by + bh + amp * 2; y += amp * 2.2) {
+      ctx.beginPath();
+      let up = true;
+      for (let x = bx - wl; x <= bx + bw + wl; x += wl, up = !up)
+        ctx.lineTo(x, y + (up ? -amp : amp));
+      ctx.stroke();
+    }
+  } else if (part.pattern === "Net") {
+    const gap = 7 + size * 0.1;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = color;
+    for (const dir of [1, -1])
+      for (let c = -bh; c < bw + bh; c += gap) {
+        ctx.beginPath();
+        ctx.moveTo(bx + c, by);
+        ctx.lineTo(bx + c + dir * bh, by + bh);
+        ctx.stroke();
+      }
+  } else if (part.pattern === "Rays") {
+    const baseX = bx + bw * 0.08, baseY = by + bh / 2;
+    const rays = Math.round(7 + size * 0.08);
+    ctx.lineWidth = Math.max(1, 1.5 + size * 0.02);
+    ctx.strokeStyle = color;
+    for (let i = 0; i < rays; i++) {
+      ctx.beginPath();
+      ctx.moveTo(baseX, baseY);
+      ctx.lineTo(bx + bw, by + (i / (rays - 1)) * bh);
+      ctx.stroke();
+    }
+  } else if (part.pattern === "Ocellus") {
+    const visualRoll = (salt) => roll01(seed, "visual_" + salt);
+    const r = 5 + size * 0.1;
+    const dark = mixHex(color, "#04121a", 0.55);
+    for (let i = 0; i < 3; i++) {
+      const cx = bx + (0.25 + 0.5 * visualRoll(`oc${i}x`)) * bw;
+      const cy = by + (0.25 + 0.5 * visualRoll(`oc${i}y`)) * bh;
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = dark;
+      ctx.beginPath(); ctx.arc(cx, cy, r * 0.55, 0, Math.PI * 2); ctx.fill();
+    }
+  } else if (part.pattern === "Marble") {
+    const visualRoll = (salt) => roll01(seed, "visual_" + salt);
+    ctx.strokeStyle = color;
+    ctx.lineCap = "round";
+    for (let i = 0; i < 4; i++) {
+      ctx.lineWidth = 1.5 + visualRoll(`mv${i}w`) * (1 + size * 0.03);
+      ctx.beginPath();
+      ctx.moveTo(bx, by + visualRoll(`mv${i}a`) * bh);
+      ctx.bezierCurveTo(
+        bx + bw * 0.33, by + visualRoll(`mv${i}b`) * bh,
+        bx + bw * 0.66, by + visualRoll(`mv${i}c`) * bh,
+        bx + bw, by + visualRoll(`mv${i}d`) * bh);
+      ctx.stroke();
+    }
   }
   ctx.restore();
 }
@@ -202,6 +279,16 @@ function drawShimmer(ctx, traits, time) {
     const grad = ctx.createLinearGradient(bx, 0, bx + bw, 0);
     for (let i = 0; i <= 4; i++)
       grad.addColorStop(i / 4, `hsl(${(hue + i * 45) % 360} 90% 65%)`);
+    ctx.fillStyle = grad;
+  } else if (traits.shimmerColor === "Gold" || traits.shimmerColor === "Silver") {
+    // Metálico: realça pra não confundir com o cinza do peixe comum
+    ctx.globalAlpha = Math.min(1, (traits.shimmerOpacity / 100) * 2.2);
+    const base = SHIMMER_HEX[traits.shimmerColor];
+    const bright = traits.shimmerColor === "Gold" ? "#fff2c2" : "#ffffff";
+    const grad = ctx.createLinearGradient(bx, BODY_BBOX[1], bx + bw, BODY_BBOX[1] + BODY_BBOX[3]);
+    grad.addColorStop(0, base);
+    grad.addColorStop(0.5, bright);
+    grad.addColorStop(1, base);
     ctx.fillStyle = grad;
   } else {
     ctx.fillStyle = SHIMMER_HEX[traits.shimmerColor];
