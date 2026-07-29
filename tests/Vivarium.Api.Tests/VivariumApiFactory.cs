@@ -23,6 +23,9 @@ public class VivariumApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Jwt:Issuer", "vivarium");
         builder.UseSetting("Jwt:Audience", "vivarium");
         builder.UseSetting("ConnectionStrings:Vivarium", "Host=ignorado");
+        // Rate limiting afrouxado nos testes (muitos registros do mesmo host)
+        builder.UseSetting("RateLimiting:GlobalPerMinute", "1000000");
+        builder.UseSetting("RateLimiting:AuthPerMinute", "1000000");
 
         builder.ConfigureServices(services =>
         {

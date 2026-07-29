@@ -14,13 +14,15 @@ public static class AuthEndpoints
 
     public static void MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/auth");
+        var group = app.MapGroup("/api/auth").RequireRateLimiting("auth");
 
         group.MapPost("/register", async (RegisterRequest req, VivariumDbContext db, TokenService tokens) =>
         {
-            if (string.IsNullOrWhiteSpace(req.Username) || req.Username.Length is < 3 or > 32)
-                return Results.BadRequest(new { error = "Username deve ter entre 3 e 32 caracteres" });
-            if (string.IsNullOrWhiteSpace(req.Email) || !req.Email.Contains('@'))
+            if (string.IsNullOrWhiteSpace(req.Username) || req.Username.Length is < 3 or > 32
+                || !req.Username.All(c => char.IsLetterOrDigit(c) || c is '_' or '-'))
+                return Results.BadRequest(new { error = "Username: 3–32 caracteres, só letras, números, _ ou -" });
+            if (string.IsNullOrWhiteSpace(req.Email) || req.Email.Length > 256
+                || !System.Net.Mail.MailAddress.TryCreate(req.Email, out _))
                 return Results.BadRequest(new { error = "Email inválido" });
             if (string.IsNullOrEmpty(req.Password) || req.Password.Length < 8)
                 return Results.BadRequest(new { error = "Senha deve ter pelo menos 8 caracteres" });

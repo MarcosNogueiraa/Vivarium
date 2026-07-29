@@ -1,6 +1,8 @@
 using System.Text;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Vivarium.Api.Data;
@@ -44,8 +46,30 @@ var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get
 builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
     policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod()));
 
+// Rate limiting: global (folgado, pro polling do jogo) por usuário/IP + política
+// "auth" apertada por IP contra brute-force de login. NB: atrás de proxy
+// (Cloudflare/Oracle) o IP real exige UseForwardedHeaders — configurar no deploy.
+static string ClientKey(HttpContext ctx) =>
+    ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+    ?? ctx.User.FindFirst("sub")?.Value
+    ?? ctx.Connection.RemoteIpAddress?.ToString()
+    ?? "anon";
+int globalPerMinute = builder.Configuration.GetValue("RateLimiting:GlobalPerMinute", 300);
+int authPerMinute = builder.Configuration.GetValue("RateLimiting:AuthPerMinute", 10);
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(ClientKey(ctx),
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = globalPerMinute, Window = TimeSpan.FromMinutes(1) }));
+    options.AddPolicy("auth", ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(ctx.Connection.RemoteIpAddress?.ToString() ?? "anon",
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = authPerMinute, Window = TimeSpan.FromMinutes(1) }));
+});
+
 var app = builder.Build();
 
+app.UseRateLimiter();
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
