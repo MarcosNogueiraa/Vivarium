@@ -276,6 +276,15 @@ function TankView({ tank, refresh, notify }) {
     } catch (err) { notify(err.message); }
   }
 
+  async function store(creature) {
+    try {
+      await api.storeCreature(creature.id);
+      notify("Guardado na mochila.");
+      setSelectedId(null);
+      await refresh();
+    } catch (err) { notify(err.message); }
+  }
+
   return (
     <div className="tank-layout">
       <div className="tank-stage">
@@ -316,7 +325,8 @@ function TankView({ tank, refresh, notify }) {
           <ShimmerLabel seed={selected.seed} />
           <span className="faint mono">seed {selected.seed}</span>
           <span className="spacer" />
-          <button onClick={() => sell(selected)}>Vender no mercado</button>
+          <button onClick={() => store(selected)} title="Guardar na mochila (não farma)">Guardar</button>
+          <button onClick={() => sell(selected)}>Vender</button>
           <button onClick={() => transfer(selected)}>Transferir</button>
         </div>
       ) : (
@@ -442,6 +452,64 @@ function StoreView({ refreshTank, notify }) {
   );
 }
 
+function BackpackView({ refreshTank, notify }) {
+  const [data, setData] = useState(null);
+
+  const refresh = useCallback(async () => { setData(await api.backpack()); }, []);
+  useEffect(() => { refresh().catch((e) => notify(e.message)); }, [refresh, notify]);
+
+  async function deploy(c) {
+    try {
+      await api.deployCreature(c.id);
+      notify("Peixe de volta ao tanque!");
+      await Promise.all([refresh(), refreshTank()]);
+    } catch (e) { notify(e.message); }
+  }
+  async function sell(c) {
+    const price = window.prompt("Preço em moeda soft:", "50");
+    if (!price) return;
+    try { await api.createListing(c.id, Number(price)); notify("Listado no mercado."); await refresh(); }
+    catch (e) { notify(e.message); }
+  }
+  async function transfer(c) {
+    const to = window.prompt("Transferir para qual jogador (username)?");
+    if (!to) return;
+    try { await api.transferCreature(c.id, to.trim()); notify(`Transferido para ${to.trim()}.`); await refresh(); }
+    catch (e) { notify(e.message); }
+  }
+
+  if (data === null) return <p className="hint">Carregando mochila…</p>;
+
+  return (
+    <>
+      <div className="section-head">
+        <span className="eyebrow">Mochila</span>
+        <span className="count">{data.creatures.length}/{data.capacity}</span>
+      </div>
+      {data.creatures.length === 0 ? (
+        <p className="hint">Mochila vazia. Guarde peixes do tanque aqui — eles ficam seguros (mas não farmam).</p>
+      ) : (
+        <div className="grid">
+          {data.creatures.map((c) => (
+            <div key={c.id} className="card" style={{ "--tier": bandOf(Number(c.rarityScore)).color }}>
+              <div className="fish-stage"><FishCanvas seed={c.seed} /></div>
+              <div className="card-row">
+                <RarityBadge score={Number(c.rarityScore)} />
+              </div>
+              <ShimmerLabel seed={c.seed} />
+              <div className="card-row">
+                <button className="btn-primary" onClick={() => deploy(c)}>Pro tanque</button>
+                <button onClick={() => sell(c)}>Vender</button>
+                <button onClick={() => transfer(c)}>Transferir</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 function GameView({ onLogout }) {
   const [tank, setTank] = useState(null);
   const [tab, setTab] = useState("tank");
@@ -483,6 +551,7 @@ function GameView({ onLogout }) {
         <span className="spacer" />
         <nav className="nav-pills">
           <button className={tab === "tank" ? "active" : ""} onClick={() => setTab("tank")}>Tanque</button>
+          <button className={tab === "backpack" ? "active" : ""} onClick={() => setTab("backpack")}>Mochila</button>
           <button className={tab === "market" ? "active" : ""} onClick={() => setTab("market")}>Mercado</button>
           <button className={tab === "store" ? "active" : ""} onClick={() => setTab("store")}>Loja</button>
         </nav>
@@ -496,6 +565,7 @@ function GameView({ onLogout }) {
 
       <main className="content">
         {tab === "tank" && <TankView tank={tank} refresh={refreshTank} notify={notify} />}
+        {tab === "backpack" && <BackpackView refreshTank={refreshTank} notify={notify} />}
         {tab === "market" && <MarketView userId={userId} refreshTank={refreshTank} notify={notify} />}
         {tab === "store" && <StoreView refreshTank={refreshTank} notify={notify} />}
       </main>
