@@ -503,6 +503,16 @@ function TankView({ tank, refresh, notify }) {
   }, 0);
   const nextFish = nextFishEta(tank);
 
+  // Lista ordenada por produção (farm) desc — que já reflete raridade × sinergia
+  const listFish = tank.creatures
+    .map((c) => {
+      const traits = generateTraits(BigInt(c.seed));
+      const col = traits.tail.color;
+      const mult = synergyMultiplier(colorCounts[col] ?? 1);
+      return { c, traits, col, prod: coinsPerHourOf(Number(c.rarityScore), mult) };
+    })
+    .sort((a, b) => b.prod - a.prod || Number(b.c.rarityScore) - Number(a.c.rarityScore));
+
   async function collect(itemId) {
     try { await api.collect(itemId); await refresh(); }
     catch (err) { notify(err.message); }
@@ -632,10 +642,7 @@ function TankView({ tank, refresh, notify }) {
           </div>
           {listOpen && (
           <div className="fish-list">
-            {tank.creatures.map((c) => {
-              const traits = generateTraits(BigInt(c.seed));
-              const col = traits.tail.color;
-              const mult = synergyMultiplier(colorCounts[col] ?? 1);
+            {listFish.map(({ c, traits, col, prod }) => {
               const band = bandOf(Number(c.rarityScore));
               return (
                 <button key={c.id} className="fish-row" onClick={() => setSelectedId(c.id)} style={{ "--tier": band.color }}>
@@ -650,7 +657,7 @@ function TankView({ tank, refresh, notify }) {
                       {traits.shimmerTier !== "None" && <span className="shimmer-label">✦ {PT.shimmer[traits.shimmerColor]}</span>}
                     </span>
                   </span>
-                  <span className="fr-prod mono"><Coin /> ~{coinsPerHourOf(Number(c.rarityScore), mult).toFixed(1)}<small>/h</small></span>
+                  <span className="fr-prod mono"><Coin /> ~{prod.toFixed(1)}<small>/h</small></span>
                 </button>
               );
             })}
