@@ -57,22 +57,55 @@ const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const FISH_CX = 290;
 const FISH_CY = 210;
 
-// Aura suave (glow radial aditivo) atrás do peixe — em vez de um círculo/anel.
-// Raio precisa ser maior que o peixe na tela (~95px do centro) pra o halo
-// aparecer em volta em vez de ficar escondido atrás do corpo.
-function drawAura(ctx, cx, cy, r, hex, alpha) {
-  const n = parseInt(hex.slice(1), 16);
-  const rgb = `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
-  const g = ctx.createRadialGradient(cx, cy, 40, cx, cy, r);
-  g.addColorStop(0, `rgba(${rgb}, ${alpha})`);
-  g.addColorStop(0.7, `rgba(${rgb}, ${alpha * 0.6})`);
-  g.addColorStop(1, `rgba(${rgb}, 0)`);
+// Aura que segue o CONTORNO do peixe: rasteriza a silhueta uma vez, tinge na cor
+// e aplica blur; desenhada atrás do peixe vira um brilho abraçando a forma.
+const AURA_SCALE = 0.34;
+const AURA_PAD = 36;
+const AURA_BLUR = 11;
+const AURA_CX = AURA_PAD + FISH_CX * AURA_SCALE;
+const AURA_CY = AURA_PAD + FISH_CY * AURA_SCALE;
+const auraCache = new Map();
+
+function buildAuraSprite(bigSeed, traits, color) {
+  const w = Math.ceil(VIEW_W * AURA_SCALE) + AURA_PAD * 2;
+  const h = Math.ceil(VIEW_H * AURA_SCALE) + AURA_PAD * 2;
+
+  // 1. desenha o peixe (pose estática) e tinge tudo na cor (mantém o alpha da forma)
+  const base = document.createElement("canvas");
+  base.width = w; base.height = h;
+  const bctx = base.getContext("2d");
+  bctx.save();
+  bctx.translate(AURA_PAD, AURA_PAD);
+  bctx.scale(AURA_SCALE, AURA_SCALE);
+  drawFish(bctx, bigSeed, traits, 0);
+  bctx.restore();
+  bctx.globalCompositeOperation = "source-in";
+  bctx.fillStyle = color;
+  bctx.fillRect(0, 0, w, h);
+
+  // 2. borra a silhueta tingida → contorno suave
+  const out = document.createElement("canvas");
+  out.width = w; out.height = h;
+  const octx = out.getContext("2d");
+  octx.filter = `blur(${AURA_BLUR}px)`;
+  octx.drawImage(base, 0, 0);
+  return out;
+}
+
+function getAuraSprite(c, color) {
+  const key = `${c.id}:${color}`;
+  let sp = auraCache.get(key);
+  if (!sp) { sp = buildAuraSprite(c.bigSeed, c.traits, color); auraCache.set(key, sp); }
+  return sp;
+}
+
+function drawAura(ctx, sprite, cx, cy, flip, alpha) {
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.globalAlpha = alpha;
+  ctx.translate(cx, cy);
+  if (flip) ctx.scale(-1, 1);
+  ctx.drawImage(sprite, -AURA_CX, -AURA_CY);
   ctx.restore();
 }
 
@@ -130,16 +163,16 @@ function AquariumCanvas({ creatures, selectedId, onSelect, interactive = true, a
         if (s.x > W - 90) { s.x = W - 90; s.vx = -Math.abs(s.vx); }
         const y = s.y + Math.sin(time / 900 + s.phase) * 7;
 
-        // Aura suave de raridade pra peixes raros+ (lendário reluz de leve)
+        // Aura no contorno pra peixes raros+ (lendário reluz de leve)
         const rscore = Number(c.rarityScore);
         if (rscore >= 6.7) {
           const legendary = rscore >= 11.2;
           const pulse = legendary ? 0.82 + 0.18 * Math.sin(time / 650 + s.phase) : 1;
-          drawAura(ctx, s.x, y, legendary ? 200 : 165, bandOf(rscore).color, (legendary ? 0.4 : 0.26) * pulse);
+          drawAura(ctx, getAuraSprite(c, bandOf(rscore).color), s.x, y, s.vx > 0, (legendary ? 0.55 : 0.36) * pulse);
         }
-        // Aura de seleção (aqua, um pouco mais forte)
+        // Aura de seleção (aqua, seguindo o contorno)
         if (c.id === selectedRef.current) {
-          drawAura(ctx, s.x, y, 180, "#54e6d1", 0.42);
+          drawAura(ctx, getAuraSprite(c, "#54e6d1"), s.x, y, s.vx > 0, 0.5);
         }
 
         ctx.save();
