@@ -88,13 +88,16 @@ export const CONFIG = {
     ["None", 65.0], ["Stripe", 15.0], ["Dot", 15.0], ["Gradient", 4.0], ["Mottled", 1.0],
   ],
   correlationBoostPoints: 15.0,
-  sizeMean: 50.0, sizeStdDev: 20.0,
-  opacityMin: 20.0, opacityMax: 90.0,
+  sizeMean: 50.0, sizeStdDev: 20.0, sizeExtremeLow: 10.0, sizeExtremeHigh: 90.0,
+  opacityMin: 20.0, opacityMax: 90.0, opacityExtremeLow: 30.0, opacityExtremeHigh: 80.0,
   movement: {
     speedMean: 50.0, speedStdDev: 20.0,
+    speedExtremeLow: 10.0, speedExtremeHigh: 90.0, scoreWeight: 0.5,
     tailAmpMin: 0.20, tailAmpMax: 0.75,
     finAmpMin: 0.15, finAmpMax: 0.75,
   },
+  // Renda por peixe — espelha IncomeCalculator/TickConfig (manter em sincronia)
+  income: { base: 3.0, growth: 0.49, ref: 4.0 },
   closestPartColor: {
     Gold: "Yellow", Silver: "PureWhite", Bluish: "Blue", Emerald: "Green",
     Purple: "Purple", Pink: "Red", Rainbow: "PureWhite", AbsoluteBlack: "Black",
@@ -178,4 +181,100 @@ export function generateTraits(seed) {
     pectoral: generatePart("pectoral"),
     movement,
   };
+}
+
+// ---------- Produção e breakdown de raridade (só display; motor é a fonte) ----------
+
+/** Moedas/hora que o peixe rende a água cheia (espelha IncomeCalculator.CoinsPerHour). */
+export function coinsPerHourOf(rarityScore) {
+  const i = CONFIG.income;
+  return i.base * Math.exp(i.growth * (rarityScore - i.ref));
+}
+
+function erf(x) {
+  const sign = Math.sign(x);
+  x = Math.abs(x);
+  const t = 1.0 / (1.0 + 0.3275911 * x);
+  const y = 1.0 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592)
+            * t * Math.exp(-x * x);
+  return sign * y;
+}
+function normalCdf(x, mean, stdDev) {
+  return 0.5 * (1.0 + erf((x - mean) / (stdDev * Math.SQRT2)));
+}
+function pickProb(table, roll) {
+  let total = 0;
+  for (const [, w] of table) total += w;
+  const target = roll * total;
+  let cum = 0;
+  for (const [value, w] of table) {
+    cum += w;
+    if (target < cum) return [value, w / total];
+  }
+  const last = table[table.length - 1];
+  return [last[0], last[1] / total];
+}
+
+/**
+ * Decompõe o rarity score em fatores (o que faz o peixe ser raro), espelhando
+ * TraitGenerator: score = Σ −log10(P). Cada fator: { key, part, value, probPct, points }.
+ * O total ≈ rarityScore da API (mesma fórmula).
+ */
+export function rarityBreakdown(seed) {
+  const factors = [];
+  const selfInfo = (p) => -Math.log10(p);
+  const push = (key, part, value, prob) =>
+    factors.push({ key, part, value, probPct: prob * 100, points: selfInfo(prob) });
+
+  const [tier, tierP] = pickProb(CONFIG.shimmerTiers, roll01(seed, "body_shimmer"));
+  push("shimmerTier", null, tier, tierP);
+
+  let shimmerColor = null;
+  if (tier !== "None") {
+    const palette = CONFIG.shimmerColorsByTier[tier];
+    shimmerColor = palette[Math.floor(roll01(seed, "body_shimmer_color") * palette.length)];
+  }
+  const boosted = (tier === "Vibrant" || tier === "Rare" || tier === "Legendary")
+    ? CONFIG.closestPartColor[shimmerColor]
+    : null;
+  const colorTable = applyCorrelation(CONFIG.partColors, boosted);
+
+  for (const part of ["tail", "dorsal", "pectoral"]) {
+    const [color, colorP] = pickProb(colorTable, roll01(seed, part + "_color"));
+    push("partColor", part, color, colorP);
+    const [pattern, patternP] = pickProb(CONFIG.patternTypes, roll01(seed, part + "_pattern"));
+    push("patternType", part, pattern, patternP);
+    if (pattern === "None") continue;
+
+    const patternPalette = CONFIG.partColors.filter(([v]) => v !== color);
+    const [pc, pcP] = pickProb(patternPalette, roll01(seed, part + "_pattern_color"));
+    push("patternColor", part, pc, pcP);
+
+    const size = normalPick(seed, part + "_pattern_size", CONFIG.sizeMean, CONFIG.sizeStdDev);
+    if (size < CONFIG.sizeExtremeLow)
+      push("patternSizeExtreme", part, "pequeno", normalCdf(CONFIG.sizeExtremeLow, CONFIG.sizeMean, CONFIG.sizeStdDev));
+    else if (size > CONFIG.sizeExtremeHigh)
+      push("patternSizeExtreme", part, "grande", 1 - normalCdf(CONFIG.sizeExtremeHigh, CONFIG.sizeMean, CONFIG.sizeStdDev));
+
+    const opacity = CONFIG.opacityMin + roll01(seed, part + "_pattern_opacity") * (CONFIG.opacityMax - CONFIG.opacityMin);
+    const range = CONFIG.opacityMax - CONFIG.opacityMin;
+    if (opacity < CONFIG.opacityExtremeLow)
+      push("patternOpacityExtreme", part, "baixa", (CONFIG.opacityExtremeLow - CONFIG.opacityMin) / range);
+    else if (opacity > CONFIG.opacityExtremeHigh)
+      push("patternOpacityExtreme", part, "alta", (CONFIG.opacityMax - CONFIG.opacityExtremeHigh) / range);
+  }
+
+  const mv = CONFIG.movement;
+  for (const [salt, which] of [["tail_speed", "tail"], ["fin_speed", "fin"]]) {
+    const speed = normalPick(seed, salt, mv.speedMean, mv.speedStdDev);
+    let prob = null, value = null;
+    if (speed < mv.speedExtremeLow) { prob = normalCdf(mv.speedExtremeLow, mv.speedMean, mv.speedStdDev); value = "lenta"; }
+    else if (speed > mv.speedExtremeHigh) { prob = 1 - normalCdf(mv.speedExtremeHigh, mv.speedMean, mv.speedStdDev); value = "rápida"; }
+    if (prob !== null)
+      factors.push({ key: "speedExtreme", part: which, value, probPct: prob * 100, points: mv.scoreWeight * selfInfo(prob) });
+  }
+
+  const total = factors.reduce((s, f) => s + f.points, 0);
+  factors.sort((a, b) => b.points - a.points);
+  return { total, factors };
 }

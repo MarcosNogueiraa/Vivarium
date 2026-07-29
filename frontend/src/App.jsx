@@ -1,10 +1,55 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, clearToken, getToken, setToken } from "./api.js";
-import { generateTraits, roll01 } from "./generator.js";
+import { coinsPerHourOf, generateTraits, rarityBreakdown, roll01 } from "./generator.js";
 import {
-  bandOf, drawFish, drawTankBackground, drawTankForeground,
+  BANDS, bandOf, drawFish, drawTankBackground, drawTankForeground,
   PT, swimSpeedOf, VIEW_H, VIEW_W,
 } from "./fishRenderer.js";
+
+const PART_PT = { tail: "Cauda", dorsal: "Nadadeira dorsal", pectoral: "Barbatana peitoral" };
+
+// Rótulo humano de um fator do breakdown de raridade
+function factorLabel(f) {
+  switch (f.key) {
+    case "shimmerTier":
+      return f.value === "None" ? "Corpo sem brilho" : `Brilho ${PT.tier[f.value].toLowerCase()}`;
+    case "partColor":
+      return `${PART_PT[f.part]}: ${PT.color[f.value]}`;
+    case "patternType":
+      return `${PART_PT[f.part]}: ${PT.pattern[f.value].toLowerCase()}`;
+    case "patternColor":
+      return `Cor do padrão (${PART_PT[f.part].toLowerCase()}): ${PT.color[f.value]}`;
+    case "patternSizeExtreme":
+      return `Padrão ${f.value} (${PART_PT[f.part].toLowerCase()})`;
+    case "patternOpacityExtreme":
+      return `Opacidade ${f.value} do padrão (${PART_PT[f.part].toLowerCase()})`;
+    case "speedExtreme":
+      return `${f.part === "tail" ? "Cauda" : "Nadadeira"} ${f.value}`;
+    default:
+      return f.key;
+  }
+}
+
+const speedWord = (s) => (s < 10 ? "muito lenta" : s < 35 ? "lenta" : s > 90 ? "muito rápida" : s > 65 ? "rápida" : "normal");
+
+function ageOf(createdAt) {
+  const mins = Math.max(0, (Date.now() - new Date(createdAt).getTime()) / 60000);
+  if (mins < 60) return `${Math.floor(mins)} min`;
+  const h = mins / 60;
+  if (h < 24) return `${Math.floor(h)} h`;
+  return `${Math.floor(h / 24)} d`;
+}
+
+// Estimativa do próximo peixe na fila a partir do progresso de geração.
+function nextFishEta(tank) {
+  if (tank.queue.length >= tank.queueCap) return { full: true };
+  const interval = tank.generationIntervalMinutes || 15;
+  const progress = Number(tank.generationProgressMinutes ?? 0);
+  const waterFactor = Number(tank.maintenanceLevel) < 40 ? 0.5 : 1;
+  const rate = (tank.online ? 1.0 : 0.45) * waterFactor; // min efetivos por min real
+  const mins = rate > 0 ? Math.max(0, interval - progress) / rate : Infinity;
+  return { full: false, mins, fraction: Math.min(1, progress / interval) };
+}
 
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -21,6 +66,7 @@ function AquariumCanvas({ creatures, selectedId, onSelect, interactive = true, a
   const creaturesRef = useRef([]);
   const selectedRef = useRef(null);
   const qualityRef = useRef(100);
+  const [hover, setHover] = useState(null);
 
   creaturesRef.current = useMemo(
     () => creatures.map((c) => {
@@ -65,6 +111,21 @@ function AquariumCanvas({ creatures, selectedId, onSelect, interactive = true, a
         if (s.x > W - 90) { s.x = W - 90; s.vx = -Math.abs(s.vx); }
         const y = s.y + Math.sin(time / 900 + s.phase) * 7;
 
+        // Anel de raridade sempre visível pra peixes raros+ (lendário reluz)
+        const rscore = Number(c.rarityScore);
+        if (rscore >= 6.7) {
+          const rc = bandOf(rscore);
+          ctx.save();
+          ctx.strokeStyle = rc.color;
+          ctx.globalAlpha = 0.5;
+          ctx.lineWidth = 2;
+          if (rscore >= 11.2) { ctx.shadowColor = rc.color; ctx.shadowBlur = 20; ctx.globalAlpha = 0.85; }
+          ctx.beginPath();
+          ctx.ellipse(s.x, y + 34, 52, 12, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+
         if (c.id === selectedRef.current) {
           ctx.save();
           ctx.strokeStyle = "rgba(84, 230, 209, 0.9)";
@@ -94,8 +155,7 @@ function AquariumCanvas({ creatures, selectedId, onSelect, interactive = true, a
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  function handleClick(e) {
-    if (!interactive) return;
+  function hitTest(e) {
     const rect = canvasRef.current.getBoundingClientRect();
     const px = (e.clientX - rect.left) * (W / rect.width);
     const py = (e.clientY - rect.top) * (H / rect.height);
@@ -103,16 +163,39 @@ function AquariumCanvas({ creatures, selectedId, onSelect, interactive = true, a
       const s = statesRef.current.get(c.id);
       return s && Math.abs(px - s.x) < 70 && Math.abs(py - s.y) < 55;
     });
-    onSelect(hit ? hit.id : null);
+    return { rect, hit };
+  }
+
+  function handleClick(e) {
+    if (!interactive) return;
+    onSelect(hitTest(e).hit?.id ?? null);
+  }
+
+  function handleMove(e) {
+    if (!interactive) return;
+    const { rect, hit } = hitTest(e);
+    if (hit) {
+      const band = bandOf(Number(hit.rarityScore));
+      setHover({ name: band.name, color: band.color, x: e.clientX - rect.left, y: e.clientY - rect.top });
+    } else if (hover) {
+      setHover(null);
+    }
   }
 
   return (
-    <canvas
-      ref={canvasRef} width={W} height={H}
-      className={`aquarium${ambient ? " ambient" : ""}`}
-      onClick={interactive ? handleClick : undefined}
-      role="img" aria-label="Aquário com seus peixes"
-    />
+    <>
+      <canvas
+        ref={canvasRef} width={W} height={H}
+        className={`aquarium${ambient ? " ambient" : ""}`}
+        onClick={interactive ? handleClick : undefined}
+        onMouseMove={interactive ? handleMove : undefined}
+        onMouseLeave={() => hover && setHover(null)}
+        role="img" aria-label="Aquário com seus peixes"
+      />
+      {hover && (
+        <div className="fish-tip" style={{ left: hover.x, top: hover.y, "--tier": hover.color }}>{hover.name}</div>
+      )}
+    </>
   );
 }
 
@@ -162,6 +245,124 @@ function ShimmerLabel({ seed }) {
 }
 
 function Coin() { return <span className="coin" aria-hidden="true" />; }
+
+function TraitRow({ label, value }) {
+  return (
+    <div className="trait-row">
+      <span className="tr-label">{label}</span>
+      <span className="tr-value">{value}</span>
+    </div>
+  );
+}
+
+function partSummary(part) {
+  const c = PT.color[part.color];
+  if (part.pattern === "None") return `${c} · sem padrão`;
+  return `${c} · ${PT.pattern[part.pattern].toLowerCase()} ${PT.color[part.patternColor]} `
+    + `(tam ${part.patternSize.toFixed(0)}, op ${part.patternOpacity.toFixed(0)}%)`;
+}
+
+function FishDetail({ creature, onClose, children }) {
+  const seed = creature.seed;
+  const bigSeed = useMemo(() => BigInt(seed), [seed]);
+  const traits = useMemo(() => generateTraits(bigSeed), [bigSeed]);
+  const breakdown = useMemo(() => rarityBreakdown(bigSeed), [bigSeed]);
+  const score = Number(creature.rarityScore);
+  const band = bandOf(score);
+  const coins = coinsPerHourOf(score);
+  const maxPoints = Math.max(...breakdown.factors.map((f) => f.points), 0.001);
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal glass" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose} aria-label="Fechar">×</button>
+
+        <div className="detail-head">
+          <div className="detail-fish"><FishCanvas seed={seed} width={280} /></div>
+          <div className="detail-meta">
+            <span className="badge big" style={{ "--tier": band.color }}><span className="gem" /> {band.name}</span>
+            <div className="detail-score">Raridade <b>{score.toFixed(2)}</b></div>
+            <div className="detail-coins"><Coin /> ~{coins.toFixed(1)} <small>soft/h a água cheia</small></div>
+            {traits.shimmerTier !== "None" && (
+              <div className="shimmer-label">✦ {PT.tier[traits.shimmerTier]} · {PT.shimmer[traits.shimmerColor]}</div>
+            )}
+            <div className="faint mono">seed {seed} · {ageOf(creature.createdAt)}</div>
+          </div>
+        </div>
+
+        <div className="detail-section">
+          <div className="eyebrow">Atributos</div>
+          <TraitRow label="Corpo" value={traits.shimmerTier === "None"
+            ? "Cinza, sem brilho"
+            : `${PT.tier[traits.shimmerTier]} · ${PT.shimmer[traits.shimmerColor]} ${traits.shimmerOpacity.toFixed(0)}%`} />
+          <TraitRow label="Cauda" value={partSummary(traits.tail)} />
+          <TraitRow label="Nadadeira dorsal" value={partSummary(traits.dorsal)} />
+          <TraitRow label="Barbatana peitoral" value={partSummary(traits.pectoral)} />
+          <TraitRow label="Movimento" value={`cauda ${speedWord(traits.movement.tailSpeed)}, `
+            + `nadadeira ${speedWord(traits.movement.finSpeed)} · nado ${swimSpeedOf(traits).toFixed(0)} px/s`} />
+        </div>
+
+        <div className="detail-section">
+          <div className="eyebrow">Por que é raro</div>
+          <p className="bd-help">Cada atributo soma pontos conforme quão improvável é. Quanto mais raro o conjunto, maior o score.</p>
+          <div className="breakdown">
+            {breakdown.factors.map((f, i) => (
+              <div className="bd-row" key={i}>
+                <span className="bd-label">{factorLabel(f)}</span>
+                <span className="bd-bar"><span style={{ width: `${(f.points / maxPoints) * 100}%` }} /></span>
+                <span className="bd-prob mono">{f.probPct < 1 ? f.probPct.toFixed(1) : f.probPct.toFixed(0)}%</span>
+                <span className="bd-points mono">+{f.points.toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="bd-total">Score total <b>{breakdown.total.toFixed(2)}</b></div>
+        </div>
+
+        {children && <div className="detail-actions">{children}</div>}
+      </div>
+    </div>
+  );
+}
+
+const RARITY_RANGES = ["menos de 5.0", "5.0 – 6.7", "6.7 – 8.4", "8.4 – 11.2", "11.2 ou mais"];
+
+function RarityGuide({ onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal glass narrow" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose} aria-label="Fechar">×</button>
+        <div className="eyebrow">Como funciona a raridade</div>
+        <p className="muted guide-intro">
+          Cada peixe nasce de um seed único. Todo atributo — brilho do corpo, cor e padrão de cada parte,
+          velocidade de nado — é sorteado com uma probabilidade. Quanto mais improvável o conjunto, maior a
+          raridade; e quanto mais raro, mais moedas o peixe produz por hora.
+        </p>
+        <div className="guide-bands">
+          {BANDS.map((b, i) => (
+            <div className="guide-band" key={b.name}>
+              <span className="gem" style={{ background: b.color, boxShadow: `0 0 10px ${b.color}` }} />
+              <span className="gb-name" style={{ color: b.color }}>{b.name}</span>
+              <span className="gb-range mono">{RARITY_RANGES[i]}</span>
+            </div>
+          ))}
+        </div>
+        <p className="faint guide-foot">Abra qualquer peixe para ver o detalhamento “por que é raro”.</p>
+      </div>
+    </div>
+  );
+}
 
 function randomDemoSeed() {
   return String(Math.floor(Math.random() * 9_007_199_254_740_991));
@@ -232,8 +433,13 @@ function AuthView({ onAuthed }) {
 
 function TankView({ tank, refresh, notify }) {
   const [selectedId, setSelectedId] = useState(null);
+  const [showGuide, setShowGuide] = useState(false);
   const selected = tank.creatures.find((c) => c.id === selectedId) ?? null;
   const lowWater = Number(tank.maintenanceLevel) < 40;
+
+  const current = Number(tank.coinsPerHour ?? 0);
+  const potential = tank.creatures.reduce((s, c) => s + coinsPerHourOf(Number(c.rarityScore)), 0);
+  const nextFish = nextFishEta(tank);
 
   async function collect(itemId) {
     try { await api.collect(itemId); await refresh(); }
@@ -292,9 +498,18 @@ function TankView({ tank, refresh, notify }) {
           <span className={`status-pill ${tank.online ? "on" : "off"}`}>
             <span className="led" />{tank.online ? "Online" : "Offline"}
           </span>
+          <span className="capacity-chip" title="Peixes ativos no tanque / capacidade">
+            🐟 {tank.creatures.length}/{tank.capacity}
+          </span>
+          <button className="guide-btn" onClick={() => setShowGuide(true)} title="Como funciona a raridade">?</button>
           <span className="spacer" style={{ flex: 1 }} />
-          <span className="income-chip" title="Moedas por hora que seu tanque farma (já com o efeito da água)">
-            <Coin />+{Number(tank.coinsPerHour ?? 0).toFixed(1)}<small>/h</small>
+          <span className="income-chip" title={
+            potential > current + 0.05
+              ? `Produção atual (com a água). Potencial a água cheia: ${potential.toFixed(1)}/h`
+              : "Moedas por hora que seu tanque farma"
+          }>
+            <Coin />+{current.toFixed(1)}<small>/h</small>
+            {potential > current + 0.05 && <em className="of-potential"> de {potential.toFixed(0)}</em>}
           </span>
           <span className="water-gauge">
             <span className="label">Água</span>
@@ -319,21 +534,17 @@ function TankView({ tank, refresh, notify }) {
         )}
       </div>
 
-      {selected ? (
-        <div className="selected-bar glass">
-          <RarityBadge score={Number(selected.rarityScore)} />
-          <ShimmerLabel seed={selected.seed} />
-          <span className="faint mono">seed {selected.seed}</span>
-          <span className="spacer" />
+      {tank.creatures.length > 0 && !selected && (
+        <p className="hint">Clique num peixe para ver os detalhes, guardar, vender ou transferir.</p>
+      )}
+      {selected && (
+        <FishDetail creature={selected} onClose={() => setSelectedId(null)}>
           <button onClick={() => store(selected)} title="Guardar na mochila (não farma)">Guardar</button>
           <button onClick={() => sell(selected)}>Vender</button>
           <button onClick={() => transfer(selected)}>Transferir</button>
-        </div>
-      ) : (
-        tank.creatures.length > 0 && (
-          <p className="hint">Clique num peixe para ver detalhes, vender ou transferir.</p>
-        )
+        </FishDetail>
       )}
+      {showGuide && <RarityGuide onClose={() => setShowGuide(false)} />}
 
       <section>
         <div className="section-head">
@@ -347,7 +558,17 @@ function TankView({ tank, refresh, notify }) {
             <button className="dev-btn" onClick={devClear} title="Só existe em dev">Limpar (dev)</button>
           )}
         </div>
-        {tank.queue.length === 0 && <p className="hint">Nada na fila ainda — os peixes surgem com o tempo.</p>}
+        {nextFish.full ? (
+          <p className="hint">Fila cheia — colete peixes para liberar espaço.</p>
+        ) : (
+          <div className="next-fish">
+            <span className="nf-label">
+              Próximo peixe {nextFish.mins < 1 ? "em instantes" : `em ~${Math.ceil(nextFish.mins)} min`}
+              {!tank.online && " (offline, mais devagar)"}
+            </span>
+            <span className="nf-track"><span style={{ width: `${(nextFish.fraction * 100).toFixed(0)}%` }} /></span>
+          </div>
+        )}
         <div className="queue">
           {tank.queue.map((item) => (
             <div key={item.id} className={`queue-item glass ${item.isSick ? "sick" : ""}`}>
@@ -368,6 +589,7 @@ function TankView({ tank, refresh, notify }) {
 
 function MarketView({ userId, refreshTank, notify }) {
   const [listings, setListings] = useState(null);
+  const [detail, setDetail] = useState(null);
 
   const refresh = useCallback(async () => {
     setListings(await api.listings());
@@ -379,36 +601,54 @@ function MarketView({ userId, refreshTank, notify }) {
     try {
       await api.buyListing(listing.id);
       notify(`Comprado por ${listing.priceSoft} soft!`);
+      setDetail(null);
       await Promise.all([refresh(), refreshTank()]);
     } catch (err) { notify(err.message); }
   }
   async function cancel(listing) {
-    try { await api.cancelListing(listing.id); await Promise.all([refresh(), refreshTank()]); }
-    catch (err) { notify(err.message); }
+    try {
+      await api.cancelListing(listing.id);
+      setDetail(null);
+      await Promise.all([refresh(), refreshTank()]);
+    } catch (err) { notify(err.message); }
   }
 
   if (listings === null) return <p className="hint">Carregando mercado…</p>;
   if (listings.length === 0) return <p className="hint">Nenhum peixe à venda no momento — seja o primeiro a listar.</p>;
 
   return (
-    <div className="grid">
-      {listings.map((l) => (
-        <div key={l.id} className="card" style={{ "--tier": bandOf(Number(l.rarityScore)).color }}>
-          <div className="fish-stage"><FishCanvas seed={l.seed} /></div>
-          <div className="card-row">
-            <RarityBadge score={Number(l.rarityScore)} />
-            <span className="price"><Coin />{Number(l.priceSoft).toFixed(0)}</span>
+    <>
+      <div className="grid">
+        {listings.map((l) => (
+          <div key={l.id} className="card" style={{ "--tier": bandOf(Number(l.rarityScore)).color }}>
+            <button className="fish-stage as-button" onClick={() => setDetail(l)} title="Ver detalhes">
+              <FishCanvas seed={l.seed} />
+            </button>
+            <div className="card-row">
+              <RarityBadge score={Number(l.rarityScore)} />
+              <span className="price"><Coin />{Number(l.priceSoft).toFixed(0)}</span>
+            </div>
+            <div className="card-row">
+              <span className="produces mono">~{coinsPerHourOf(Number(l.rarityScore)).toFixed(1)}/h</span>
+              <span className="seller">de {l.sellerName}</span>
+            </div>
+            <div className="card-row">
+              <button onClick={() => setDetail(l)}>Detalhes</button>
+              {l.sellerId === userId
+                ? <button onClick={() => cancel(l)}>Cancelar</button>
+                : <button className="btn-primary" onClick={() => buy(l)}>Comprar</button>}
+            </div>
           </div>
-          <ShimmerLabel seed={l.seed} />
-          <div className="card-row">
-            <span className="seller">de {l.sellerName}</span>
-            {l.sellerId === userId
-              ? <button onClick={() => cancel(l)}>Cancelar</button>
-              : <button className="btn-primary" onClick={() => buy(l)}>Comprar</button>}
-          </div>
-        </div>
-      ))}
-    </div>
+        ))}
+      </div>
+      {detail && (
+        <FishDetail creature={detail} onClose={() => setDetail(null)}>
+          {detail.sellerId === userId
+            ? <button onClick={() => cancel(detail)}>Cancelar listagem</button>
+            : <button className="btn-primary" onClick={() => buy(detail)}>Comprar por {Number(detail.priceSoft).toFixed(0)} soft</button>}
+        </FishDetail>
+      )}
+    </>
   );
 }
 
@@ -454,6 +694,7 @@ function StoreView({ refreshTank, notify }) {
 
 function BackpackView({ refreshTank, notify }) {
   const [data, setData] = useState(null);
+  const [detail, setDetail] = useState(null);
 
   const refresh = useCallback(async () => { setData(await api.backpack()); }, []);
   useEffect(() => { refresh().catch((e) => notify(e.message)); }, [refresh, notify]);
@@ -462,19 +703,20 @@ function BackpackView({ refreshTank, notify }) {
     try {
       await api.deployCreature(c.id);
       notify("Peixe de volta ao tanque!");
+      setDetail(null);
       await Promise.all([refresh(), refreshTank()]);
     } catch (e) { notify(e.message); }
   }
   async function sell(c) {
     const price = window.prompt("Preço em moeda soft:", "50");
     if (!price) return;
-    try { await api.createListing(c.id, Number(price)); notify("Listado no mercado."); await refresh(); }
+    try { await api.createListing(c.id, Number(price)); notify("Listado no mercado."); setDetail(null); await refresh(); }
     catch (e) { notify(e.message); }
   }
   async function transfer(c) {
     const to = window.prompt("Transferir para qual jogador (username)?");
     if (!to) return;
-    try { await api.transferCreature(c.id, to.trim()); notify(`Transferido para ${to.trim()}.`); await refresh(); }
+    try { await api.transferCreature(c.id, to.trim()); notify(`Transferido para ${to.trim()}.`); setDetail(null); await refresh(); }
     catch (e) { notify(e.message); }
   }
 
@@ -492,11 +734,13 @@ function BackpackView({ refreshTank, notify }) {
         <div className="grid">
           {data.creatures.map((c) => (
             <div key={c.id} className="card" style={{ "--tier": bandOf(Number(c.rarityScore)).color }}>
-              <div className="fish-stage"><FishCanvas seed={c.seed} /></div>
+              <button className="fish-stage as-button" onClick={() => setDetail(c)} title="Ver detalhes">
+                <FishCanvas seed={c.seed} />
+              </button>
               <div className="card-row">
                 <RarityBadge score={Number(c.rarityScore)} />
+                <span className="produces mono">~{coinsPerHourOf(Number(c.rarityScore)).toFixed(1)}/h</span>
               </div>
-              <ShimmerLabel seed={c.seed} />
               <div className="card-row">
                 <button className="btn-primary" onClick={() => deploy(c)}>Pro tanque</button>
                 <button onClick={() => sell(c)}>Vender</button>
@@ -505,6 +749,13 @@ function BackpackView({ refreshTank, notify }) {
             </div>
           ))}
         </div>
+      )}
+      {detail && (
+        <FishDetail creature={detail} onClose={() => setDetail(null)}>
+          <button className="btn-primary" onClick={() => deploy(detail)}>Pro tanque</button>
+          <button onClick={() => sell(detail)}>Vender</button>
+          <button onClick={() => transfer(detail)}>Transferir</button>
+        </FishDetail>
       )}
     </>
   );

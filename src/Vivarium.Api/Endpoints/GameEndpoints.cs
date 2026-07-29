@@ -21,7 +21,9 @@ public static class GameEndpoints
         IReadOnlyList<QueueItemDto> Queue,
         IReadOnlyList<CreatureDto> Creatures,
         Dictionary<string, decimal> Wallet,
-        decimal CoinsPerHour);
+        decimal CoinsPerHour,
+        decimal GenerationProgressMinutes,
+        int GenerationIntervalMinutes);
 
     public static void MapGameEndpoints(this IEndpointRouteBuilder app)
     {
@@ -96,7 +98,9 @@ public static class GameEndpoints
                 queue,
                 creatures,
                 wallet,
-                coinsPerHour));
+                coinsPerHour,
+                habitat.GenerationProgressMinutes,
+                habitat.GenerationIntervalMinutes));
         });
 
         // Transferência direta entre contas (negociação externa é responsabilidade
