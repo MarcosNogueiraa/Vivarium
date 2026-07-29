@@ -57,6 +57,23 @@ const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const FISH_CX = 290;
 const FISH_CY = 210;
 
+// Aura suave (glow radial aditivo) atrás do peixe — em vez de um círculo/anel.
+function drawAura(ctx, cx, cy, r, hex, alpha) {
+  const n = parseInt(hex.slice(1), 16);
+  const rgb = `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+  const g = ctx.createRadialGradient(cx, cy, 4, cx, cy, r);
+  g.addColorStop(0, `rgba(${rgb}, ${alpha})`);
+  g.addColorStop(0.55, `rgba(${rgb}, ${alpha * 0.45})`);
+  g.addColorStop(1, `rgba(${rgb}, 0)`);
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 function AquariumCanvas({ creatures, selectedId, onSelect, interactive = true, ambient = false, quality = 100 }) {
   const W = 960;
   const H = 480;
@@ -111,31 +128,16 @@ function AquariumCanvas({ creatures, selectedId, onSelect, interactive = true, a
         if (s.x > W - 90) { s.x = W - 90; s.vx = -Math.abs(s.vx); }
         const y = s.y + Math.sin(time / 900 + s.phase) * 7;
 
-        // Anel de raridade sempre visível pra peixes raros+ (lendário reluz)
+        // Aura suave de raridade pra peixes raros+ (lendário reluz de leve)
         const rscore = Number(c.rarityScore);
         if (rscore >= 6.7) {
-          const rc = bandOf(rscore);
-          ctx.save();
-          ctx.strokeStyle = rc.color;
-          ctx.globalAlpha = 0.5;
-          ctx.lineWidth = 2;
-          if (rscore >= 11.2) { ctx.shadowColor = rc.color; ctx.shadowBlur = 20; ctx.globalAlpha = 0.85; }
-          ctx.beginPath();
-          ctx.ellipse(s.x, y + 34, 52, 12, 0, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.restore();
+          const legendary = rscore >= 11.2;
+          const pulse = legendary ? 0.82 + 0.18 * Math.sin(time / 650 + s.phase) : 1;
+          drawAura(ctx, s.x, y, legendary ? 108 : 90, bandOf(rscore).color, (legendary ? 0.2 : 0.12) * pulse);
         }
-
+        // Aura de seleção (aqua, um pouco mais forte)
         if (c.id === selectedRef.current) {
-          ctx.save();
-          ctx.strokeStyle = "rgba(84, 230, 209, 0.9)";
-          ctx.lineWidth = 2;
-          ctx.shadowColor = "rgba(84, 230, 209, 0.8)";
-          ctx.shadowBlur = 16;
-          ctx.beginPath();
-          ctx.ellipse(s.x, y + 36, 64, 15, 0, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.restore();
+          drawAura(ctx, s.x, y, 104, "#54e6d1", 0.24);
         }
 
         ctx.save();
