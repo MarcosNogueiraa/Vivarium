@@ -616,6 +616,41 @@ function TankView({ tank, refresh, notify }) {
       )}
       {showGuide && <RarityGuide onClose={() => setShowGuide(false)} />}
 
+      {tank.creatures.length > 0 && (
+        <section>
+          <div className="section-head">
+            <span className="eyebrow">Peixes no tanque</span>
+            <span className="count">{tank.creatures.length}/{tank.capacity}</span>
+            <span className="spacer" />
+            <span className="faint" style={{ fontSize: "0.82rem" }}>clique para detalhes</span>
+          </div>
+          <div className="fish-list">
+            {tank.creatures.map((c) => {
+              const traits = generateTraits(BigInt(c.seed));
+              const col = traits.tail.color;
+              const mult = synergyMultiplier(colorCounts[col] ?? 1);
+              const band = bandOf(Number(c.rarityScore));
+              return (
+                <button key={c.id} className="fish-row" onClick={() => setSelectedId(c.id)} style={{ "--tier": band.color }}>
+                  <span className="fr-thumb"><FishCanvas seed={c.seed} width={72} /></span>
+                  <span className="fr-body">
+                    <span className="fr-line1">
+                      <span className="badge" style={{ "--tier": band.color }}><span className="gem" /> {band.name}</span>
+                      <span className="fr-score mono">{Number(c.rarityScore).toFixed(1)}</span>
+                    </span>
+                    <span className="fr-line2">
+                      <span className="fr-color"><span className="dot-color" style={{ background: PART_HEX[col] }} /> {PT.color[col]}</span>
+                      {traits.shimmerTier !== "None" && <span className="shimmer-label">✦ {PT.shimmer[traits.shimmerColor]}</span>}
+                    </span>
+                  </span>
+                  <span className="fr-prod mono"><Coin /> ~{coinsPerHourOf(Number(c.rarityScore), mult).toFixed(1)}<small>/h</small></span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       <section>
         <div className="section-head">
           <span className="eyebrow">Fila de criação</span>
