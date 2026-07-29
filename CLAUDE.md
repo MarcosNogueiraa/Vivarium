@@ -261,10 +261,35 @@ Renda passiva: cada peixe no tanque farma soft continuamente, escalado pela rari
 
 **Efeitos da água no cliente (só visual):** peixes ficam mais lentos (`speedFactor = 0.5 + 0.5·maint/100`) e a água **esverdeia e suja** conforme piora — `drawTankBackground`/`drawTankForeground` recebem `quality` e interpolam pro verde-turvo, reduzem a luz e adicionam algas/sujeira flutuando e película nas bordas.
 
-### 8.7 Fora do escopo do MVP
+### 8.7 Mochila — storage de criaturas (28/07/2026)
+
+Um peixe do jogador tem **três estados** (fonte de verdade: `HabitatId` + listagem ativa; sem campo novo):
+
+| Estado | `HabitatId` | Listagem ativa? | Farma moeda / nada no tanque |
+|---|---|---|---|
+| No tanque | = do habitat | não | sim |
+| Na mochila | `null` | não | não |
+| À venda | `null` | sim | não |
+
+- **Mochila = `OwnerId = user`, `HabitatId = null`, sem `MarketListing` ativa.** Guarda peixes sem gastar vaga do tanque (só o tanque farma — mantém a capacidade como recurso escasso). Cap `BackpackCapacity = 50`.
+- **Conserta o furo #2 da auditoria (limbo):** coletar/comprar/receber com o tanque cheio agora vai pra **mochila** (se houver espaço), nunca pra um "limbo" invisível. Se tanque **e** mochila cheios, a ação é bloqueada com mensagem clara.
+- **Transições:** mover tanque↔mochila (respeitando a capacidade do tanque); listar do mercado sai do tanque/mochila; coletar prioriza tanque, senão mochila.
+- **Endpoints:** `GET /api/game/backpack`, `POST /api/game/creatures/{id}/store` (tanque→mochila), `POST /api/game/creatures/{id}/deploy` (mochila→tanque). Front: aba "Mochila".
+- **É a fundação do breeding** (8.8): os pais podem vir da mochila.
+
+### 8.8 Breeding — proposta de design (v2, ainda não implementado)
+
+O motor já está pronto pra isso: `CreatureInstance.ParentAId/ParentBId` existem, e como cada trait vem de um `Hash(seed, salt)` **independente**, dá pra fazer **herança trait-a-trait**.
+
+- **Herança:** para cada trait (cor da cauda, brilho do corpo, velocidade…), o filho puxa o valor do pai A ou do pai B (50/50), com uma **chance de mutação** (re-sorteia do próprio seed do filho). Implementação: um `BreedTraits(seedFilho, pais, configVersion)` paralelo ao `Generate`, escolhendo por trait a fonte via `Hash(seedFilho, salt + "_inherit")`.
+- **Anti "fábrica de lendários" (crítico p/ economia):** a chance de o filho **superar** os pais tem que ser pequena — mutação para cima rara. Senão destrói o "lendário raro e caro" (seção 5). Breeding tem **custo real** (soft + tempo de gestação + travar/consumir os pais) e passa pelo `TransactionLog` (cria valor do nada → auditável).
+- **Persistência:** o filho é um `CreatureInstance` normal com `ParentAId/ParentBId` preenchidos e `TraitConfigVersion` própria; nasce na fila/mochila.
+- **Decisões abertas:** consumir os pais ou só travá-los por um tempo? Gestação (fila) ou instantâneo pago? Recalibrar a raridade dos filhos por simulação antes de soltar.
+
+### 8.9 Fora do escopo do MVP
 
 - **Alimentação**: cortada do MVP para não duplicar a função de "sink de manutenção" já coberta pela qualidade da água. Candidata a entrar na v2 como boost opcional (não como necessidade punitiva).
-- **Breeding**: fica para v2, depois do motor de geração e mercado estarem validados.
+- **Breeding**: projetado em 8.8; implementação fica para v2, depois da mochila e do mercado validados.
 
 ---
 
