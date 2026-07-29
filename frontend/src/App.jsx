@@ -58,12 +58,14 @@ const FISH_CX = 290;
 const FISH_CY = 210;
 
 // Aura suave (glow radial aditivo) atrás do peixe — em vez de um círculo/anel.
+// Raio precisa ser maior que o peixe na tela (~95px do centro) pra o halo
+// aparecer em volta em vez de ficar escondido atrás do corpo.
 function drawAura(ctx, cx, cy, r, hex, alpha) {
   const n = parseInt(hex.slice(1), 16);
   const rgb = `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
-  const g = ctx.createRadialGradient(cx, cy, 4, cx, cy, r);
+  const g = ctx.createRadialGradient(cx, cy, 40, cx, cy, r);
   g.addColorStop(0, `rgba(${rgb}, ${alpha})`);
-  g.addColorStop(0.55, `rgba(${rgb}, ${alpha * 0.45})`);
+  g.addColorStop(0.7, `rgba(${rgb}, ${alpha * 0.6})`);
   g.addColorStop(1, `rgba(${rgb}, 0)`);
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
@@ -133,11 +135,11 @@ function AquariumCanvas({ creatures, selectedId, onSelect, interactive = true, a
         if (rscore >= 6.7) {
           const legendary = rscore >= 11.2;
           const pulse = legendary ? 0.82 + 0.18 * Math.sin(time / 650 + s.phase) : 1;
-          drawAura(ctx, s.x, y, legendary ? 108 : 90, bandOf(rscore).color, (legendary ? 0.2 : 0.12) * pulse);
+          drawAura(ctx, s.x, y, legendary ? 200 : 165, bandOf(rscore).color, (legendary ? 0.4 : 0.26) * pulse);
         }
         // Aura de seleção (aqua, um pouco mais forte)
         if (c.id === selectedRef.current) {
-          drawAura(ctx, s.x, y, 104, "#54e6d1", 0.24);
+          drawAura(ctx, s.x, y, 180, "#54e6d1", 0.42);
         }
 
         ctx.save();
