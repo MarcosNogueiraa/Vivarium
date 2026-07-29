@@ -130,10 +130,13 @@ public class GameService(VivariumDbContext db)
             return (null, "Item não encontrado ou já coletado");
         if (item.ReadyAt > nowUtc)
             return (null, "Item ainda não está pronto");
-        if (await CountActiveCreaturesAsync(habitat) >= habitat.Capacity)
-            return (null, "Tanque cheio — venda ou transfira um peixe antes de coletar");
 
-        return (CollectOne(habitat, item, nowUtc), null);
+        // Vai pro tanque se couber, senão pra mochila; se ambos cheios, bloqueia.
+        bool toTank = await CountActiveCreaturesAsync(habitat) < habitat.Capacity;
+        if (!toTank && await CountBackpackAsync(habitat.UserId) >= HabitatDefaults.BackpackCapacity)
+            return (null, "Tanque e mochila cheios — venda ou solte um peixe antes.");
+
+        return (CollectOne(habitat, item, nowUtc, toTank), null);
     }
 
     private async Task CollectAllReadyAsync(Habitat habitat, DateTime nowUtc)
@@ -151,12 +154,12 @@ public class GameService(VivariumDbContext db)
         {
             if (active >= habitat.Capacity)
                 break;
-            CollectOne(habitat, item, nowUtc);
+            CollectOne(habitat, item, nowUtc, toTank: true);
             active++;
         }
     }
 
-    private CreatureInstance CollectOne(Habitat habitat, GenerationQueueItem item, DateTime nowUtc)
+    private CreatureInstance CollectOne(Habitat habitat, GenerationQueueItem item, DateTime nowUtc, bool toTank)
     {
         var collected = CreatureCollector.Collect(item.IsSick, CreatureCollector.NewRandomSeed);
         item.Status = QueueItemStatus.Collected;
@@ -165,7 +168,7 @@ public class GameService(VivariumDbContext db)
         {
             SpeciesId = item.SpeciesId,
             OwnerId = habitat.UserId,
-            HabitatId = habitat.Id,
+            HabitatId = toTank ? habitat.Id : null, // mochila quando o tanque está cheio
             Seed = collected.Seed,
             TraitConfigVersion = collected.TraitConfigVersion,
             RarityScore = collected.RarityScore,
@@ -177,4 +180,56 @@ public class GameService(VivariumDbContext db)
 
     private Task<int> CountActiveCreaturesAsync(Habitat habitat)
         => db.CreatureInstances.CountAsync(c => c.HabitatId == habitat.Id);
+
+    // ---------- Mochila (storage de criaturas) ----------
+    // Mochila = criatura do jogador com HabitatId null e SEM listagem ativa.
+
+    public IQueryable<CreatureInstance> BackpackQuery(long userId)
+        => db.CreatureInstances.Where(c =>
+            c.OwnerId == userId
+            && c.HabitatId == null
+            && !db.MarketListings.Any(m => m.CreatureInstanceId == c.Id && m.Status == ListingStatus.Active));
+
+    public Task<int> CountBackpackAsync(long userId) => BackpackQuery(userId).CountAsync();
+
+    /// <summary>Coloca no tanque (se couber) ou na mochila (se couber). false = sem espaço em nenhum.</summary>
+    public async Task<bool> TryPlaceAsync(CreatureInstance creature, Habitat habitat)
+    {
+        if (await CountActiveCreaturesAsync(habitat) < habitat.Capacity)
+        {
+            creature.HabitatId = habitat.Id;
+            return true;
+        }
+        if (await CountBackpackAsync(habitat.UserId) < HabitatDefaults.BackpackCapacity)
+        {
+            creature.HabitatId = null;
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>Tanque → mochila.</summary>
+    public async Task<string?> StoreAsync(long userId, long creatureId, Habitat habitat)
+    {
+        var creature = await db.CreatureInstances
+            .FirstOrDefaultAsync(c => c.Id == creatureId && c.OwnerId == userId && c.HabitatId == habitat.Id);
+        if (creature is null)
+            return "Peixe não está no seu tanque";
+        if (await CountBackpackAsync(userId) >= HabitatDefaults.BackpackCapacity)
+            return "Mochila cheia";
+        creature.HabitatId = null;
+        return null;
+    }
+
+    /// <summary>Mochila → tanque.</summary>
+    public async Task<string?> DeployAsync(long userId, long creatureId, Habitat habitat)
+    {
+        var creature = await BackpackQuery(userId).FirstOrDefaultAsync(c => c.Id == creatureId);
+        if (creature is null)
+            return "Peixe não está na sua mochila";
+        if (await CountActiveCreaturesAsync(habitat) >= habitat.Capacity)
+            return "Tanque cheio";
+        creature.HabitatId = habitat.Id;
+        return null;
+    }
 }

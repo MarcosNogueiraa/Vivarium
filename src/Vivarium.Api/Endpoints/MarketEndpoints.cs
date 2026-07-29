@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Vivarium.Api.Data;
 using Vivarium.Api.Services;
 using Vivarium.Core.Domain;
+using Vivarium.Core.Gameplay;
 
 namespace Vivarium.Api.Endpoints;
 
@@ -103,7 +104,7 @@ public static class MarketEndpoints
         });
 
         group.MapPost("/listings/{id:long}/buy", async (
-            long id, ClaimsPrincipal principal, VivariumDbContext db) =>
+            long id, ClaimsPrincipal principal, VivariumDbContext db, GameService game) =>
         {
             long buyerId = TokenService.GetUserId(principal);
             var now = DateTime.UtcNow;
@@ -118,6 +119,15 @@ public static class MarketEndpoints
             if (listing.SellerId == buyerId)
                 return Results.BadRequest(new { error = "Você não pode comprar sua própria listagem" });
 
+            var buyerHabitat = await game.FindHabitatAsync(buyerId);
+            if (buyerHabitat is null)
+                return Results.NotFound();
+            // Espaço no comprador ANTES de cobrar (senão pagaria e o peixe sumiria).
+            bool tankSpace = await db.CreatureInstances.CountAsync(c => c.HabitatId == buyerHabitat.Id) < buyerHabitat.Capacity;
+            bool backpackSpace = await game.CountBackpackAsync(buyerId) < HabitatDefaults.BackpackCapacity;
+            if (!tankSpace && !backpackSpace)
+                return Results.BadRequest(new { error = "Seu tanque e mochila estão cheios." });
+
             int softId = await db.CurrencyTypes.Where(c => c.Code == "SOFT").Select(c => c.Id).FirstAsync();
             var buyerWallet = await db.WalletBalances
                 .FirstAsync(w => w.UserId == buyerId && w.CurrencyTypeId == softId);
@@ -131,7 +141,7 @@ public static class MarketEndpoints
 
             var creature = listing.CreatureInstance!;
             creature.OwnerId = buyerId;
-            await ReturnToOwnerTankIfSpaceAsync(db, creature, buyerId);
+            creature.HabitatId = tankSpace ? buyerHabitat.Id : null; // mochila se o tanque estiver cheio
 
             listing.Status = ListingStatus.Sold;
             listing.BuyerId = buyerId;

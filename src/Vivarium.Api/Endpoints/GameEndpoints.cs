@@ -102,14 +102,17 @@ public static class GameEndpoints
         // Transferência direta entre contas (negociação externa é responsabilidade
         // dos jogadores — o jogo só move o item e audita no TransactionLog)
         group.MapPost("/creatures/{creatureId:long}/transfer", async (
-            long creatureId, TransferRequest req, ClaimsPrincipal principal, VivariumDbContext db) =>
+            long creatureId, TransferRequest req, ClaimsPrincipal principal, VivariumDbContext db, GameService game) =>
         {
             long userId = TokenService.GetUserId(principal);
             var creature = await db.CreatureInstances
                 .FirstOrDefaultAsync(c => c.Id == creatureId && c.OwnerId == userId);
             if (creature is null)
                 return Results.NotFound(new { error = "Criatura não encontrada" });
-            if (creature.HabitatId is null)
+            // Só transfere do tanque ou da mochila; se listada, cancele antes.
+            bool listed = await db.MarketListings.AnyAsync(m =>
+                m.CreatureInstanceId == creature.Id && m.Status == ListingStatus.Active);
+            if (listed)
                 return Results.BadRequest(new { error = "Criatura está no mercado — cancele a listagem antes" });
 
             var target = await db.Users.FirstOrDefaultAsync(u => u.Username == req.ToUsername);
@@ -118,14 +121,13 @@ public static class GameEndpoints
             if (target.Id == userId)
                 return Results.BadRequest(new { error = "Não dá pra transferir pra si mesmo" });
 
+            var targetHabitat = await game.FindHabitatAsync(target.Id);
+            if (targetHabitat is null)
+                return Results.BadRequest(new { error = "Destinatário não tem habitat" });
+
             creature.OwnerId = target.Id;
-            var targetHabitat = await db.Habitats.FirstOrDefaultAsync(h => h.UserId == target.Id);
-            int active = targetHabitat is null
-                ? 0
-                : await db.CreatureInstances.CountAsync(c => c.HabitatId == targetHabitat.Id);
-            creature.HabitatId = targetHabitat is not null && active < targetHabitat.Capacity
-                ? targetHabitat.Id
-                : null;
+            if (!await game.TryPlaceAsync(creature, targetHabitat))
+                return Results.BadRequest(new { error = "O tanque e a mochila do destinatário estão cheios." });
 
             db.TransactionLogs.Add(new TransactionLog
             {
@@ -170,6 +172,48 @@ public static class GameEndpoints
             return Results.Ok(new CreatureDto(
                 creature.Id, creature.SpeciesId, creature.Seed.ToString(),
                 creature.TraitConfigVersion, creature.RarityScore, creature.CreatedAt));
+        });
+
+        // ---------- Mochila (storage) ----------
+
+        group.MapGet("/backpack", async (ClaimsPrincipal principal, GameService game) =>
+        {
+            long userId = TokenService.GetUserId(principal);
+            var creatures = (await game.BackpackQuery(userId).ToListAsync())
+                .Select(c => new CreatureDto(c.Id, c.SpeciesId, c.Seed.ToString(),
+                    c.TraitConfigVersion, c.RarityScore, c.CreatedAt))
+                .ToList();
+            return Results.Ok(new { capacity = HabitatDefaults.BackpackCapacity, creatures });
+        });
+
+        // Tanque → mochila
+        group.MapPost("/creatures/{creatureId:long}/store", async (
+            long creatureId, ClaimsPrincipal principal, VivariumDbContext db, GameService game) =>
+        {
+            var habitat = await game.FindHabitatAsync(TokenService.GetUserId(principal));
+            if (habitat is null)
+                return Results.NotFound();
+            var error = await game.StoreAsync(habitat.UserId, creatureId, habitat);
+            if (error is not null)
+                return Results.BadRequest(new { error });
+            try { await db.SaveChangesAsync(); }
+            catch (DbUpdateConcurrencyException) { return Results.Conflict(new { error = "Tente de novo." }); }
+            return Results.Ok();
+        });
+
+        // Mochila → tanque
+        group.MapPost("/creatures/{creatureId:long}/deploy", async (
+            long creatureId, ClaimsPrincipal principal, VivariumDbContext db, GameService game) =>
+        {
+            var habitat = await game.FindHabitatAsync(TokenService.GetUserId(principal));
+            if (habitat is null)
+                return Results.NotFound();
+            var error = await game.DeployAsync(habitat.UserId, creatureId, habitat);
+            if (error is not null)
+                return Results.BadRequest(new { error });
+            try { await db.SaveChangesAsync(); }
+            catch (DbUpdateConcurrencyException) { return Results.Conflict(new { error = "Tente de novo." }); }
+            return Results.Ok();
         });
     }
 }

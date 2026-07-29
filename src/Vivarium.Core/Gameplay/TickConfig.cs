@@ -44,6 +44,8 @@ public static class EconomyDefaults
 public static class HabitatDefaults
 {
     public const int Capacity = 3;
+    /// <summary>Storage de criaturas fora do tanque (não farmam). Base pro breeding.</summary>
+    public const int BackpackCapacity = 50;
     public const int QueueCap = 5;
     public const int GenerationIntervalMinutes = 15;
     public const decimal OnlineGenerationRate = 1.0m;

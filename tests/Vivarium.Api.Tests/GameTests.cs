@@ -72,7 +72,7 @@ public class GameTests : IClassFixture<VivariumApiFactory>
     }
 
     [Fact]
-    public async Task Coleta_TanqueCheio_Retorna400()
+    public async Task Coleta_TanqueCheio_VaiParaMochila()
     {
         var (client, userId) = await _factory.RegisterAsync("cheio1");
         long habitatId = await HabitatIdOf(userId);
@@ -95,8 +95,12 @@ public class GameTests : IClassFixture<VivariumApiFactory>
         var tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
         var item = Assert.Single(tank!.Queue);
 
+        // Tanque cheio: coleta vai pra mochila, não dá erro
         var response = await client.PostAsync($"/api/game/collect/{item.Id}", null);
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        response.EnsureSuccessStatusCode();
+
+        tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
+        Assert.Equal(3, tank!.Creatures.Count); // tanque não estourou
     }
 
     [Fact]
