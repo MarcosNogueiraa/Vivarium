@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Vivarium.Api.Contracts;
 using Vivarium.Api.Data;
+using Vivarium.Api.Http;
 using Vivarium.Core.Domain;
 using Vivarium.Core.Gameplay;
 using Vivarium.Core.Generation;
@@ -137,7 +139,7 @@ public class GameService(VivariumDbContext db)
             && v.StartAt <= nowUtc
             && v.EndAt > nowUtc);
 
-    public async Task<(CreatureInstance? Creature, string? Error)> CollectAsync(
+    private async Task<(CreatureInstance? Creature, string? Error)> CollectInternalAsync(
         Habitat habitat, long queueItemId, DateTime nowUtc)
     {
         var item = await db.GenerationQueueItems
@@ -225,7 +227,7 @@ public class GameService(VivariumDbContext db)
     }
 
     /// <summary>Tanque → mochila.</summary>
-    public async Task<string?> StoreAsync(long userId, long creatureId, Habitat habitat)
+    private async Task<string?> StoreCoreAsync(long userId, long creatureId, Habitat habitat)
     {
         var creature = await db.CreatureInstances
             .FirstOrDefaultAsync(c => c.Id == creatureId && c.OwnerId == userId && c.HabitatId == habitat.Id);
@@ -238,7 +240,7 @@ public class GameService(VivariumDbContext db)
     }
 
     /// <summary>Mochila → tanque.</summary>
-    public async Task<string?> DeployAsync(long userId, long creatureId, Habitat habitat)
+    private async Task<string?> DeployCoreAsync(long userId, long creatureId, Habitat habitat)
     {
         var creature = await BackpackQuery(userId).FirstOrDefaultAsync(c => c.Id == creatureId);
         if (creature is null)
@@ -247,5 +249,181 @@ public class GameService(VivariumDbContext db)
             return "Tanque cheio";
         creature.HabitatId = habitat.Id;
         return null;
+    }
+
+    // ---------- Orquestração (endpoints delegam aqui; devolvem ServiceResult) ----------
+
+    public async Task<ServiceResult> HeartbeatAsync(long userId, DateTime now)
+    {
+        var habitat = await FindHabitatAsync(userId);
+        if (habitat is null)
+            return ServiceResult.NotFound("Habitat não encontrado");
+
+        // Tick primeiro, com o heartbeat antigo: senão um retorno após dias
+        // contaria a ausência inteira como tempo online.
+        try
+        {
+            await ApplyTickAsync(habitat, now);
+            habitat.LastHeartbeatAt = now;
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Outro request ticou primeiro; o próximo heartbeat regrava. A janela
+            // desta chamada foi descartada (LastTickAt não avançou) e será coberta
+            // no próximo tick — renda continua exatamente-uma-vez.
+        }
+
+        return ServiceResult.Success(new { online = true, maintenanceLevel = habitat.MaintenanceLevel });
+    }
+
+    public async Task<ServiceResult> GetTankAsync(long userId, DateTime now)
+    {
+        var habitat = await FindHabitatAsync(userId);
+        if (habitat is null)
+            return ServiceResult.NotFound("Habitat não encontrado");
+
+        try
+        {
+            await ApplyTickAsync(habitat, now);
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Outro request ticou primeiro; recarrega o estado atual e segue.
+            db.ChangeTracker.Clear();
+            habitat = (await FindHabitatAsync(userId))!;
+        }
+
+        var queue = await db.GenerationQueueItems
+            .Where(q => q.HabitatId == habitat.Id && q.Status == QueueItemStatus.Pending)
+            .OrderBy(q => q.ReadyAt)
+            .Select(q => new QueueItemDto(q.Id, q.ReadyAt, q.ReadyAt <= now, q.IsSick))
+            .ToListAsync();
+        var creatures = (await db.CreatureInstances
+            .Where(c => c.HabitatId == habitat.Id)
+            .ToListAsync())
+            .Select(CreatureDto.From)
+            .ToList();
+        var wallet = await db.WalletBalances
+            .Where(w => w.UserId == userId)
+            .Select(w => new { w.CurrencyType!.Code, w.Amount })
+            .ToDictionaryAsync(x => x.Code, x => x.Amount);
+        var coinsPerHour = await CoinsPerHourAsync(habitat);
+
+        return ServiceResult.Success(new TankResponse(
+            HabitatTicker.IsOnline(habitat.LastHeartbeatAt, now, TickConfig.Default),
+            habitat.MaintenanceLevel,
+            habitat.Capacity,
+            habitat.QueueCap,
+            queue,
+            creatures,
+            wallet,
+            coinsPerHour,
+            habitat.GenerationProgressMinutes,
+            habitat.GenerationIntervalMinutes));
+    }
+
+    // Transferência direta entre contas (negociação externa é responsabilidade
+    // dos jogadores — o jogo só move o item e audita no TransactionLog)
+    public async Task<ServiceResult> TransferAsync(long userId, long creatureId, string toUsername)
+    {
+        var creature = await db.CreatureInstances
+            .FirstOrDefaultAsync(c => c.Id == creatureId && c.OwnerId == userId);
+        if (creature is null)
+            return ServiceResult.NotFound("Criatura não encontrada");
+        // Só transfere do tanque ou da mochila; se listada, cancele antes.
+        bool listed = await db.MarketListings.AnyAsync(m =>
+            m.CreatureInstanceId == creature.Id && m.Status == ListingStatus.Active);
+        if (listed)
+            return ServiceResult.Bad("Criatura está no mercado — cancele a listagem antes");
+
+        var target = await db.Users.FirstOrDefaultAsync(u => u.Username == toUsername);
+        if (target is null)
+            return ServiceResult.NotFound("Jogador destinatário não encontrado");
+        if (target.Id == userId)
+            return ServiceResult.Bad("Não dá pra transferir pra si mesmo");
+
+        var targetHabitat = await FindHabitatAsync(target.Id);
+        if (targetHabitat is null)
+            return ServiceResult.Bad("Destinatário não tem habitat");
+
+        creature.OwnerId = target.Id;
+        if (!await TryPlaceAsync(creature, targetHabitat))
+            return ServiceResult.Bad("O tanque e a mochila do destinatário estão cheios.");
+
+        db.TransactionLogs.Add(new TransactionLog
+        {
+            Type = TransactionType.DirectTransfer,
+            FromUserId = userId,
+            ToUserId = target.Id,
+            CreatureInstanceId = creature.Id,
+            CreatedAt = DateTime.UtcNow,
+        });
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return ServiceResult.Conflict("O peixe mudou de estado — atualize e tente de novo.");
+        }
+        return ServiceResult.Success(new { transferredTo = target.Username });
+    }
+
+    public async Task<ServiceResult> CollectQueueItemAsync(long userId, long queueItemId, DateTime now)
+    {
+        var habitat = await FindHabitatAsync(userId);
+        if (habitat is null)
+            return ServiceResult.NotFound("Habitat não encontrado");
+
+        await ApplyTickAsync(habitat, now);
+        var (creature, error) = await CollectInternalAsync(habitat, queueItemId, now);
+        if (creature is null)
+            return ServiceResult.Bad(error!);
+
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return ServiceResult.Conflict("Operação concorrente — tente de novo.");
+        }
+        return ServiceResult.Success(CreatureDto.From(creature));
+    }
+
+    public async Task<ServiceResult> GetBackpackAsync(long userId)
+    {
+        var creatures = (await BackpackQuery(userId).ToListAsync())
+            .Select(CreatureDto.From)
+            .ToList();
+        return ServiceResult.Success(new BackpackResponse(HabitatDefaults.BackpackCapacity, creatures));
+    }
+
+    public async Task<ServiceResult> StoreAsync(long userId, long creatureId)
+    {
+        var habitat = await FindHabitatAsync(userId);
+        if (habitat is null)
+            return ServiceResult.NotFound("Habitat não encontrado");
+        var error = await StoreCoreAsync(userId, creatureId, habitat);
+        if (error is not null)
+            return ServiceResult.Bad(error);
+        try { await db.SaveChangesAsync(); }
+        catch (DbUpdateConcurrencyException) { return ServiceResult.Conflict("Tente de novo."); }
+        return ServiceResult.Success();
+    }
+
+    public async Task<ServiceResult> DeployAsync(long userId, long creatureId)
+    {
+        var habitat = await FindHabitatAsync(userId);
+        if (habitat is null)
+            return ServiceResult.NotFound("Habitat não encontrado");
+        var error = await DeployCoreAsync(userId, creatureId, habitat);
+        if (error is not null)
+            return ServiceResult.Bad(error);
+        try { await db.SaveChangesAsync(); }
+        catch (DbUpdateConcurrencyException) { return ServiceResult.Conflict("Tente de novo."); }
+        return ServiceResult.Success();
     }
 }

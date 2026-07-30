@@ -40,6 +40,8 @@ builder.Services.AddAuthorization();
 
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<GameService>();
+builder.Services.AddScoped<MarketService>();
+builder.Services.AddScoped<ItemService>();
 
 // Front roda em outro domínio (Cloudflare Pages) — origens via config
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
