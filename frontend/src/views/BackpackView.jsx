@@ -4,11 +4,13 @@ import { coinsPerHourOf } from "../lib/generator.js";
 import { bandOf } from "../lib/fishRenderer.js";
 import { RarityBadge } from "../components/RarityBadge.jsx";
 import { FishCanvas } from "../components/FishCanvas.jsx";
+import { PromptModal } from "../components/PromptModal.jsx";
 import { FishDetail } from "./FishDetail.jsx";
 
 export function BackpackView({ refreshTank, notify }) {
   const [data, setData] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [prompt, setPrompt] = useState(null); // { kind: "sell"|"transfer", creature }
 
   const refresh = useCallback(async () => { setData(await api.backpack()); }, []);
   useEffect(() => { refresh().catch((e) => notify(e.message)); }, [refresh, notify]);
@@ -21,17 +23,20 @@ export function BackpackView({ refreshTank, notify }) {
       await Promise.all([refresh(), refreshTank()]);
     } catch (e) { notify(e.message); }
   }
-  async function sell(c) {
-    const price = window.prompt("Preço em moeda soft:", "50");
-    if (!price) return;
-    try { await api.createListing(c.id, Number(price)); notify("Listado no mercado."); setDetail(null); await refresh(); }
-    catch (e) { notify(e.message); }
+  function sell(c) { setDetail(null); setPrompt({ kind: "sell", creature: c }); }
+  function transfer(c) { setDetail(null); setPrompt({ kind: "transfer", creature: c }); }
+
+  async function confirmSell(price) {
+    await api.createListing(prompt.creature.id, Number(price));
+    setPrompt(null);
+    notify("Listado no mercado.");
+    await refresh();
   }
-  async function transfer(c) {
-    const to = window.prompt("Transferir para qual jogador (username)?");
-    if (!to) return;
-    try { await api.transferCreature(c.id, to.trim()); notify(`Transferido para ${to.trim()}.`); setDetail(null); await refresh(); }
-    catch (e) { notify(e.message); }
+  async function confirmTransfer(username) {
+    await api.transferCreature(prompt.creature.id, username.trim());
+    setPrompt(null);
+    notify(`Transferido para ${username.trim()}.`);
+    await refresh();
   }
 
   if (data === null) return <p className="hint">Carregando mochila…</p>;
@@ -70,6 +75,20 @@ export function BackpackView({ refreshTank, notify }) {
           <button onClick={() => sell(detail)}>Vender</button>
           <button onClick={() => transfer(detail)}>Transferir</button>
         </FishDetail>
+      )}
+      {prompt?.kind === "sell" && (
+        <PromptModal
+          title="Vender no mercado" label="Preço em moedas soft" type="number"
+          defaultValue="50" confirmLabel="Listar peixe"
+          onConfirm={confirmSell} onClose={() => setPrompt(null)}
+        />
+      )}
+      {prompt?.kind === "transfer" && (
+        <PromptModal
+          title="Transferir peixe" label="Username do jogador que vai receber"
+          placeholder="username" confirmLabel="Transferir"
+          onConfirm={confirmTransfer} onClose={() => setPrompt(null)}
+        />
       )}
     </>
   );

@@ -525,7 +525,7 @@ Falta pra ir ao ar (depende de contas do usuário):
 - **Limbo eliminado:** coletar/comprar/receber com tanque cheio vai pra **mochila** (8.7), nunca mais some. Compra bloqueia antes de cobrar se comprador sem espaço.
 - **Rate limiting:** global 300/min por usuário/IP + `auth` 10/min por IP (config `RateLimiting:*`). Atrás de proxy exige `UseForwardedHeaders` no deploy pra ver o IP real.
 - **Validação:** email via `MailAddress.TryCreate`; username `[A-Za-z0-9_-]`, 3–32.
-- **Deferidos (documentados, não feitos):** JWT sem revogação (validade 7d); taxa de mercado como sink; `window.prompt`→modais; teto de listagens por usuário; multi-conta (soft sem cash-out limita o dano).
+- **Deferidos (documentados, não feitos):** JWT sem revogação (validade 7d); taxa de mercado como sink; teto de listagens por usuário; multi-conta (soft sem cash-out limita o dano). *(`window.prompt`→modais: **feito** em 30/07 — `components/PromptModal.jsx`.)*
 
 ## 13. Estrutura da solution
 

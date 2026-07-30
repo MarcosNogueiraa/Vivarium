@@ -535,6 +535,57 @@ input:focus {
 .guide-band .gb-range { color: var(--muted); font-size: 0.82rem; }
 .guide-foot { margin-top: 14px; font-size: 0.82rem; }
 
+/* ---------- Onboarding (jogador novo) ---------- */
+.onboard {
+  display: flex; align-items: center; gap: 16px;
+  padding: 14px 18px; border-radius: var(--radius);
+  border-color: color-mix(in srgb, var(--glow) 35%, var(--line));
+}
+.onboard-body { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.onboard-body p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.onboard-body p b { color: var(--ink); }
+
+/* ---------- PromptModal ---------- */
+.prompt-form { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
+.prompt-label { color: var(--muted); font-size: 0.85rem; }
+.prompt-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+
+/* ---------- Celebração de coleta ---------- */
+.modal.celebrate { overflow: hidden; text-align: center; }
+.celebrate-rays {
+  position: absolute; inset: -40% -10% auto -10%; height: 130%;
+  background: conic-gradient(from 0deg,
+    color-mix(in srgb, var(--tier) 22%, transparent) 0deg,
+    transparent 18deg, color-mix(in srgb, var(--tier) 22%, transparent) 36deg,
+    transparent 54deg, color-mix(in srgb, var(--tier) 22%, transparent) 72deg,
+    transparent 90deg);
+  filter: blur(2px); opacity: 0.55; pointer-events: none;
+  animation: spin 18s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.celebrate-body { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 6px 4px; }
+.celebrate-fish {
+  border-radius: 16px; overflow: hidden;
+  background: linear-gradient(180deg, #d7eff8, #b9e0ee);
+  box-shadow: 0 0 40px -6px var(--tier), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  animation: rise 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+@keyframes rise { from { opacity: 0; transform: translateY(16px) scale(0.94); } }
+.celebrate-body .badge.big { align-self: center; }
+.celebrate-body .btn-primary { margin-top: 4px; padding: 11px 26px; }
+
+/* ---------- Responsivo (mobile) ---------- */
+@media (max-width: 640px) {
+  .content { padding: 16px; }
+  .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .tank-hud { flex-wrap: wrap; gap: 8px; top: 10px; left: 10px; right: 10px; }
+  .tank-hud .spacer { display: none; }
+  .fish-list { grid-template-columns: 1fr; }
+  .detail-head { justify-content: center; }
+  .onboard { flex-direction: column; align-items: stretch; }
+  .brand { font-size: 1.3rem; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }

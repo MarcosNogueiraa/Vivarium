@@ -5,12 +5,18 @@ import { nextFishEta, tankFishSorted, tankPotential, tankSynergy } from "../lib/
 import { AquariumCanvas } from "../components/AquariumCanvas.jsx";
 import { FishCanvas } from "../components/FishCanvas.jsx";
 import { Coin } from "../components/Coin.jsx";
+import { PromptModal } from "../components/PromptModal.jsx";
+import { CollectCelebration } from "../components/CollectCelebration.jsx";
 import { FishDetail } from "./FishDetail.jsx";
 import { RarityGuide } from "./RarityGuide.jsx";
 
 export function TankView({ tank, refresh, notify }) {
   const [selectedId, setSelectedId] = useState(null);
   const [showGuide, setShowGuide] = useState(false);
+  const [prompt, setPrompt] = useState(null);       // { kind: "sell"|"transfer", creature }
+  const [celebrate, setCelebrate] = useState(null); // criatura raro+ recém-coletada
+  const [onboardDone, setOnboardDone] = useState(() => localStorage.getItem("onboardDone") === "true");
+  const dismissOnboard = () => { localStorage.setItem("onboardDone", "true"); setOnboardDone(true); };
   const [listOpen, setListOpen] = useState(() => localStorage.getItem("tankListOpen") !== "false");
   const toggleList = () => setListOpen((v) => { localStorage.setItem("tankListOpen", String(!v)); return !v; });
   const selected = tank.creatures.find((c) => c.id === selectedId) ?? null;
@@ -23,8 +29,13 @@ export function TankView({ tank, refresh, notify }) {
   const listFish = tankFishSorted(tank.creatures);
 
   async function collect(itemId) {
-    try { await api.collect(itemId); await refresh(); }
-    catch (err) { notify(err.message); }
+    try {
+      const c = await api.collect(itemId);
+      await refresh();
+      // Raro+ ganha um momento de celebração; comum/incomum só um toast discreto.
+      if (c && Number(c.rarityScore) >= 7.5) setCelebrate(c);
+      else if (c) notify(`Peixe coletado! ${bandOf(Number(c.rarityScore)).name}`);
+    } catch (err) { notify(err.message); }
   }
   async function devSpawn() {
     try { await api.devSpawn(); await refresh(); }
@@ -42,25 +53,20 @@ export function TankView({ tank, refresh, notify }) {
     try { await api.buyItem("filter_basic"); notify("Água restaurada!"); await refresh(); }
     catch (err) { notify(err.message); }
   }
-  async function sell(creature) {
-    const price = window.prompt("Preço em moeda soft:", "50");
-    if (!price) return;
-    try {
-      await api.createListing(creature.id, Number(price));
-      notify("Peixe listado no mercado.");
-      setSelectedId(null);
-      await refresh();
-    } catch (err) { notify(err.message); }
+  function sell(creature) { setSelectedId(null); setPrompt({ kind: "sell", creature }); }
+  function transfer(creature) { setSelectedId(null); setPrompt({ kind: "transfer", creature }); }
+
+  async function confirmSell(price) {
+    await api.createListing(prompt.creature.id, Number(price));
+    setPrompt(null);
+    notify("Peixe listado no mercado.");
+    await refresh();
   }
-  async function transfer(creature) {
-    const toUsername = window.prompt("Transferir para qual jogador (username)?");
-    if (!toUsername) return;
-    try {
-      await api.transferCreature(creature.id, toUsername.trim());
-      notify(`Transferido para ${toUsername.trim()}.`);
-      setSelectedId(null);
-      await refresh();
-    } catch (err) { notify(err.message); }
+  async function confirmTransfer(username) {
+    await api.transferCreature(prompt.creature.id, username.trim());
+    setPrompt(null);
+    notify(`Transferido para ${username.trim()}.`);
+    await refresh();
   }
   async function store(creature) {
     try {
@@ -73,6 +79,16 @@ export function TankView({ tank, refresh, notify }) {
 
   return (
     <div className="tank-layout">
+      {!onboardDone && (
+        <div className="onboard glass">
+          <div className="onboard-body">
+            <span className="eyebrow">Bem-vindo ao seu aquário</span>
+            <p><b>1.</b> Colete os peixes da fila &nbsp;·&nbsp; <b>2.</b> Cuide da água (filtro) &nbsp;·&nbsp;
+               <b>3.</b> Peixes raros farmam mais moedas &nbsp;·&nbsp; <b>4.</b> Negocie no Mercado</p>
+          </div>
+          <button className="btn-primary" onClick={dismissOnboard}>Entendi</button>
+        </div>
+      )}
       <div className="tank-stage">
         <div className="tank-hud">
           <span className={`status-pill ${tank.online ? "on" : "off"}`}>
@@ -135,6 +151,21 @@ export function TankView({ tank, refresh, notify }) {
         </FishDetail>
       )}
       {showGuide && <RarityGuide onClose={() => setShowGuide(false)} />}
+      {prompt?.kind === "sell" && (
+        <PromptModal
+          title="Vender no mercado" label="Preço em moedas soft" type="number"
+          defaultValue="50" confirmLabel="Listar peixe"
+          onConfirm={confirmSell} onClose={() => setPrompt(null)}
+        />
+      )}
+      {prompt?.kind === "transfer" && (
+        <PromptModal
+          title="Transferir peixe" label="Username do jogador que vai receber"
+          placeholder="username" confirmLabel="Transferir"
+          onConfirm={confirmTransfer} onClose={() => setPrompt(null)}
+        />
+      )}
+      {celebrate && <CollectCelebration creature={celebrate} onClose={() => setCelebrate(null)} />}
 
       {tank.creatures.length > 0 && (
         <section>
