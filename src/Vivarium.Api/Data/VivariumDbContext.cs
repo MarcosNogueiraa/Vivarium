@@ -175,6 +175,7 @@ public class VivariumDbContext(DbContextOptions<VivariumDbContext> options) : Db
         modelBuilder.Entity<BreedingSlot>(e =>
         {
             e.Property(s => s.Status).HasConversion<string>().HasMaxLength(16);
+            e.Property(s => s.CostPaid).HasPrecision(18, 2);
             e.HasIndex(s => new { s.UserId, s.Status });
             e.HasIndex(s => s.HabitatId);
             e.HasOne(s => s.ParentA).WithMany().HasForeignKey(s => s.ParentAId).OnDelete(DeleteBehavior.Restrict);

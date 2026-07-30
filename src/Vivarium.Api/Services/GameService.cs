@@ -207,6 +207,7 @@ public class GameService(VivariumDbContext db)
         => db.CreatureInstances.Where(c =>
             c.OwnerId == userId
             && c.HabitatId == null
+            && !c.IsDead
             && !db.MarketListings.Any(m => m.CreatureInstanceId == c.Id && m.Status == ListingStatus.Active));
 
     public Task<int> CountBackpackAsync(long userId) => BackpackQuery(userId).CountAsync();
@@ -333,6 +334,8 @@ public class GameService(VivariumDbContext db)
             .FirstOrDefaultAsync(c => c.Id == creatureId && c.OwnerId == userId);
         if (creature is null)
             return ServiceResult.NotFound("Criatura não encontrada");
+        if (creature.IsDead)
+            return ServiceResult.Bad("Essa criatura não sobreviveu à gestação");
         // Só transfere do tanque ou da mochila; se listada, cancele antes.
         bool listed = await db.MarketListings.AnyAsync(m =>
             m.CreatureInstanceId == creature.Id && m.Status == ListingStatus.Active);

@@ -59,6 +59,8 @@ export const api = {
   transferCreature: (id, toUsername) =>
     request("POST", `/api/game/creatures/${id}/transfer`, { toUsername }),
   breedingStatus: () => request("GET", "/api/breeding"),
+  breedingQuote: (parentAId, parentBId) =>
+    request("GET", `/api/breeding/quote?parentAId=${parentAId}&parentBId=${parentBId}`),
   startBreeding: (parentAId, parentBId) =>
     request("POST", "/api/breeding/start", { parentAId, parentBId }),
   collectBreeding: () => request("POST", "/api/breeding/collect"),

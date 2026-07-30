@@ -11,9 +11,10 @@ namespace Vivarium.Api.Services;
 /// <summary>
 /// Cruzamento de peixes (CLAUDE.md 8.8). O casal vai fisicamente pro habitat de
 /// reprodução dedicado do usuário; a gestação escala com a raridade combinada dos
-/// pais (BreedingCalculator) — sink de soft (custo imediato) + de tempo (o pai fica
-/// fora do tanque principal, sem render renda, durante a gestação). Só 1 gestação
-/// em andamento por usuário no MVP (capacidade do habitat de reprodução = 2).
+/// pais (BreedingCalculator) — sink de soft (custo dinâmico) + de tempo (o pai fica
+/// fora do tanque principal, sem render renda, durante a gestação) + risco
+/// crescente do pai não sobreviver a cada gestação completada. Só 1 gestação em
+/// andamento por usuário no MVP (capacidade do habitat de reprodução = 2).
 /// </summary>
 public class BreedingService(VivariumDbContext db, GameService game)
 {
@@ -45,13 +46,37 @@ public class BreedingService(VivariumDbContext db, GameService game)
         return habitat;
     }
 
+    /// <summary>Prévia sem custo/compromisso: custo, gestação, chances do filho e risco de morte dos pais.</summary>
+    public async Task<ServiceResult> GetQuoteAsync(long userId, long parentAId, long parentBId)
+    {
+        if (parentAId == parentBId)
+            return ServiceResult.Bad("Escolha dois peixes diferentes");
+
+        var parentA = await db.CreatureInstances.FirstOrDefaultAsync(c => c.Id == parentAId && c.OwnerId == userId && !c.IsDead);
+        var parentB = await db.CreatureInstances.FirstOrDefaultAsync(c => c.Id == parentBId && c.OwnerId == userId && !c.IsDead);
+        if (parentA is null || parentB is null)
+            return ServiceResult.NotFound("Peixe não encontrado");
+
+        double hours = BreedingCalculator.GestationHours(parentA.RarityScore, parentB.RarityScore);
+        decimal cost = BreedingCalculator.CostSoft(parentA.RarityScore, parentB.RarityScore);
+        var tierDist = TraitGenerator.ChildTierDistribution(
+            parentA.Seed, parentB.Seed, TraitConfigV1.Version, BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
+
+        var quote = new BreedingQuoteDto(
+            cost, hours, DateTime.UtcNow.AddHours(hours),
+            tierDist.ToDictionary(kv => kv.Key.ToString(), kv => kv.Value),
+            parentA.BreedCount, BreedingCalculator.DeathChance(parentA.BreedCount),
+            parentB.BreedCount, BreedingCalculator.DeathChance(parentB.BreedCount));
+        return ServiceResult.Success(quote);
+    }
+
     public async Task<ServiceResult> StartAsync(long userId, long parentAId, long parentBId, DateTime now)
     {
         if (parentAId == parentBId)
             return ServiceResult.Bad("Escolha dois peixes diferentes");
 
-        var parentA = await db.CreatureInstances.FirstOrDefaultAsync(c => c.Id == parentAId && c.OwnerId == userId);
-        var parentB = await db.CreatureInstances.FirstOrDefaultAsync(c => c.Id == parentBId && c.OwnerId == userId);
+        var parentA = await db.CreatureInstances.FirstOrDefaultAsync(c => c.Id == parentAId && c.OwnerId == userId && !c.IsDead);
+        var parentB = await db.CreatureInstances.FirstOrDefaultAsync(c => c.Id == parentBId && c.OwnerId == userId && !c.IsDead);
         if (parentA is null || parentB is null)
             return ServiceResult.NotFound("Peixe não encontrado");
 
@@ -70,16 +95,17 @@ public class BreedingService(VivariumDbContext db, GameService game)
         if (userAlreadyBreeding)
             return ServiceResult.Bad("Você já tem um casal em gestação");
 
+        decimal cost = BreedingCalculator.CostSoft(parentA.RarityScore, parentB.RarityScore);
         int softId = await db.CurrencyTypes.Where(c => c.Code == "SOFT").Select(c => c.Id).FirstAsync();
         var wallet = await db.WalletBalances.FirstAsync(w => w.UserId == userId && w.CurrencyTypeId == softId);
-        if (wallet.Amount < BreedingDefaults.CostSoft)
+        if (wallet.Amount < cost)
             return ServiceResult.Bad("Saldo insuficiente");
 
         var breedingHabitat = await FindOrCreateBreedingHabitatAsync(userId);
 
         await using var transaction = await db.Database.BeginTransactionAsync();
 
-        wallet.Amount -= BreedingDefaults.CostSoft;
+        wallet.Amount -= cost;
         parentA.HabitatId = breedingHabitat.Id;
         parentB.HabitatId = breedingHabitat.Id;
 
@@ -92,6 +118,7 @@ public class BreedingService(VivariumDbContext db, GameService game)
             ParentBId = parentB.Id,
             StartedAt = now,
             ReadyAt = now.AddHours(hours),
+            CostPaid = cost,
             Status = BreedingStatus.InProgress,
         };
         db.BreedingSlots.Add(slot);
@@ -101,7 +128,7 @@ public class BreedingService(VivariumDbContext db, GameService game)
             Type = TransactionType.Breeding,
             FromUserId = userId,
             CurrencyTypeId = softId,
-            Amount = BreedingDefaults.CostSoft,
+            Amount = cost,
             CreatedAt = now,
         });
 
@@ -115,7 +142,7 @@ public class BreedingService(VivariumDbContext db, GameService game)
             return ServiceResult.Conflict("Um dos peixes mudou de estado — atualize e tente de novo.");
         }
 
-        return ServiceResult.Success(new { slotId = slot.Id, readyAt = slot.ReadyAt });
+        return ServiceResult.Success(new { slotId = slot.Id, readyAt = slot.ReadyAt, costPaid = cost });
     }
 
     public async Task<ServiceResult> GetStatusAsync(long userId)
@@ -129,7 +156,7 @@ public class BreedingService(VivariumDbContext db, GameService game)
 
         var dto = new BreedingSlotDto(
             slot.Id, CreatureDto.From(slot.ParentA!), CreatureDto.From(slot.ParentB!),
-            slot.StartedAt, slot.ReadyAt, slot.ReadyAt <= DateTime.UtcNow);
+            slot.StartedAt, slot.ReadyAt, slot.ReadyAt <= DateTime.UtcNow, slot.CostPaid);
         return ServiceResult.Success(new BreedingStatusResponse(true, dto));
     }
 
@@ -173,15 +200,40 @@ public class BreedingService(VivariumDbContext db, GameService game)
             RarityScore = (decimal)traits.RarityScore,
             ParentAId = parentA.Id,
             ParentBId = parentB.Id,
+            // Denormalizado no filho pra reconstruir os traits herdados (BreedTraits)
+            // sem precisar de join — os seeds dos pais nunca mudam.
+            ParentASeed = parentA.Seed,
+            ParentBSeed = parentB.Seed,
             CreatedAt = now,
         };
         db.CreatureInstances.Add(child);
         if (childToTank) active++; else backpackCount++;
 
-        // Devolve os pais ao tanque/mochila; se nenhum couber, ficam no habitat de
-        // reprodução até o jogador abrir espaço (sem perda, só adiado).
-        foreach (var parent in new[] { parentA, parentB })
+        // Risco de morte cresce com o nº de gestações já completadas por cada pai.
+        // Roll não-determinístico (não faz parte do motor de traits reproduzível).
+        bool parentADied = Random.Shared.NextDouble() < BreedingCalculator.DeathChance(parentA.BreedCount);
+        bool parentBDied = Random.Shared.NextDouble() < BreedingCalculator.DeathChance(parentB.BreedCount);
+
+        // Devolve os pais ao tanque/mochila (se sobreviveram); se nenhum lugar
+        // couber, ficam no habitat de reprodução até o jogador abrir espaço.
+        foreach (var (parent, died) in new[] { (parentA, parentADied), (parentB, parentBDied) })
         {
+            parent.BreedCount++;
+            if (died)
+            {
+                parent.IsDead = true;
+                parent.DiedAt = now;
+                parent.HabitatId = null;
+                db.TransactionLogs.Add(new TransactionLog
+                {
+                    Type = TransactionType.BreedingLoss,
+                    FromUserId = userId,
+                    CreatureInstanceId = parent.Id,
+                    CreatedAt = now,
+                });
+                continue;
+            }
+
             if (active < mainHabitat.Capacity)
             {
                 parent.HabitatId = mainHabitat.Id;
@@ -206,6 +258,6 @@ public class BreedingService(VivariumDbContext db, GameService game)
             return ServiceResult.Conflict("Operação concorrente — tente de novo.");
         }
 
-        return ServiceResult.Success(CreatureDto.From(child));
+        return ServiceResult.Success(new CollectBreedingResponse(CreatureDto.From(child), parentADied, parentBDied));
     }
 }

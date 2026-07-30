@@ -31,6 +31,19 @@ if (args.Length >= 1 && args[0] == "breed")
     return;
 }
 
+if (args.Length >= 1 && args[0] == "breeddump")
+{
+    int count = args.Length > 1 && int.TryParse(args[1], out var bc) ? bc : 500;
+    for (int i = 1; i <= count; i++)
+    {
+        long parentASeed = i * 7919L - i;
+        long parentBSeed = -(i * 104729L + 3);
+        long childSeed = i * 131071L + 17;
+        BreedDumpLine(childSeed, parentASeed, parentBSeed);
+    }
+    return;
+}
+
 int n = args.Length > 0 && int.TryParse(args[0], out var parsed) ? parsed : 100_000;
 Console.WriteLine($"Gerando {n:N0} criaturas...\n");
 
@@ -118,6 +131,31 @@ static void DumpLine(long seed)
     var inv = CultureInfo.InvariantCulture;
     var sb = new System.Text.StringBuilder();
     sb.Append(seed).Append(';').Append(t.ShimmerTier)
+      .Append(';').Append(t.ShimmerColor?.ToString() ?? "-")
+      .Append(';').Append(t.ShimmerOpacity.ToString("F6", inv));
+    foreach (var p in new[] { t.Tail, t.Dorsal, t.Pectoral })
+    {
+        sb.Append(';').Append(p.Color).Append(';').Append(p.Pattern)
+          .Append(';').Append(p.PatternColor?.ToString() ?? "-")
+          .Append(';').Append(p.PatternSize?.ToString("F6", inv) ?? "-")
+          .Append(';').Append(p.PatternOpacity?.ToString("F6", inv) ?? "-");
+    }
+    sb.Append(';').Append(t.Movement.TailSpeed.ToString("F6", inv))
+      .Append(';').Append(t.Movement.TailAmplitude.ToString("F6", inv))
+      .Append(';').Append(t.Movement.FinSpeed.ToString("F6", inv))
+      .Append(';').Append(t.Movement.FinAmplitude.ToString("F6", inv));
+    sb.Append(';').Append(t.RarityScore.ToString("F6", inv));
+    Console.WriteLine(sb.ToString());
+}
+
+static void BreedDumpLine(long childSeed, long parentASeed, long parentBSeed)
+{
+    var t = TraitGenerator.BreedTraits(childSeed, parentASeed, parentBSeed, TraitConfigV1.Version,
+        BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
+    var inv = CultureInfo.InvariantCulture;
+    var sb = new System.Text.StringBuilder();
+    sb.Append(childSeed).Append(';').Append(parentASeed).Append(';').Append(parentBSeed)
+      .Append(';').Append(t.ShimmerTier)
       .Append(';').Append(t.ShimmerColor?.ToString() ?? "-")
       .Append(';').Append(t.ShimmerOpacity.ToString("F6", inv));
     foreach (var p in new[] { t.Tail, t.Dorsal, t.Pectoral })
@@ -240,10 +278,52 @@ static void BreedReport()
     ReportGestationPair("2 lendários máx (18.9+18.9)", 18.9m, 18.9m);
 
     ReportTierBiasScenarios();
+    ReportCostSustainability();
+    ReportDeathRiskCurve();
 }
 
 static void ReportGestationPair(string label, decimal scoreA, decimal scoreB)
     => Console.WriteLine($"  {label,-28}: {BreedingCalculator.GestationHours(scoreA, scoreB),6:0.0}h");
+
+/// <summary>
+/// Custo dinâmico vs. renda/hora na mesma raridade: quantas horas de renda o
+/// custo representa — pra checar que não é nem irrelevante (comum) nem
+/// impagável (lendário), já que o tempo de gestação já é o sink pesado.
+/// </summary>
+static void ReportCostSustainability()
+{
+    Console.WriteLine("\nCUSTO DINÂMICO vs RENDA (score combinado -> custo, horas de renda pra pagar):");
+    var cfg = TickConfig.Default;
+    void ReportCostPair(string label, decimal scoreA, decimal scoreB)
+    {
+        decimal cost = BreedingCalculator.CostSoft(scoreA, scoreB);
+        double incomePerHour = IncomeCalculator.CoinsPerHour(scoreA, cfg) + IncomeCalculator.CoinsPerHour(scoreB, cfg);
+        double hoursToPay = incomePerHour > 0 ? (double)cost / incomePerHour : double.PositiveInfinity;
+        Console.WriteLine($"  {label,-28}: {cost,7:0} soft   ({hoursToPay,5:0.0}h de renda do casal)");
+    }
+    ReportCostPair("2 comuns (5+5)", 5m, 5m);
+    ReportCostPair("comum + raro (5+8)", 5m, 8m);
+    ReportCostPair("2 raros (8+8)", 8m, 8m);
+    ReportCostPair("2 épicos (11+11)", 11m, 11m);
+    ReportCostPair("2 lendários (15+15)", 15m, 15m);
+    ReportCostPair("2 lendários máx (18.9+18.9)", 18.9m, 18.9m);
+}
+
+/// <summary>
+/// Curva de sobrevivência esperada: risco de morte por uso e a chance de um
+/// peixe ainda estar vivo depois de N cruzamentos completados.
+/// </summary>
+static void ReportDeathRiskCurve()
+{
+    Console.WriteLine("\nRISCO DE MORTE POR CRUZAMENTO (n = gestações já completadas antes desta):");
+    double survival = 1.0;
+    for (int n = 0; n <= 10; n++)
+    {
+        double death = BreedingCalculator.DeathChance(n);
+        survival *= (1 - death);
+        Console.WriteLine($"  uso #{n + 1,-2} (n={n,-2}): risco {death * 100,5:0.0}%   sobrevivência acumulada até aqui: {survival * 100,5:0.0}%");
+    }
+}
 
 /// <summary>
 /// Viés de raridade no tier de brilho (RarityBiasStrength): compara "2 pais

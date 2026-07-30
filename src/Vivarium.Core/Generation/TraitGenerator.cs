@@ -138,6 +138,35 @@ public static class TraitGenerator
         return new CreatureTraits(tier, shimmerColor, shimmerOpacity, tail, dorsal, pectoral, movement, score);
     }
 
+    /// <summary>
+    /// Probabilidade de cada tier de brilho sair no filho, dado os pais e as
+    /// constantes de mutação/viés — cálculo fechado, sem sortear nada (usado no
+    /// preview "chances do filhote" antes de confirmar o cruzamento). Mesma
+    /// matemática de <see cref="InheritOrMutate{T}"/>: com `mutationChance` de
+    /// chance o tier vem do sorteio livre pela tabela base; senão, do viés entre
+    /// os dois pais.
+    /// </summary>
+    public static IReadOnlyDictionary<ShimmerTier, double> ChildTierDistribution(
+        long parentASeed, long parentBSeed, int configVersion, double mutationChance, double rarityBias)
+    {
+        var a = Generate(parentASeed, configVersion);
+        var b = Generate(parentBSeed, configVersion);
+
+        double probA = WeightedTable.ProbabilityOf(TraitConfigV1.ShimmerTiers, a.ShimmerTier);
+        double probB = WeightedTable.ProbabilityOf(TraitConfigV1.ShimmerTiers, b.ShimmerTier);
+        double pFromA = WeightedTable.BiasedInheritProbability(probA, probB, rarityBias);
+        double pFromB = 1 - pFromA;
+
+        var result = new Dictionary<ShimmerTier, double>();
+        foreach (var entry in TraitConfigV1.ShimmerTiers)
+        {
+            double pBaseline = entry.Weight / TraitConfigV1.ShimmerTiers.Sum(e => e.Weight);
+            double pInherit = (entry.Value == a.ShimmerTier ? pFromA : 0) + (entry.Value == b.ShimmerTier ? pFromB : 0);
+            result[entry.Value] = mutationChance * pBaseline + (1 - mutationChance) * pInherit;
+        }
+        return result;
+    }
+
     private readonly record struct InheritedPick<T>(T Value, double Probability, bool Mutated, bool FromA);
 
     /// <summary>

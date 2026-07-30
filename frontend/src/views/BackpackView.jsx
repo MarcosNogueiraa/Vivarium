@@ -54,7 +54,7 @@ export function BackpackView({ refreshTank, notify }) {
           {data.creatures.map((c) => (
             <div key={c.id} className="card" style={{ "--tier": bandOf(Number(c.rarityScore)).color }}>
               <button className="fish-stage as-button" onClick={() => setDetail(c)} title="Ver detalhes">
-                <FishCanvas seed={c.seed} />
+                <FishCanvas seed={c.seed} isBred={c.isBred} parentASeed={c.parentASeed} parentBSeed={c.parentBSeed} />
               </button>
               <div className="card-row">
                 <RarityBadge score={Number(c.rarityScore)} />

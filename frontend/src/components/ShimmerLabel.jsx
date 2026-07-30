@@ -1,9 +1,12 @@
 import { useMemo } from "react";
-import { generateTraits } from "../lib/generator.js";
+import { traitsOf } from "../lib/generator.js";
 import { PT } from "../lib/fishRenderer.js";
 
-export function ShimmerLabel({ seed }) {
-  const traits = useMemo(() => generateTraits(BigInt(seed)), [seed]);
+export function ShimmerLabel({ seed, isBred = false, parentASeed = null, parentBSeed = null }) {
+  const traits = useMemo(
+    () => traitsOf({ seed, isBred, parentASeed, parentBSeed }),
+    [seed, isBred, parentASeed, parentBSeed],
+  );
   if (traits.shimmerTier === "None") return null;
   return (
     <span className="shimmer-label">

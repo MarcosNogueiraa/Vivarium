@@ -185,7 +185,9 @@ export function TankView({ tank, refresh, notify }) {
               const band = bandOf(Number(c.rarityScore));
               return (
                 <button key={c.id} className="fish-row" onClick={() => setSelectedId(c.id)} style={{ "--tier": band.color }}>
-                  <span className="fr-thumb"><FishCanvas seed={c.seed} width={72} /></span>
+                  <span className="fr-thumb">
+                    <FishCanvas seed={c.seed} width={72} isBred={c.isBred} parentASeed={c.parentASeed} parentBSeed={c.parentBSeed} />
+                  </span>
                   <span className="fr-body">
                     <span className="fr-line1">
                       <span className="badge" style={{ "--tier": band.color }}><span className="gem" /> {band.name}</span>

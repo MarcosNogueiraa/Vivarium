@@ -3,15 +3,14 @@ import { Modal } from "../components/Modal.jsx";
 import { FishCanvas } from "../components/FishCanvas.jsx";
 import { Coin } from "../components/Coin.jsx";
 import { TraitRow } from "../components/TraitRow.jsx";
-import { coinsPerHourOf, generateTraits, rarityBreakdown } from "../lib/generator.js";
+import { coinsPerHourOf, rarityBreakdownOf, traitsOf } from "../lib/generator.js";
 import { bandOf, PT, swimSpeedOf } from "../lib/fishRenderer.js";
 import { ageOf, factorLabel, partSummary, speedWord } from "../lib/format.js";
 
 export function FishDetail({ creature, onClose, children }) {
   const seed = creature.seed;
-  const bigSeed = useMemo(() => BigInt(seed), [seed]);
-  const traits = useMemo(() => generateTraits(bigSeed), [bigSeed]);
-  const breakdown = useMemo(() => rarityBreakdown(bigSeed), [bigSeed]);
+  const traits = useMemo(() => traitsOf(creature), [creature]);
+  const breakdown = useMemo(() => rarityBreakdownOf(creature), [creature]);
   const score = Number(creature.rarityScore);
   const band = bandOf(score);
   const coins = coinsPerHourOf(score);
@@ -20,7 +19,9 @@ export function FishDetail({ creature, onClose, children }) {
   return (
     <Modal onClose={onClose}>
       <div className="detail-head">
-        <div className="detail-fish"><FishCanvas seed={seed} width={280} /></div>
+        <div className="detail-fish">
+          <FishCanvas seed={seed} width={280} isBred={creature.isBred} parentASeed={creature.parentASeed} parentBSeed={creature.parentBSeed} />
+        </div>
         <div className="detail-meta">
           <span className="badge big" style={{ "--tier": band.color }}><span className="gem" /> {band.name}</span>
           {creature.isBred && <span className="bred-tag">🐣 Filhote (nascido do ninho)</span>}

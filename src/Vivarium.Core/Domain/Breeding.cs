@@ -19,6 +19,7 @@ public class BreedingSlot
     public CreatureInstance? ParentB { get; set; }
     public DateTime StartedAt { get; set; }
     public DateTime ReadyAt { get; set; }
+    public decimal CostPaid { get; set; }
     public BreedingStatus Status { get; set; }
     public long? ChildCreatureId { get; set; }
     public CreatureInstance? ChildCreature { get; set; }

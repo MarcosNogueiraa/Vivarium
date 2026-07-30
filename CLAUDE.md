@@ -290,17 +290,21 @@ Um peixe do jogador tem **três estados** (fonte de verdade: `HabitatId` + lista
 - **Endpoints:** `GET /api/game/backpack`, `POST /api/game/creatures/{id}/store` (tanque→mochila), `POST /api/game/creatures/{id}/deploy` (mochila→tanque). Front: aba "Mochila".
 - **É a fundação do breeding** (8.8): os pais podem vir da mochila.
 
-### 8.8 Breeding — implementado (30/07/2026)
+### 8.8 Breeding — implementado (30/07/2026, 3ª iteração)
 
-Resolve o **gap #1** da economia ([[revisao-economia]]): não havia sink recorrente que escalasse com a riqueza. Breeding é sink de soft (custo imediato) + sink de tempo (os pais ficam fora do tanque principal, sem render renda, durante a gestação).
+Resolve o **gap #1** da economia ([[revisao-economia]]): não havia sink recorrente que escalasse com a riqueza. Breeding é sink de soft (custo dinâmico) + sink de tempo (os pais ficam fora do tanque principal, sem render renda, durante a gestação) + risco crescente do pai não sobreviver a cada uso.
 
-- **Habitat de reprodução dedicado:** novo `HabitatType` (`Code = "Breeding"`, id 2), um `Habitat` capacity=2 por usuário (criado no registro — `AuthEndpoints` — e sob demanda pra contas antigas — `BreedingService.FindOrCreateBreedingHabitatAsync`). Ao iniciar, os 2 pais têm `CreatureInstance.HabitatId` movido pra esse habitat — sem flag de lock nova, reaproveitando o princípio "`Habitat` genérico" (§9.1): mercado/mochila/transferência já assumem "possuído + `HabitatId` aponta pro lugar certo", nenhum precisou mudar. O habitat de breeding **nunca** passa por `HabitatTicker.ProcessTick` (só o principal do usuário é ticado), então não gera fila nem conta renda — os pais saem do cálculo de `TankFishAsync` automaticamente por não estarem mais no habitat principal.
-- **Gestação escala com a raridade combinada dos pais** (não é fixa): mesma linguagem exponencial da renda (`IncomeCalculator.CoinsPerHour`) — `BreedingCalculator.GestationHours(scoreA, scoreB) = BaseGestationHours · exp(GestationGrowth · (scoreA+scoreB − GestationRefScore))`, clampada em `[MinGestationHours, MaxGestationHours]`. Constantes em `BreedingDefaults` (`Gameplay/BreedingConfig.cs`): base 8h, growth 0.12, ref 10, mín 4h, máx 240h (10 dias — teto pro par mais raro possível). Validado por simulação (`Vivarium.Simulation breed`): 2 comuns ~8h, 2 raros ~16h, 2 épicos ~34h, 2 lendários ~88h, 2 lendários máx ~225h — cai dentro do teto.
-- **Herança trait-a-trait** (`TraitGenerator.BreedTraits`, paralelo ao `Generate`): por trait, um roll independente (`Roll01(childSeed, salt+"_source")`) decide mutação (re-sorteia do zero pela MESMA tabela de peso — legendário continua ~0.2% mesmo mutando, sem lógica assimétrica) vs. herança (`Roll01(childSeed, salt+"_inherit")` escolhe pai A/B). Subtraits condicionais (cor/opacidade de shimmer, cor/tamanho/opacidade de padrão) seguem a MESMA fonte do trait pai (tier ou tipo de padrão) — nunca herdam de um pai que não tinha aquele subtrait; colisão rara (cor de padrão herdada = cor de base do filho) cai num sorteio fresco. RarityScore recalculado a partir da probabilidade real de cada valor final (nunca copiado dos pais) — usa `WeightedTable.ProbabilityOf` (novo).
-- **Viés de raridade no tier de brilho (30/07/2026, 2ª iteração):** herança 50/50 pura regride à média quando os pais são raros por "assinaturas" diferentes — não é o "vira comum" que assustaria, mas também não passa a sensação de "raridade é hereditária". Por decisão do usuário, o viés se aplica **só ao `ShimmerTier`** (o trait mais "cabeçalho" de raridade, peso 2.5×) — cor/padrão de cauda/dorsal/peitoral continuam 50/50 puro. Mecanismo: em vez do threshold fixo 0.5, `WeightedTable.BiasedInheritProbability(probA, probB, rarityBias) = pA^-bias / (pA^-bias + pB^-bias)` — quando os pais têm o MESMO tier o threshold cai em 0.5 automaticamente (só importa quando diferem); `bias=0` desliga o viés, `bias=1` pesa pelo inverso exato da probabilidade. Mutação continua sem viés (reroll justo). `BreedingDefaults.RarityBiasStrength = 0.15` (calibrado por simulação, `Vivarium.Simulation breed`): **2 pais Lendário → 91.8%** o filho mantém o tier; **Lendário + Raro → 52.4%**; **Lendário + comum → 65.0%** (testado explicitamente pra não virar "lavagem" de lendário com peixe descartável — teto calibrado ~70%; e o throughput real já é limitado a 1 gestação por vez, então mesmo esse pior caso não vira produção em massa); população geral **não inflaciona** (legendário nos filhos ~0.2%, igual ao baseline). Testes em `BreedTraitsTests.cs`: `ViesDeRaridade_FavoreceOTierMaisRaroEntreOsPais`, `ViesDeRaridade_NaoPermiteLavagemDeLendarioComParceiroComum`.
-- **Fluxo:** `BreedingService.StartAsync` (valida donos/distintos/não listados/não já em gestação/sem gestação concorrente do usuário/saldo ≥ `CostSoft`=150; debita, move os pais, cria `TransactionLog` tipo `Breeding`, transação explícita). `GetStatusAsync` (slot ativo, se houver). `CollectAsync` (bloqueia se não pronto; sorteia `childSeed` fresco **na coleta**, nunca antes — mesmo princípio de 8.1; cria o filho com `ParentAId/ParentBId`, posiciona via tanque-se-couber-senão-mochila; devolve os pais ao tanque/mochila).
-- **Endpoints:** `GET /api/breeding` (status), `POST /api/breeding/start`, `POST /api/breeding/collect` — `BreedingService`/`BreedingEndpoints`, mesmo padrão `ServiceResult` da fase 4b.
-- **Frontend:** aba "Ninho" (`BreedingView.jsx`) — picker de 2 peixes (tanque+mochila) quando sem gestação ativa; `AquariumCanvas` com `theme="breeding"` (tingimento rosado sutil na água + bolhas em formato de coração, `fishRenderer.js`) mostrando o casal + contagem regressiva quando ativa. Hook `useBreeding.js` com polling de 30s.
+- **Habitat de reprodução dedicado:** novo `HabitatType` (`Code = "Breeding"`, id 2), um `Habitat` capacity=2 por usuário (criado no registro — `AuthEndpoints` — e sob demanda pra contas antigas — `BreedingService.FindOrCreateBreedingHabitatAsync`). Ao iniciar, os 2 pais têm `CreatureInstance.HabitatId` movido pra esse habitat — sem flag de lock nova, reaproveitando o princípio "`Habitat` genérico" (§9.1). O habitat de breeding **nunca** passa por `HabitatTicker.ProcessTick`, então não gera fila nem conta renda.
+- **Gestação escala com a raridade combinada dos pais:** `BreedingCalculator.GestationHours(scoreA, scoreB) = BaseGestationHours · exp(GestationGrowth · (scoreA+scoreB − GestationRefScore))`, clamp `[4h, 240h]`. 2 comuns ~8h, 2 raros ~16h, 2 épicos ~34h, 2 lendários ~88h, 2 lendários máx ~225h.
+- **Custo dinâmico (30/07, 3ª iteração):** `BreedingCalculator.CostSoft(scoreA, scoreB)` — mesma forma exponencial, base 150, growth 0.10, ref 10, clamp `[100, 5000]`. Cresce bem mais devagar que a renda (growth 0.10 vs. 0.49 da renda): 2 comuns 150 soft (~27h da renda do casal — um toque real pra quem começa), 2 lendários 1108 soft (~1.5h da renda do casal — parece "barato" isoladamente, mas o verdadeiro sink pra pares ricos é o **tempo de lockup**: 2 lendários parados 88h sem render ~370/h cada é ~65k de renda perdida em oportunidade, muito maior que o custo em dinheiro). O custo em soft não precisa ser o sink pesado pros ricos — só precisa doer pra quem está começando.
+- **Risco de morte crescente por cruzamento (30/07, 3ª iteração):** cada `CreatureInstance` tem `BreedCount` (nº de gestações completadas como pai/mãe). Ao coletar, ANTES de devolver cada pai, rola `BreedingCalculator.DeathChance(n) = BaseDeathChance + (MaxDeathChance − BaseDeathChance)·(1 − exp(−DeathRiskGrowth·n))` — sem limite fixo, nunca garantido (teto 85%). Calibrado (`Vivarium.Simulation breed`): uso #1 risco 5%, #2 ≈23%, #3 ≈37%, #5 ≈56% — sobrevivência acumulada cai pra ~47% já no 4º uso. Se morre: `IsDead=true`+`DiedAt` (não apaga a linha — preservaria a FK `Restrict` de lindagem `ParentAId/BId`; `BackpackQuery`/`MarketService`/`TransferAsync` bloqueiam peixe morto), audita `TransactionLog.BreedingLoss`.
+- **Herança trait-a-trait** (`TraitGenerator.BreedTraits`): por trait, um roll decide mutação (re-sorteia do zero, mesma tabela — legendário continua ~0.2%) vs. herança (escolhe pai A/B). Subtraits condicionais seguem a MESMA fonte do trait pai. RarityScore recalculado a partir da probabilidade real de cada valor final — nunca copiado dos pais.
+- **Viés de raridade no tier de brilho** (só `ShimmerTier`, decisão do usuário): `WeightedTable.BiasedInheritProbability(probA, probB, rarityBias) = pA^-bias / (pA^-bias + pB^-bias)`, pais com o mesmo tier caem em 0.5 automático. `RarityBiasStrength = 0.15`: 2 Lendário → 91.8% mantém; Lendário+Raro → 52.4%; Lendário+comum → 65.0% (teto anti-"lavagem" ~70%); população geral não inflaciona (~0.2%, igual ao baseline).
+- **Bug crítico corrigido (30/07, 3ª iteração):** o filhote coletado tinha o `RarityScore` calculado corretamente por `BreedTraits`, mas era **exibido** via `Generate(childSeed)` normal — um seed novo e aleatório, sem NENHUMA relação com os pais (78% de chance de sair cinza, igual à população base, mascarando completamente a herança calculada). Fix: `CreatureInstance` ganhou `ParentASeed`/`ParentBSeed` (denormalizado do pai, imutável — evita join), expostos em `CreatureDto`/`ListingDto`; `frontend/lib/generator.js` ganhou um port completo de `BreedTraits` (`breedTraits`, `bredRarityBreakdown`, `inheritOrMutate`, `biasedInheritProbability`, `probabilityOf`) verificado 1:1 contra o C# (`Vivarium.Simulation breeddump`, 5.000 seeds, 0 mismatches — traits E score). Helpers `traitsOf(creature)`/`rarityBreakdownOf(creature)` escolhem o motor certo (`isBred` ou não); todo componente que desenha um peixe (`FishCanvas`, `AquariumCanvas`, `FishDetail`, `ShimmerLabel`, `tankMath.js`) usa esses helpers agora, nunca `generateTraits(seed)` direto num peixe que pode ser filhote.
+- **Prévia sem compromisso:** `GET /api/breeding/quote?parentAId=&parentBId=` — custo, gestação, `TraitGenerator.ChildTierDistribution` (distribuição de probabilidade do tier do filho, cálculo fechado sem RNG) e o `BreedCount`/risco de morte de cada pai, tudo sem gastar nada. `BreedingSlotDto` ganhou `CostPaid` (o que foi cobrado na gestação ativa).
+- **Fluxo:** `BreedingService.StartAsync`/`GetStatusAsync`/`CollectAsync`/`GetQuoteAsync` — mesmo padrão `ServiceResult` da fase 4b. `CollectAsync` devolve `CollectBreedingResponse { Child, ParentADied, ParentBDied }`.
+- **Endpoints:** `GET /api/breeding`, `GET /api/breeding/quote`, `POST /api/breeding/start`, `POST /api/breeding/collect`.
+- **Frontend:** aba "Ninho" (`BreedingView.jsx`) — picker de 2 peixes; ao selecionar os 2, uma **barra fixa no rodapé** (`.sticky-bar`) chama um **modal de prévia** (custo/gestação/chances/risco, via `/quote`) antes de confirmar; `AquariumCanvas` com `theme="breeding"` (tingimento rosado + corações) durante a gestação ativa; `CollectCelebration` ganhou `variant="breeding"` (mostrada **sempre** ao coletar um filhote, não só se raro — é um evento demorado que merece o momento — com aviso se algum pai não sobreviveu). Fix de CSS: `.card-row` de ações (mochila) ganhou `flex-wrap` + botões mais compactos — estourava a borda do card com 3 botões.
 
 ### 8.9 Fora do escopo do MVP
 
@@ -402,8 +406,13 @@ CreatureInstance
 - Seed (bigint)
 - TraitConfigVersion (int)
 - RarityScore (decimal, cacheado)
-- ParentAId (FK -> CreatureInstance, nullable) -- pronto pra breeding futuro
+- ParentAId (FK -> CreatureInstance, nullable) -- linhagem (breeding, 8.8)
 - ParentBId (FK -> CreatureInstance, nullable)
+- ParentASeed (bigint, nullable) -- denormalizado do pai p/ reconstruir traits (BreedTraits) sem join
+- ParentBSeed (bigint, nullable)
+- BreedCount (int, default 0) -- nº de gestações já completadas como pai/mãe
+- IsDead (bool, default false) -- não sobreviveu a uma gestação (risco cresce com BreedCount)
+- DiedAt (datetime, nullable)
 - CreatedAt
 
 ItemDefinition
@@ -433,7 +442,7 @@ MarketListing
 
 TransactionLog
 - Id (PK)
-- Type (MarketSale | DirectTransfer | CurrencyPurchase | ItemPurchase | Sink | Breeding)
+- Type (MarketSale | DirectTransfer | CurrencyPurchase | ItemPurchase | Sink | Breeding | BreedingLoss)
 - FromUserId (FK -> User, nullable)
 - ToUserId (FK -> User, nullable)
 - CreatureInstanceId (FK -> CreatureInstance, nullable)
@@ -449,6 +458,7 @@ BreedingSlot -- par em gestação (8.8); habitat de reprodução dedicado (Habit
 - ParentBId (FK -> CreatureInstance)
 - StartedAt
 - ReadyAt -- StartedAt + BreedingCalculator.GestationHours(scoreA, scoreB)
+- CostPaid (decimal) -- BreedingCalculator.CostSoft(scoreA, scoreB) no momento do Start
 - Status (InProgress | Collected)
 - ChildCreatureId (FK -> CreatureInstance, nullable) -- preenchido na coleta
 ```
@@ -529,8 +539,9 @@ Falta pra ir ao ar (depende de contas do usuário):
 | GET | `/api/items/` | ✓ | catálogo (preço de upgrade calculado pelo nível atual) |
 | POST | `/api/items/{key}/buy` | ✓ | compra e aplica efeito; registra `ItemPurchase` (sink) |
 | GET | `/api/breeding` | ✓ | gestação em andamento do usuário, se houver (8.8) |
-| POST | `/api/breeding/start` | ✓ | leva 2 peixes próprios pro habitat de reprodução; debita `CostSoft`; registra `Breeding` (sink) |
-| POST | `/api/breeding/collect` | ✓ | coleta o filhote quando pronto (herança trait-a-trait); devolve os pais ao tanque/mochila |
+| GET | `/api/breeding/quote` | ✓ | prévia sem custo: custo/gestação/chances do filho/risco de morte dos pais |
+| POST | `/api/breeding/start` | ✓ | leva 2 peixes próprios pro habitat de reprodução; debita `CostSoft` dinâmico; registra `Breeding` (sink) |
+| POST | `/api/breeding/collect` | ✓ | coleta o filhote quando pronto (herança trait-a-trait); devolve os pais sobreviventes ao tanque/mochila; rola risco de morte |
 
 **Itens do MVP** (seed via migration `SeedItemDefinitions`): `filter_basic` (20 soft, restaura água pra 100 — tick roda antes, pra degradação pendente ser aplicada primeiro), `auto_filter` (500 soft, permanente via UserInventory, tick lê e degrada na metade), `tank_upgrade` (base 50 soft, +1 capacidade, preço = base × 1.5^(capacidade − 3) — seção 8.4). Filtro e upgrade aplicam na hora (sem inventário); só o auto_filter fica em UserInventory.
 

@@ -4,7 +4,10 @@ import { useBreeding } from "../hooks/useBreeding.js";
 import { AquariumCanvas } from "../components/AquariumCanvas.jsx";
 import { RarityBadge } from "../components/RarityBadge.jsx";
 import { FishCanvas } from "../components/FishCanvas.jsx";
-import { bandOf } from "../lib/fishRenderer.js";
+import { Modal } from "../components/Modal.jsx";
+import { Coin } from "../components/Coin.jsx";
+import { CollectCelebration } from "../components/CollectCelebration.jsx";
+import { bandOf, PT } from "../lib/fishRenderer.js";
 
 function timeLeft(readyAt) {
   const ms = new Date(readyAt).getTime() - Date.now();
@@ -15,11 +18,18 @@ function timeLeft(readyAt) {
   return h > 0 ? `${h}h ${m}min` : `${m}min`;
 }
 
+function hoursLabel(h) {
+  if (h < 24) return `${h.toFixed(1)}h`;
+  return `${(h / 24).toFixed(1)} dias`;
+}
+
 export function BreedingView({ tank, refreshTank, notify }) {
   const { status, refresh } = useBreeding();
   const [backpack, setBackpack] = useState(null);
   const [pickA, setPickA] = useState(null);
   const [pickB, setPickB] = useState(null);
+  const [quote, setQuote] = useState(null); // null = fechado, "loading" = carregando, objeto = pronto
+  const [celebrate, setCelebrate] = useState(null); // { child, parentLosses }
   const [, forceTick] = useState(0);
 
   const loadBackpack = useCallback(async () => { setBackpack(await api.backpack()); }, []);
@@ -40,14 +50,16 @@ export function BreedingView({ tank, refreshTank, notify }) {
       notify("Casal levado pro ninho!");
       setPickA(null);
       setPickB(null);
+      setQuote(null);
       await Promise.all([refresh(), refreshTank(), loadBackpack()]);
     } catch (e) { notify(e.message); }
   }
 
   async function collect() {
     try {
-      await api.collectBreeding();
-      notify("Filhote coletado!");
+      const result = await api.collectBreeding();
+      const parentLosses = [result.parentADied, result.parentBDied].filter(Boolean);
+      setCelebrate({ child: result.child, parentLosses });
       await Promise.all([refresh(), refreshTank(), loadBackpack()]);
     } catch (e) { notify(e.message); }
   }
@@ -67,40 +79,51 @@ export function BreedingView({ tank, refreshTank, notify }) {
     else if (!pickB) setPickB(c);
   }
 
-  if (status.active) {
-    const { slot } = status;
-    return (
-      <>
-        <div className="section-head">
-          <span className="eyebrow">Ninho</span>
-          <span className="count">{slot.isReady ? "pronto!" : timeLeft(slot.readyAt)}</span>
-        </div>
-        <AquariumCanvas
-          creatures={[slot.parentA, slot.parentB]}
-          selectedId={null} onSelect={() => {}} interactive={false} ambient theme="breeding"
-        />
-        <div className="card-row" style={{ justifyContent: "center", gap: 16, marginTop: 12 }}>
-          <RarityBadge score={Number(slot.parentA.rarityScore)} />
-          <span>+</span>
-          <RarityBadge score={Number(slot.parentB.rarityScore)} />
-        </div>
-        <div className="card-row" style={{ justifyContent: "center", gap: 8, marginTop: 12 }}>
-          <button className="btn-primary" disabled={!slot.isReady} onClick={collect}>
-            {slot.isReady ? "Coletar filhote" : "Aguardando…"}
-          </button>
-          {import.meta.env.DEV && !slot.isReady && (
-            <button className="dev-btn" onClick={devFinish} title="Só existe em dev">
-              Terminar gestação
-            </button>
-          )}
-        </div>
-      </>
-    );
+  async function openQuote() {
+    setQuote("loading");
+    try {
+      setQuote(await api.breedingQuote(pickA.id, pickB.id));
+    } catch (e) {
+      notify(e.message);
+      setQuote(null);
+    }
+  }
+
+  async function confirmStart() {
+    await start();
   }
 
   const candidates = [...tank.creatures, ...backpack.creatures];
+  const bothPicked = pickA && pickB;
 
-  return (
+  const content = status.active ? (
+    <>
+      <div className="section-head">
+        <span className="eyebrow">Ninho</span>
+        <span className="count">{status.slot.isReady ? "pronto!" : timeLeft(status.slot.readyAt)}</span>
+      </div>
+      <AquariumCanvas
+        creatures={[status.slot.parentA, status.slot.parentB]}
+        selectedId={null} onSelect={() => {}} interactive={false} ambient theme="breeding"
+      />
+      <div className="card-row" style={{ justifyContent: "center", gap: 16, marginTop: 12 }}>
+        <RarityBadge score={Number(status.slot.parentA.rarityScore)} />
+        <span>+</span>
+        <RarityBadge score={Number(status.slot.parentB.rarityScore)} />
+      </div>
+      <p className="hint" style={{ textAlign: "center" }}>Custo pago: <Coin /> {Number(status.slot.costPaid).toFixed(0)} soft</p>
+      <div className="card-row" style={{ justifyContent: "center", gap: 8, marginTop: 12 }}>
+        <button className="btn-primary" disabled={!status.slot.isReady} onClick={collect}>
+          {status.slot.isReady ? "Coletar filhote" : "Aguardando…"}
+        </button>
+        {import.meta.env.DEV && !status.slot.isReady && (
+          <button className="dev-btn" onClick={devFinish} title="Só existe em dev">
+            Terminar gestação
+          </button>
+        )}
+      </div>
+    </>
+  ) : (
     <>
       <div className="section-head">
         <span className="eyebrow">Ninho</span>
@@ -110,9 +133,9 @@ export function BreedingView({ tank, refreshTank, notify }) {
       ) : (
         <>
           <p className="hint">
-            Escolha 2 peixes pra levar pro ninho. Quanto mais raro o casal, mais demorada a gestação.
+            Escolha 2 peixes pra levar pro ninho. Quanto mais raro o casal, mais demorada (e cara) a gestação.
           </p>
-          <div className="grid">
+          <div className="grid" style={{ paddingBottom: bothPicked ? 70 : 0 }}>
             {candidates.map((c) => {
               const picked = pickA?.id === c.id || pickB?.id === c.id;
               return (
@@ -125,19 +148,89 @@ export function BreedingView({ tank, refreshTank, notify }) {
                   }}
                 >
                   <button className="fish-stage as-button" onClick={() => togglePick(c)} title="Selecionar">
-                    <FishCanvas seed={c.seed} />
+                    <FishCanvas seed={c.seed} isBred={c.isBred} parentASeed={c.parentASeed} parentBSeed={c.parentBSeed} />
                   </button>
                   <RarityBadge score={Number(c.rarityScore)} />
                 </div>
               );
             })}
           </div>
-          <div className="card-row" style={{ justifyContent: "center", marginTop: 12 }}>
-            <button className="btn-primary" disabled={!pickA || !pickB} onClick={start}>
-              Levar pro ninho
-            </button>
-          </div>
         </>
+      )}
+
+      {bothPicked && (
+        <div className="sticky-bar">
+          <span className="hint" style={{ padding: 0 }}>2 peixes selecionados</span>
+          <button className="btn-primary" onClick={openQuote}>Ver chances e cruzar</button>
+        </div>
+      )}
+    </>
+  );
+
+  return (
+    <>
+      {content}
+
+      {quote && (
+        <Modal onClose={() => setQuote(null)}>
+          <div className="eyebrow">Prévia do cruzamento</div>
+          {quote === "loading" ? (
+            <p className="hint">Calculando…</p>
+          ) : (
+            <>
+              <div className="card-row" style={{ marginTop: 10 }}>
+                <span>Custo</span>
+                <span className="mono"><Coin /> {quote.costSoft.toFixed(0)} soft</span>
+              </div>
+              <div className="card-row">
+                <span>Gestação</span>
+                <span className="mono">{hoursLabel(quote.gestationHours)}</span>
+              </div>
+
+              <div className="detail-section">
+                <div className="eyebrow">Chance do brilho do filhote</div>
+                <div className="breakdown">
+                  {Object.entries(quote.childTierProbabilities)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([tier, p]) => (
+                      <div className="bd-row" key={tier}>
+                        <span className="bd-label">{PT.tier[tier] ?? tier}</span>
+                        <span className="bd-bar"><span style={{ width: `${p * 100}%` }} /></span>
+                        <span className="bd-prob mono">{(p * 100).toFixed(1)}%</span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+              <div className="detail-section">
+                <div className="eyebrow">Risco de morte dos pais</div>
+                <p className="bd-help">Cada cruzamento completado aumenta o risco do próximo — nunca garantido, mas cresce com o uso.</p>
+                <div className="card-row">
+                  <span>Pai A ({quote.parentABreedCount}× cruzado)</span>
+                  <span className="mono">{(quote.parentADeathChance * 100).toFixed(0)}%</span>
+                </div>
+                <div className="card-row">
+                  <span>Pai B ({quote.parentBBreedCount}× cruzado)</span>
+                  <span className="mono">{(quote.parentBDeathChance * 100).toFixed(0)}%</span>
+                </div>
+              </div>
+
+              <div className="detail-actions">
+                <button className="btn-primary" onClick={confirmStart}>Confirmar cruzamento</button>
+                <button onClick={() => setQuote(null)}>Cancelar</button>
+              </div>
+            </>
+          )}
+        </Modal>
+      )}
+
+      {celebrate && (
+        <CollectCelebration
+          creature={celebrate.child}
+          variant="breeding"
+          parentLosses={celebrate.parentLosses}
+          onClose={() => setCelebrate(null)}
+        />
       )}
     </>
   );

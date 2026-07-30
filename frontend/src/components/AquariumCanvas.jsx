@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { generateTraits, roll01 } from "../lib/generator.js";
+import { roll01, traitsOf } from "../lib/generator.js";
 import {
   bandOf, drawFish, drawTankBackground, drawTankForeground, swimSpeedOf, VIEW_H, VIEW_W,
 } from "../lib/fishRenderer.js";
@@ -79,7 +79,7 @@ export function AquariumCanvas({
   creaturesRef.current = useMemo(
     () => creatures.map((c) => {
       const bigSeed = BigInt(c.seed);
-      return { ...c, bigSeed, traits: generateTraits(bigSeed) };
+      return { ...c, bigSeed, traits: traitsOf(c) };
     }),
     [creatures],
   );

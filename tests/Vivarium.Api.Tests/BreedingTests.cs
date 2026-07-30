@@ -11,10 +11,18 @@ public class BreedingTests : IClassFixture<VivariumApiFactory>
 
     public BreedingTests(VivariumApiFactory factory) => _factory = factory;
 
-    private record CreatureDto(long Id, int SpeciesId, string Seed, int TraitConfigVersion, decimal RarityScore, DateTime CreatedAt);
-    private record BreedingSlotDto(long Id, CreatureDto ParentA, CreatureDto ParentB, DateTime StartedAt, DateTime ReadyAt, bool IsReady);
+    private record CreatureDto(
+        long Id, int SpeciesId, string Seed, int TraitConfigVersion, decimal RarityScore, DateTime CreatedAt,
+        bool IsBred, string? ParentASeed, string? ParentBSeed, int BreedCount);
+    private record BreedingSlotDto(long Id, CreatureDto ParentA, CreatureDto ParentB, DateTime StartedAt, DateTime ReadyAt, bool IsReady, decimal CostPaid);
     private record BreedingStatusDto(bool Active, BreedingSlotDto? Slot);
-    private record StartResultDto(long SlotId, DateTime ReadyAt);
+    private record StartResultDto(long SlotId, DateTime ReadyAt, decimal CostPaid);
+    private record CollectBreedingResponse(CreatureDto Child, bool ParentADied, bool ParentBDied);
+    private record BreedingQuoteDto(
+        decimal CostSoft, double GestationHours, DateTime EstimatedReadyAt,
+        Dictionary<string, double> ChildTierProbabilities,
+        int ParentABreedCount, double ParentADeathChance,
+        int ParentBBreedCount, double ParentBDeathChance);
     private record ErrorDto(string Error);
 
     private async Task<long> HabitatIdOf(long userId)
@@ -92,21 +100,55 @@ public class BreedingTests : IClassFixture<VivariumApiFactory>
 
         var collectResp = await client.PostAsync("/api/breeding/collect", null);
         collectResp.EnsureSuccessStatusCode();
-        var child = await collectResp.Content.ReadFromJsonAsync<CreatureDto>();
-        Assert.NotNull(child);
+        var result = await collectResp.Content.ReadFromJsonAsync<CollectBreedingResponse>();
+        Assert.NotNull(result);
+        var child = result!.Child;
 
         var statusAfter = await client.GetFromJsonAsync<BreedingStatusDto>("/api/breeding");
         Assert.False(statusAfter!.Active);
 
+        // Risco de morte é não-determinístico (chance baixa por pai): o filho sempre
+        // volta pro tanque, mas cada pai só volta se sobreviveu à gestação.
+        int survivors = (result.ParentADied ? 0 : 1) + (result.ParentBDied ? 0 : 1);
         var tankAfter = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
-        Assert.Equal(3, tankAfter!.Creatures.Count); // filho + 2 pais de volta
+        Assert.Equal(1 + survivors, tankAfter!.Creatures.Count);
+
+        // Conserta o bug relatado: o filhote precisa reconstruir os traits reais
+        // (herdados via BreedTraits), não um peixe aleatório do próprio seed solto —
+        // por isso o DTO precisa expor os seeds dos pais.
+        Assert.True(child.IsBred);
+        Assert.Equal("111", child.ParentASeed);
+        Assert.Equal("222", child.ParentBSeed);
 
         await _factory.WithDbAsync(async db =>
         {
             var childEntity = await db.CreatureInstances.FirstAsync(c => c.Id == child!.Id);
             Assert.Equal(a, childEntity.ParentAId);
             Assert.Equal(b, childEntity.ParentBId);
+            Assert.Equal(111, childEntity.ParentASeed);
+            Assert.Equal(222, childEntity.ParentBSeed);
         });
+    }
+
+    [Fact]
+    public async Task Quote_RetornaCustoGestacaoEChancesSemCobrarNada()
+    {
+        var (client, userId) = await _factory.RegisterAsync("breed8");
+        long a = await CreateOwnedCreature(userId, 5m, 2020);
+        long b = await CreateOwnedCreature(userId, 6m, 2121);
+
+        var quote = await client.GetFromJsonAsync<BreedingQuoteDto>($"/api/breeding/quote?parentAId={a}&parentBId={b}");
+        Assert.NotNull(quote);
+        Assert.True(quote!.CostSoft > 0);
+        Assert.True(quote.GestationHours > 0);
+        Assert.Equal(0, quote.ParentABreedCount);
+        Assert.Equal(0, quote.ParentBBreedCount);
+        Assert.InRange(quote.ParentADeathChance, 0, 1);
+        Assert.True(quote.ChildTierProbabilities.Values.Sum() is > 0.99 and < 1.01);
+
+        // Prévia não cobra nem inicia nada — o par continua livre pra outras coisas.
+        var tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
+        Assert.Equal(2, tank!.Creatures.Count);
     }
 
     [Fact]

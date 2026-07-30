@@ -27,12 +27,14 @@ public class MarketService(VivariumDbContext db, GameService game)
                 CreatureId = m.CreatureInstanceId, m.CreatureInstance!.SpeciesId,
                 m.CreatureInstance.Seed, m.CreatureInstance.TraitConfigVersion,
                 m.CreatureInstance.RarityScore, m.CreatureInstance.ParentAId,
+                m.CreatureInstance.ParentASeed, m.CreatureInstance.ParentBSeed,
             })
             .ToListAsync())
             .Select(m => new ListingDto(
                 m.Id, m.PriceSoft, m.SellerId, m.SellerName,
                 m.CreatureId, m.SpeciesId, m.Seed.ToString(),
-                m.TraitConfigVersion, m.RarityScore, m.ParentAId.HasValue))
+                m.TraitConfigVersion, m.RarityScore, m.ParentAId.HasValue,
+                m.ParentASeed?.ToString(), m.ParentBSeed?.ToString()))
             .ToList();
     }
 
@@ -45,6 +47,8 @@ public class MarketService(VivariumDbContext db, GameService game)
             .FirstOrDefaultAsync(c => c.Id == req.CreatureInstanceId && c.OwnerId == userId);
         if (creature is null)
             return ServiceResult.NotFound("Criatura não encontrada");
+        if (creature.IsDead)
+            return ServiceResult.Bad("Essa criatura não sobreviveu à gestação");
         if (creature.HabitatId is null)
             return ServiceResult.Bad("Criatura já está no mercado ou em trânsito");
 

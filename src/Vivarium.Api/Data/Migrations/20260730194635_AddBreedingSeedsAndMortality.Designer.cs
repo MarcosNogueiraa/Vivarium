@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Vivarium.Api.Data;
@@ -11,9 +12,11 @@ using Vivarium.Api.Data;
 namespace Vivarium.Api.Data.Migrations
 {
     [DbContext(typeof(VivariumDbContext))]
-    partial class VivariumDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260730194635_AddBreedingSeedsAndMortality")]
+    partial class AddBreedingSeedsAndMortality
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -32,10 +35,6 @@ namespace Vivarium.Api.Data.Migrations
 
                     b.Property<long?>("ChildCreatureId")
                         .HasColumnType("bigint");
-
-                    b.Property<decimal>("CostPaid")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
 
                     b.Property<long>("HabitatId")
                         .HasColumnType("bigint");

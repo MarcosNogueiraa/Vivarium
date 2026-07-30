@@ -19,6 +19,16 @@ public class CreatureInstance
     public CreatureInstance? ParentA { get; set; }
     public long? ParentBId { get; set; }
     public CreatureInstance? ParentB { get; set; }
+    /// <summary>
+    /// Seed dos pais denormalizado no filho (imutável, nunca muda) — evita join só
+    /// pra reconstruir os traits herdados via BreedTraits. Null se não for filhote.
+    /// </summary>
+    public long? ParentASeed { get; set; }
+    public long? ParentBSeed { get; set; }
+    /// <summary>Nº de gestações que este peixe já completou como pai/mãe (risco de morte cresce com o uso).</summary>
+    public int BreedCount { get; set; }
+    public bool IsDead { get; set; }
+    public DateTime? DiedAt { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 

@@ -1,12 +1,12 @@
 // Cálculos derivados do estado do tanque (só display; o servidor é a fonte da renda).
-import { coinsPerHourOf, generateTraits, synergyMultiplier } from "./generator.js";
+import { coinsPerHourOf, synergyMultiplier, traitsOf } from "./generator.js";
 import { PT } from "./fishRenderer.js";
 
 /** Contagem de peixes por cor de cauda no tanque. */
 export function tailColorCounts(creatures) {
   const counts = {};
   for (const c of creatures) {
-    const color = generateTraits(BigInt(c.seed)).tail.color;
+    const color = traitsOf(c).tail.color;
     counts[color] = (counts[color] || 0) + 1;
   }
   return counts;
@@ -29,7 +29,7 @@ export function tankFishSorted(creatures) {
   const counts = tailColorCounts(creatures);
   return creatures
     .map((c) => {
-      const traits = generateTraits(BigInt(c.seed));
+      const traits = traitsOf(c);
       const col = traits.tail.color;
       const mult = synergyMultiplier(counts[col] ?? 1);
       return { c, traits, col, colorLabel: PT.color[col], prod: coinsPerHourOf(Number(c.rarityScore), mult) };
@@ -41,7 +41,7 @@ export function tankFishSorted(creatures) {
 export function tankPotential(creatures) {
   const counts = tailColorCounts(creatures);
   return creatures.reduce((s, c) => {
-    const col = generateTraits(BigInt(c.seed)).tail.color;
+    const col = traitsOf(c).tail.color;
     return s + coinsPerHourOf(Number(c.rarityScore), synergyMultiplier(counts[col]));
   }, 0);
 }
