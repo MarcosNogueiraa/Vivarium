@@ -15,6 +15,14 @@ public static class BreedingDefaults
     public const double MaxGestationHours = 240.0;
     public const decimal CostSoft = 150m;
     public const double MutationChance = 0.08;
+
+    /// <summary>
+    /// Viés de raridade na herança do tier de brilho (0 = 50/50 puro, 1 = pesa
+    /// pelo inverso exato da probabilidade). Calibrado por simulação (`Vivarium.Simulation
+    /// breed`) pra favorecer "raro cruza com raro dá raro" sem virar atalho de
+    /// "lavagem" de lendário cruzando com um peixe comum qualquer.
+    /// </summary>
+    public const double RarityBiasStrength = 0.15;
 }
 
 public static class BreedingCalculator

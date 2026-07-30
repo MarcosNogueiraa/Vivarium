@@ -7,8 +7,8 @@ namespace Vivarium.Api.Contracts;
 /// (double trunca acima de 2^53). Use <see cref="From"/> pra mapear da entidade.
 /// </summary>
 public record CreatureDto(
-    long Id, int SpeciesId, string Seed, int TraitConfigVersion, decimal RarityScore, DateTime CreatedAt)
+    long Id, int SpeciesId, string Seed, int TraitConfigVersion, decimal RarityScore, DateTime CreatedAt, bool IsBred)
 {
     public static CreatureDto From(CreatureInstance c) =>
-        new(c.Id, c.SpeciesId, c.Seed.ToString(), c.TraitConfigVersion, c.RarityScore, c.CreatedAt);
+        new(c.Id, c.SpeciesId, c.Seed.ToString(), c.TraitConfigVersion, c.RarityScore, c.CreatedAt, c.ParentAId.HasValue);
 }

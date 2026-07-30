@@ -52,6 +52,7 @@ export function MarketView({ userId, refreshTank, notify }) {
               <span className="produces mono">~{coinsPerHourOf(Number(l.rarityScore)).toFixed(1)}/h</span>
               <span className="seller">de {l.sellerName}</span>
             </div>
+            {l.isBred && <span className="bred-tag">🐣 Filhote</span>}
             <div className="card-row">
               <button onClick={() => setDetail(l)}>Detalhes</button>
               {l.sellerId === userId

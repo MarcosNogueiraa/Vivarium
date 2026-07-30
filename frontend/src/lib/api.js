@@ -62,4 +62,5 @@ export const api = {
   startBreeding: (parentAId, parentBId) =>
     request("POST", "/api/breeding/start", { parentAId, parentBId }),
   collectBreeding: () => request("POST", "/api/breeding/collect"),
+  devFinishBreeding: () => request("POST", "/api/dev/breeding/finish"),
 };

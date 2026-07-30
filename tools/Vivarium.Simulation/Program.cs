@@ -211,7 +211,8 @@ static void BreedReport()
         var a = TraitGenerator.Generate(seedA);
         var b = TraitGenerator.Generate(seedB);
         long childSeed = rngPairs.NextInt64();
-        var child = TraitGenerator.BreedTraits(childSeed, seedA, seedB, TraitConfigV1.Version, BreedingDefaults.MutationChance);
+        var child = TraitGenerator.BreedTraits(childSeed, seedA, seedB, TraitConfigV1.Version,
+            BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
 
         gestationHours.Add(BreedingCalculator.GestationHours((decimal)a.RarityScore, (decimal)b.RarityScore));
         if (child.ShimmerTier == ShimmerTier.Legendary) childLegendary++;
@@ -237,10 +238,53 @@ static void BreedReport()
     ReportGestationPair("2 épicos (11+11)", 11m, 11m);
     ReportGestationPair("2 lendários (15+15)", 15m, 15m);
     ReportGestationPair("2 lendários máx (18.9+18.9)", 18.9m, 18.9m);
+
+    ReportTierBiasScenarios();
 }
 
 static void ReportGestationPair(string label, decimal scoreA, decimal scoreB)
     => Console.WriteLine($"  {label,-28}: {BreedingCalculator.GestationHours(scoreA, scoreB),6:0.0}h");
+
+/// <summary>
+/// Viés de raridade no tier de brilho (RarityBiasStrength): compara "2 pais
+/// Lendário" vs "1 Lendário + 1 comum qualquer" — a segunda tem que ficar bem
+/// abaixo da primeira, senão cruzar com um peixe qualquer vira atalho de
+/// "lavagem" de lendário (o exploit que a calibração precisa evitar).
+/// </summary>
+static void ReportTierBiasScenarios()
+{
+    const int n = 30_000;
+    long legendarySeed = FindSeedWithTier(ShimmerTier.Legendary, 200_000);
+    long commonSeed = FindSeedWithTier(ShimmerTier.None, 200);
+    long rareSeed = FindSeedWithTier(ShimmerTier.Rare, 5_000);
+
+    double PctLegendary(long seedA, long seedB, int seed)
+    {
+        var rng = new Random(seed);
+        int count = 0;
+        for (int i = 0; i < n; i++)
+        {
+            long childSeed = rng.NextInt64();
+            var child = TraitGenerator.BreedTraits(childSeed, seedA, seedB, TraitConfigV1.Version,
+                BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
+            if (child.ShimmerTier == ShimmerTier.Legendary) count++;
+        }
+        return count / (double)n * 100;
+    }
+
+    Console.WriteLine($"\nVIÉS DE RARIDADE NO TIER DE BRILHO (RarityBiasStrength = {BreedingDefaults.RarityBiasStrength:0.00}):");
+    Console.WriteLine($"  2 pais Lendário       -> filho Lendário: {PctLegendary(legendarySeed, legendarySeed, 1):0.0}%");
+    Console.WriteLine($"  Lendário + Raro       -> filho Lendário: {PctLegendary(legendarySeed, rareSeed, 2):0.0}%");
+    Console.WriteLine($"  Lendário + comum      -> filho Lendário: {PctLegendary(legendarySeed, commonSeed, 3):0.0}%  <- deve ficar bem abaixo do primeiro (anti-lavagem)");
+    Console.WriteLine($"  2 pais comuns         -> filho Lendário: {PctLegendary(commonSeed, commonSeed, 4):0.0}%  (baseline, deve ficar perto de 0.2%)");
+}
+
+static long FindSeedWithTier(ShimmerTier tier, int searchLimit)
+{
+    for (long s = 1; s <= searchLimit; s++)
+        if (TraitGenerator.Generate(s).ShimmerTier == tier) return s;
+    throw new InvalidOperationException($"Nenhum seed com tier {tier} nos primeiros {searchLimit}");
+}
 
 static double Percentile(double[] sorted, double p)
 {

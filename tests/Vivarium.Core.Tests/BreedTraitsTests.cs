@@ -1,3 +1,4 @@
+using Vivarium.Core.Gameplay;
 using Vivarium.Core.Generation;
 
 namespace Vivarium.Core.Tests;
@@ -12,8 +13,8 @@ public class BreedTraitsTests
     {
         for (long childSeed = 1; childSeed <= 200; childSeed++)
         {
-            var x = TraitGenerator.BreedTraits(childSeed, ParentASeed, ParentBSeed, TraitConfigV1.Version, 0.08);
-            var y = TraitGenerator.BreedTraits(childSeed, ParentASeed, ParentBSeed, TraitConfigV1.Version, 0.08);
+            var x = TraitGenerator.BreedTraits(childSeed, ParentASeed, ParentBSeed, TraitConfigV1.Version, 0.08, 0.0);
+            var y = TraitGenerator.BreedTraits(childSeed, ParentASeed, ParentBSeed, TraitConfigV1.Version, 0.08, 0.0);
             Assert.Equal(x, y);
         }
     }
@@ -27,7 +28,7 @@ public class BreedTraitsTests
         // breeding está corretamente alinhada com a do motor normal.
         foreach (long childSeed in ManySeeds(300))
         {
-            var bred = TraitGenerator.BreedTraits(childSeed, ParentASeed, ParentBSeed, TraitConfigV1.Version, 1.0);
+            var bred = TraitGenerator.BreedTraits(childSeed, ParentASeed, ParentBSeed, TraitConfigV1.Version, 1.0, 0.0);
             var generated = TraitGenerator.Generate(childSeed);
             Assert.Equal(generated, bred);
         }
@@ -43,7 +44,7 @@ public class BreedTraitsTests
 
             foreach (long childSeed in ManySeeds(20))
             {
-                var child = TraitGenerator.BreedTraits(childSeed, parentA, parentB, TraitConfigV1.Version, 0.0);
+                var child = TraitGenerator.BreedTraits(childSeed, parentA, parentB, TraitConfigV1.Version, 0.0, 0.0);
 
                 Assert.True(child.ShimmerTier == a.ShimmerTier || child.ShimmerTier == b.ShimmerTier);
 
@@ -92,7 +93,7 @@ public class BreedTraitsTests
         int foraDosPais = 0;
         for (long childSeed = 1; childSeed <= n; childSeed++)
         {
-            var tier = TraitGenerator.BreedTraits(childSeed, parentA, parentB, TraitConfigV1.Version, mutationChance).ShimmerTier;
+            var tier = TraitGenerator.BreedTraits(childSeed, parentA, parentB, TraitConfigV1.Version, mutationChance, 0.0).ShimmerTier;
             if (tier != ShimmerTier.Subtle && tier != ShimmerTier.Rare)
                 foraDosPais++;
         }
@@ -116,7 +117,7 @@ public class BreedTraitsTests
         {
             long parentA = childSeed * 13 + 1;
             long parentB = childSeed * 13 + 2;
-            var child = TraitGenerator.BreedTraits(childSeed, parentA, parentB, TraitConfigV1.Version, 0.08);
+            var child = TraitGenerator.BreedTraits(childSeed, parentA, parentB, TraitConfigV1.Version, 0.08, 0.0);
             scores.Add(Math.Round(child.RarityScore, 6));
         }
         Assert.True(scores.Count > 50, $"esperava boa variação de score, só {scores.Count} valores distintos em 500 filhos");
@@ -126,26 +127,88 @@ public class BreedTraitsTests
     public void FabricaDeLendarios_NaoInflacionaAcimaDoBaseline()
     {
         // População base (não selecionada por raridade): pares aleatórios cruzados
-        // com a chance de mutação default não devem produzir legendário muito acima
-        // do baseline populacional (~0.2%, seção 5 do CLAUDE.md) — checagem de
-        // sanidade, tolerância larga (não é trava rígida de produto).
+        // com os parâmetros REAIS de produção (mutação + viés de raridade) não
+        // devem produzir legendário muito acima do baseline populacional (~0.2%,
+        // seção 5 do CLAUDE.md) — na maioria dos pares os dois tiers já diferem
+        // pouco em probabilidade e nenhum dos dois é legendário, então o viés
+        // quase não se manifesta aqui. Checagem de sanidade, tolerância larga.
         const int n = 30_000;
         int legendarios = 0;
         for (long childSeed = 1; childSeed <= n; childSeed++)
         {
             long parentA = childSeed * 97 + 1;
             long parentB = childSeed * 97 + 2;
-            var child = TraitGenerator.BreedTraits(childSeed, parentA, parentB, TraitConfigV1.Version, BreedTraitsDefaultMutation);
+            var child = TraitGenerator.BreedTraits(childSeed, parentA, parentB, TraitConfigV1.Version,
+                BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
             if (child.ShimmerTier == ShimmerTier.Legendary)
                 legendarios++;
         }
         Assert.InRange(legendarios / (double)n, 0, 0.01); // até ~5x o baseline de 0.2%
     }
 
-    private const double BreedTraitsDefaultMutation = 0.08;
+    [Fact]
+    public void ViesDeRaridade_FavoreceOTierMaisRaroEntreOsPais()
+    {
+        // Pais com tiers diferentes: Subtle (P=15%) e Rare (P=1.3%, mais raro).
+        // Sem mutação, o viés deve inclinar a herança pro tier mais raro (Rare)
+        // mais da metade das vezes — e a fração observada deve bater com a
+        // fórmula fechada (BiasedInheritProbability), não só "acima de 50%".
+        long subtleParent = FindSeedWithTier(ShimmerTier.Subtle);
+        long rareParent = FindSeedWithTier(ShimmerTier.Rare);
+        const double rarityBias = 0.6;
+        const int n = 30_000;
 
-    private static long FindSeedWithTier(ShimmerTier tier)
-        => ManySeeds(50_000).First(s => TraitGenerator.Generate(s).ShimmerTier == tier);
+        int rareCount = 0;
+        for (long childSeed = 1; childSeed <= n; childSeed++)
+        {
+            var tier = TraitGenerator.BreedTraits(childSeed, subtleParent, rareParent, TraitConfigV1.Version, 0.0, rarityBias).ShimmerTier;
+            if (tier == ShimmerTier.Rare) rareCount++;
+        }
+
+        double expected = WeightedTable.BiasedInheritProbability(0.013, 0.15, rarityBias); // P(escolher o valor com prob 0.013 = Rare)
+        Assert.True(expected > 0.5, "sanity da fórmula: deveria favorecer o mais raro");
+        Assert.InRange(rareCount / (double)n, expected - 0.03, expected + 0.03);
+    }
+
+    [Fact]
+    public void ViesDeRaridade_NaoPermiteLavagemDeLendarioComParceiroComum()
+    {
+        // Anti-exploit: cruzar 1 lendário com 1 peixe comum qualquer não pode ser
+        // um atalho confiável pra "lavar" o lendário — a chance de o filho manter
+        // o tier lendário nesse caso precisa ficar BEM abaixo do caso "2 lendários",
+        // usando os parâmetros reais de produção.
+        long legendaryParent = FindSeedWithTier(ShimmerTier.Legendary, 200_000);
+        long commonParent = FindSeedWithTier(ShimmerTier.None);
+        const int n = 20_000;
+
+        double PctLegendary(long parentA, long parentB, long seedOffset)
+        {
+            int count = 0;
+            for (long childSeed = 1; childSeed <= n; childSeed++)
+            {
+                var tier = TraitGenerator.BreedTraits(childSeed + seedOffset, parentA, parentB, TraitConfigV1.Version,
+                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength).ShimmerTier;
+                if (tier == ShimmerTier.Legendary) count++;
+            }
+            return count / (double)n;
+        }
+
+        double bothLegendary = PctLegendary(legendaryParent, legendaryParent, 0);
+        double legendaryPlusCommon = PctLegendary(legendaryParent, commonParent, 10_000_000);
+
+        Assert.True(bothLegendary > 0.5,
+            $"2 lendários deveria manter o tier na maioria das vezes, saiu {bothLegendary:P1}");
+        // Teto calibrado (não "menos da metade" arbitrário): mesmo o pior caso de
+        // lavagem (parceiro comum) não pode passar de ~70% — e o throughput real já
+        // é limitado a 1 gestação por vez, então isso não vira produção em massa.
+        Assert.True(legendaryPlusCommon < 0.70,
+            $"lendário+comum ({legendaryPlusCommon:P1}) deveria ficar abaixo de 70% — risco de 'lavagem'");
+        Assert.True(legendaryPlusCommon < bothLegendary,
+            $"lendário+comum ({legendaryPlusCommon:P1}) deveria ficar abaixo de 2-lendários ({bothLegendary:P1})");
+    }
+
+    private static long FindSeedWithTier(ShimmerTier tier, int searchLimit = 50_000)
+        => ManySeeds(searchLimit).First(s => TraitGenerator.Generate(s).ShimmerTier == tier);
 
     private static IEnumerable<long> ManySeeds(int count = 5_000)
         => Enumerable.Range(1, count).Select(i => (long)i * 7919);

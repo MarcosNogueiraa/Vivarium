@@ -160,7 +160,8 @@ public class BreedingService(VivariumDbContext db, GameService game)
 
         long childSeed = CreatureCollector.NewRandomSeed();
         var traits = TraitGenerator.BreedTraits(
-            childSeed, parentA.Seed, parentB.Seed, TraitConfigV1.Version, BreedingDefaults.MutationChance);
+            childSeed, parentA.Seed, parentB.Seed, TraitConfigV1.Version,
+            BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
 
         var child = new CreatureInstance
         {

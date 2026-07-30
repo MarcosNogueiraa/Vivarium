@@ -194,6 +194,7 @@ export function TankView({ tank, refresh, notify }) {
                     <span className="fr-line2">
                       <span className="fr-color"><span className="dot-color" style={{ background: PART_HEX[col] }} /> {colorLabel}</span>
                       {traits.shimmerTier !== "None" && <span className="shimmer-label">✦ {PT.shimmer[traits.shimmerColor]}</span>}
+                      {c.isBred && <span className="bred-tag">🐣 Filhote</span>}
                     </span>
                   </span>
                   <span className="fr-prod mono"><Coin /> ~{prod.toFixed(1)}<small>/h</small></span>

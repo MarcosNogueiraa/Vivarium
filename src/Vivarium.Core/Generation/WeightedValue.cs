@@ -44,4 +44,19 @@ public static class WeightedTable
         }
         return match / total;
     }
+
+    /// <summary>
+    /// Probabilidade de herdar o valor do pai A dado um viés de raridade: bias=0 é
+    /// 50/50 puro (ignora raridade); bias=1 pesa pelo inverso da probabilidade,
+    /// favorecendo fortemente o valor mais raro entre os dois pais. Quando os pais
+    /// têm o mesmo valor (probA == probB), sempre devolve 0.5 — o viés só entra em
+    /// jogo quando os pais diferem nesse trait.
+    /// </summary>
+    public static double BiasedInheritProbability(double probA, double probB, double rarityBias)
+    {
+        if (rarityBias <= 0) return 0.5;
+        double wA = Math.Pow(probA, -rarityBias);
+        double wB = Math.Pow(probB, -rarityBias);
+        return wA / (wA + wB);
+    }
 }

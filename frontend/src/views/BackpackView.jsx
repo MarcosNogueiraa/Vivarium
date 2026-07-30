@@ -60,6 +60,7 @@ export function BackpackView({ refreshTank, notify }) {
                 <RarityBadge score={Number(c.rarityScore)} />
                 <span className="produces mono">~{coinsPerHourOf(Number(c.rarityScore)).toFixed(1)}/h</span>
               </div>
+              {c.isBred && <span className="bred-tag">🐣 Filhote</span>}
               <div className="card-row">
                 <button className="btn-primary" onClick={() => deploy(c)}>Pro tanque</button>
                 <button onClick={() => sell(c)}>Vender</button>

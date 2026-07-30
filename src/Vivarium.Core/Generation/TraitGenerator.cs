@@ -72,9 +72,12 @@ public static class TraitGenerator
     /// nunca copiado dos pais. Subtraits condicionais (cor/opacidade de shimmer,
     /// cor/tamanho/opacidade de padrão) seguem a MESMA fonte do trait pai (tier ou
     /// tipo de padrão) pra nunca herdar um subtrait de um pai que não o tinha.
+    /// Só o tier de brilho do corpo usa <paramref name="rarityBias"/> pra favorecer
+    /// o valor mais raro entre os pais (raridade "hereditária", sem virar garantia —
+    /// mutação continua sem viés); os demais traits continuam 50/50 puro.
     /// </summary>
     public static CreatureTraits BreedTraits(
-        long childSeed, long parentASeed, long parentBSeed, int configVersion, double mutationChance)
+        long childSeed, long parentASeed, long parentBSeed, int configVersion, double mutationChance, double rarityBias)
     {
         if (configVersion != TraitConfigV1.Version)
             throw new ArgumentException($"Versão de config desconhecida: {configVersion}", nameof(configVersion));
@@ -84,7 +87,7 @@ public static class TraitGenerator
 
         double score = 0;
 
-        var tierPick = InheritOrMutate(childSeed, "body_shimmer", mutationChance, a.ShimmerTier, b.ShimmerTier, TraitConfigV1.ShimmerTiers);
+        var tierPick = InheritOrMutate(childSeed, "body_shimmer", mutationChance, a.ShimmerTier, b.ShimmerTier, TraitConfigV1.ShimmerTiers, rarityBias);
         score += TraitConfigV1.ShimmerScoreWeight * SelfInformation(tierPick.Probability);
         ShimmerTier tier = tierPick.Value;
 
@@ -137,10 +140,15 @@ public static class TraitGenerator
 
     private readonly record struct InheritedPick<T>(T Value, double Probability, bool Mutated, bool FromA);
 
-    /// <summary>Decide, por um hash independente, se o trait muta (sorteia do zero) ou é herdado de A/B.</summary>
+    /// <summary>
+    /// Decide, por um hash independente, se o trait muta (sorteia do zero) ou é
+    /// herdado de A/B. <paramref name="rarityBias"/> (0 = 50/50 puro) desloca a
+    /// escolha de herança em favor do valor mais raro entre os pais — a mutação em
+    /// si nunca é enviesada.
+    /// </summary>
     private static InheritedPick<T> InheritOrMutate<T>(
         long childSeed, string salt, double mutationChance,
-        T valueA, T valueB, IReadOnlyList<WeightedValue<T>> table)
+        T valueA, T valueB, IReadOnlyList<WeightedValue<T>> table, double rarityBias = 0)
     {
         bool mutated = DeterministicHash.Roll01(childSeed, salt + "_source") < mutationChance;
         if (mutated)
@@ -148,9 +156,12 @@ public static class TraitGenerator
             var (value, p) = WeightedTable.Pick(table, DeterministicHash.Roll01(childSeed, salt));
             return new InheritedPick<T>(value, p, true, false);
         }
-        bool fromA = DeterministicHash.Roll01(childSeed, salt + "_inherit") < 0.5;
+        double probA = WeightedTable.ProbabilityOf(table, valueA);
+        double probB = WeightedTable.ProbabilityOf(table, valueB);
+        double threshold = WeightedTable.BiasedInheritProbability(probA, probB, rarityBias);
+        bool fromA = DeterministicHash.Roll01(childSeed, salt + "_inherit") < threshold;
         T v = fromA ? valueA : valueB;
-        return new InheritedPick<T>(v, WeightedTable.ProbabilityOf(table, v), false, fromA);
+        return new InheritedPick<T>(v, fromA ? probA : probB, false, fromA);
     }
 
     private static double BreedContinuousNormal(

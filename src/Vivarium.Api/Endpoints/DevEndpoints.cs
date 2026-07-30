@@ -82,5 +82,20 @@ public static class DevEndpoints
             await db.SaveChangesAsync();
             return Results.Ok(new { credited = credit, balance = wallet.Amount });
         });
+
+        // Zera o tempo de gestação restante (não muda o resultado, só a hora) — pra
+        // testar o "coletar" sem esperar as horas/dias reais da fórmula.
+        group.MapPost("/breeding/finish", async (ClaimsPrincipal principal, VivariumDbContext db) =>
+        {
+            long userId = TokenService.GetUserId(principal);
+            var slot = await db.BreedingSlots
+                .FirstOrDefaultAsync(s => s.UserId == userId && s.Status == BreedingStatus.InProgress);
+            if (slot is null)
+                return Results.NotFound();
+
+            slot.ReadyAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            return Results.Ok(new { readyAt = slot.ReadyAt });
+        });
     }
 }

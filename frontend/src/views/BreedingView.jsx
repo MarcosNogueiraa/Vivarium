@@ -52,6 +52,14 @@ export function BreedingView({ tank, refreshTank, notify }) {
     } catch (e) { notify(e.message); }
   }
 
+  async function devFinish() {
+    try {
+      await api.devFinishBreeding();
+      notify("Gestação zerada (dev).");
+      await refresh();
+    } catch (e) { notify(e.message); }
+  }
+
   function togglePick(c) {
     if (pickA?.id === c.id) { setPickA(null); return; }
     if (pickB?.id === c.id) { setPickB(null); return; }
@@ -76,10 +84,15 @@ export function BreedingView({ tank, refreshTank, notify }) {
           <span>+</span>
           <RarityBadge score={Number(slot.parentB.rarityScore)} />
         </div>
-        <div className="card-row" style={{ justifyContent: "center", marginTop: 12 }}>
+        <div className="card-row" style={{ justifyContent: "center", gap: 8, marginTop: 12 }}>
           <button className="btn-primary" disabled={!slot.isReady} onClick={collect}>
             {slot.isReady ? "Coletar filhote" : "Aguardando…"}
           </button>
+          {import.meta.env.DEV && !slot.isReady && (
+            <button className="dev-btn" onClick={devFinish} title="Só existe em dev">
+              Terminar gestação
+            </button>
+          )}
         </div>
       </>
     );

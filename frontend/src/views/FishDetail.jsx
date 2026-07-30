@@ -23,6 +23,7 @@ export function FishDetail({ creature, onClose, children }) {
         <div className="detail-fish"><FishCanvas seed={seed} width={280} /></div>
         <div className="detail-meta">
           <span className="badge big" style={{ "--tier": band.color }}><span className="gem" /> {band.name}</span>
+          {creature.isBred && <span className="bred-tag">🐣 Filhote (nascido do ninho)</span>}
           <div className="detail-score">Raridade <b>{score.toFixed(2)}</b></div>
           <div className="detail-coins"><Coin /> ~{coins.toFixed(1)} <small>soft/h a água cheia</small></div>
           {traits.shimmerTier !== "None" && (
