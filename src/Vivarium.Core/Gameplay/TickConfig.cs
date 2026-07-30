@@ -25,7 +25,9 @@ public sealed record TickConfig
     // --- Farm de moedas (renda passiva por raridade) ---
     // coinsPorHora(score) = IncomeBasePerHour * exp(IncomeGrowth * (score - IncomeRefScore))
     // Base reduzida (ritmo lento) mantendo o topo íngreme (lendário valioso).
-    public double IncomeBasePerHour { get; init; } = 2.0;
+    // 1.7 (era 2.0): compensa o +19% de renda mediana que a raridade v2 trouxe
+    // (score mediano subiu 5.0→5.36) — ver CLAUDE.md 8.6.
+    public double IncomeBasePerHour { get; init; } = 1.7;
     public double IncomeGrowth { get; init; } = 0.49;
     public double IncomeRefScore { get; init; } = 4.0;
     /// <summary>Fator água na renda: (maint/100)^IncomeWaterExp. Água suja corta a renda.</summary>

@@ -19,13 +19,13 @@ public class IncomeCalculatorTests
     [Fact]
     public void RendaCrescExponencialComRaridade()
     {
-        double comum = IncomeCalculator.CoinsPerHour(4m, Cfg);
-        double raro = IncomeCalculator.CoinsPerHour(7.5m, Cfg);
-        double lendario = IncomeCalculator.CoinsPerHour(11.2m, Cfg);
+        double comum = IncomeCalculator.CoinsPerHour(4m, Cfg);   // score ref
+        double raro = IncomeCalculator.CoinsPerHour(7.5m, Cfg);  // início da faixa Raro (v2)
+        double lendario = IncomeCalculator.CoinsPerHour(14m, Cfg); // início do Lendário (v2)
 
         Assert.True(comum < raro && raro < lendario);
-        Assert.InRange(comum, 1.5, 2.5);          // base 2/h
-        Assert.True(lendario > 55);                // lendário rende muito mais
+        Assert.InRange(comum, 1.4, 2.0);           // base 1.7/h
+        Assert.True(lendario > 150);               // lendário rende muito mais
         Assert.True(lendario / comum > 25);        // gap enorme comum→lendário
     }
 

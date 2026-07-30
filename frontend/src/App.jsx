@@ -180,10 +180,11 @@ function AquariumCanvas({ creatures, selectedId, onSelect, interactive = true, a
         if (s.x > W - 90) { s.x = W - 90; s.vx = -Math.abs(s.vx); }
         const y = s.y + Math.sin(time / 900 + s.phase) * 7;
 
-        // Aura no contorno pra peixes raros+ (lendário reluz de leve)
+        // Aura no contorno pra peixes raros+ (lendário reluz de leve).
+        // Cortes seguem as faixas de raridade v2 (Raro ≥ 7.5, Lendário ≥ 14.0).
         const rscore = Number(c.rarityScore);
-        if (rscore >= 6.7) {
-          const legendary = rscore >= 11.2;
+        if (rscore >= 7.5) {
+          const legendary = rscore >= 14.0;
           const pulse = legendary ? 0.82 + 0.18 * Math.sin(time / 650 + s.phase) : 1;
           drawAura(ctx, getAuraSprite(c, bandOf(rscore).color), s.x, y, s.vx > 0, (legendary ? 0.55 : 0.36) * pulse);
         }

@@ -285,8 +285,12 @@ const CONFIG = {
     ["Green", 14.0], ["Purple", 6.0], ["Black", 3.0], ["PureWhite", 1.0],
   ],
   patternTypes: [
-    ["None", 65.0], ["Stripe", 15.0], ["Dot", 15.0], ["Gradient", 4.0], ["Mottled", 1.0],
+    ["None", 76.0], ["Stripe", 8.0], ["Dot", 8.0], ["Scales", 3.0], ["Rays", 1.6],
+    ["Chevron", 1.2], ["Net", 0.9], ["Gradient", 0.6], ["Mottled", 0.35],
+    ["Ocellus", 0.2], ["Marble", 0.05],
   ],
+  shimmerScoreWeight: 2.5,
+  setBonus: { samePattern2: 1.0, samePattern3: 2.5, sameColor2: 0.8, sameColor3: 2.0 },
   correlationBoostPoints: 15.0,
   sizeMean: 50.0, sizeStdDev: 20.0, sizeExtremeLow: 10.0, sizeExtremeHigh: 90.0,
   opacityMin: 20.0, opacityMax: 90.0, opacityExtremeLow: 30.0, opacityExtremeHigh: 80.0,
@@ -351,7 +355,7 @@ function generateTraits(seed) {
   const selfInfo = (p) => -Math.log10(p);
 
   const [tier, tierP] = weightedPick(CONFIG.shimmerTiers, roll01(seed, "body_shimmer"));
-  score += selfInfo(tierP);
+  score += CONFIG.shimmerScoreWeight * selfInfo(tierP); // corpo é o destaque
 
   let shimmerColor = null;
   let shimmerOpacity = 0;
@@ -426,6 +430,22 @@ function generateTraits(seed) {
 
   const movement = { tailSpeed, tailAmplitude, finSpeed, finAmplitude };
 
+  // Bônus de conjunto coeso (mesmo padrão / mesma cor entre as 3 partes)
+  const sb = CONFIG.setBonus;
+  const maxGroup = (arr) => {
+    const counts = {};
+    let max = 0;
+    for (const v of arr) { counts[v] = (counts[v] || 0) + 1; max = Math.max(max, counts[v]); }
+    return max;
+  };
+  const nonNone = [tail, dorsal, pectoral].map((p) => p.pattern).filter((p) => p !== "None");
+  const patMatch = nonNone.length ? maxGroup(nonNone) : 0;
+  if (patMatch === 3) score += sb.samePattern3;
+  else if (patMatch === 2) score += sb.samePattern2;
+  const colMatch = maxGroup([tail.color, dorsal.color, pectoral.color]);
+  if (colMatch === 3) score += sb.sameColor3;
+  else if (colMatch === 2) score += sb.sameColor2;
+
   return { shimmerTier: tier, shimmerColor, shimmerOpacity, tail, dorsal, pectoral, movement, rarityScore: score };
 }
 
@@ -481,14 +501,17 @@ const PT = {
   tier: { None: "Sem brilho", Subtle: "Brilho sutil", Vibrant: "Brilho vibrante", Rare: "Brilho raro", Legendary: "Brilho lendário" },
   shimmer: { Gold: "Dourado", Silver: "Prateado", Bluish: "Azulado", Emerald: "Verde-esmeralda", Purple: "Roxo", Pink: "Rosa", Rainbow: "Arco-íris", AbsoluteBlack: "Preto absoluto", Iridescent: "Iridescente" },
   color: { Orange: "Laranja", Blue: "Azul", Red: "Vermelho", Yellow: "Amarelo", Green: "Verde", Purple: "Roxo", Black: "Preto", PureWhite: "Branco puro" },
-  pattern: { None: "Sem padrão", Stripe: "Estria", Dot: "Bolinha", Gradient: "Degradê", Mottled: "Manchado" },
+  pattern: {
+    None: "Sem padrão", Stripe: "Estria", Dot: "Bolinha", Gradient: "Degradê", Mottled: "Manchado",
+    Scales: "Escamas", Chevron: "Ziguezague", Net: "Rede", Rays: "Raios", Ocellus: "Ocelo", Marble: "Mármore",
+  },
 };
 
 const BANDS = [
-  { max: 5.0, name: "Comum", color: "var(--r-comum)" },
-  { max: 6.7, name: "Incomum", color: "var(--r-incomum)" },
-  { max: 8.4, name: "Raro", color: "var(--r-raro)" },
-  { max: 11.2, name: "Épico", color: "var(--r-epico)" },
+  { max: 5.4, name: "Comum", color: "var(--r-comum)" },
+  { max: 7.5, name: "Incomum", color: "var(--r-incomum)" },
+  { max: 9.8, name: "Raro", color: "var(--r-raro)" },
+  { max: 14.0, name: "Épico", color: "var(--r-epico)" },
   { max: Infinity, name: "Lendário", color: "var(--r-lendario)" },
 ];
 
@@ -522,6 +545,18 @@ let currentTraits = null;
 // mas fora do motor: não afetam raridade nem o contrato com o backend.
 function visualRoll(salt) {
   return roll01(currentSeed, "visual_" + salt);
+}
+
+function hexToRgb(h) {
+  const n = parseInt(h.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function mixHex(a, b, t) {
+  const ca = hexToRgb(a), cb = hexToRgb(b);
+  const r = Math.round(ca[0] + (cb[0] - ca[0]) * t);
+  const g = Math.round(ca[1] + (cb[1] - ca[1]) * t);
+  const bl = Math.round(ca[2] + (cb[2] - ca[2]) * t);
+  return `rgb(${r}, ${g}, ${bl})`;
 }
 
 function drawPattern(part, path, bbox) {
@@ -572,6 +607,78 @@ function drawPattern(part, path, bbox) {
         ctx.arc(cx + (j - 1) * r * 0.5, cy + (j % 2) * r * 0.4, r * (1 - j * 0.2), 0, Math.PI * 2);
         ctx.fill();
       }
+    }
+  } else if (part.pattern === "Scales") {
+    const r = 4 + size * 0.09;
+    const stepX = r * 1.8, stepY = r * 1.05;
+    ctx.lineWidth = Math.max(1, r * 0.16);
+    ctx.strokeStyle = color;
+    for (let row = 0, y = by; y < by + bh + stepY; row++, y += stepY) {
+      const off = row % 2 ? stepX / 2 : 0;
+      for (let x = bx + off; x < bx + bw + stepX; x += stepX) {
+        ctx.beginPath();
+        ctx.arc(x, y, r, Math.PI * 0.15, Math.PI * 0.85);
+        ctx.stroke();
+      }
+    }
+  } else if (part.pattern === "Chevron") {
+    const amp = 5 + size * 0.07;
+    const wl = amp * 1.8;
+    ctx.lineWidth = Math.max(1.5, 2 + size * 0.03);
+    ctx.strokeStyle = color;
+    ctx.lineJoin = "round";
+    for (let y = by; y < by + bh + amp * 2; y += amp * 2.2) {
+      ctx.beginPath();
+      let up = true;
+      for (let x = bx - wl; x <= bx + bw + wl; x += wl, up = !up)
+        ctx.lineTo(x, y + (up ? -amp : amp));
+      ctx.stroke();
+    }
+  } else if (part.pattern === "Net") {
+    const gap = 7 + size * 0.1;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = color;
+    for (const dir of [1, -1])
+      for (let c = -bh; c < bw + bh; c += gap) {
+        ctx.beginPath();
+        ctx.moveTo(bx + c, by);
+        ctx.lineTo(bx + c + dir * bh, by + bh);
+        ctx.stroke();
+      }
+  } else if (part.pattern === "Rays") {
+    const baseX = bx + bw * 0.08, baseY = by + bh / 2;
+    const rays = Math.round(7 + size * 0.08);
+    ctx.lineWidth = Math.max(1, 1.5 + size * 0.02);
+    ctx.strokeStyle = color;
+    for (let i = 0; i < rays; i++) {
+      ctx.beginPath();
+      ctx.moveTo(baseX, baseY);
+      ctx.lineTo(bx + bw, by + (i / (rays - 1)) * bh);
+      ctx.stroke();
+    }
+  } else if (part.pattern === "Ocellus") {
+    const r = 5 + size * 0.1;
+    const dark = mixHex(color, "#04121a", 0.55);
+    for (let i = 0; i < 3; i++) {
+      const cx = bx + (0.25 + 0.5 * visualRoll(`oc${i}x`)) * bw;
+      const cy = by + (0.25 + 0.5 * visualRoll(`oc${i}y`)) * bh;
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = dark;
+      ctx.beginPath(); ctx.arc(cx, cy, r * 0.55, 0, Math.PI * 2); ctx.fill();
+    }
+  } else if (part.pattern === "Marble") {
+    ctx.strokeStyle = color;
+    ctx.lineCap = "round";
+    for (let i = 0; i < 4; i++) {
+      ctx.lineWidth = 1.5 + visualRoll(`mv${i}w`) * (1 + size * 0.03);
+      ctx.beginPath();
+      ctx.moveTo(bx, by + visualRoll(`mv${i}a`) * bh);
+      ctx.bezierCurveTo(
+        bx + bw * 0.33, by + visualRoll(`mv${i}b`) * bh,
+        bx + bw * 0.66, by + visualRoll(`mv${i}c`) * bh,
+        bx + bw, by + visualRoll(`mv${i}d`) * bh);
+      ctx.stroke();
     }
   }
   ctx.restore();
@@ -650,6 +757,16 @@ function drawShimmer(traits, time) {
     const grad = ctx.createLinearGradient(bx, 0, bx + bw, 0);
     for (let i = 0; i <= 4; i++)
       grad.addColorStop(i / 4, `hsl(${(hue + i * 45) % 360} 90% 65%)`);
+    ctx.fillStyle = grad;
+  } else if (traits.shimmerColor === "Gold" || traits.shimmerColor === "Silver") {
+    // Metálico: realça pra não confundir com o cinza do peixe comum
+    ctx.globalAlpha = Math.min(1, (traits.shimmerOpacity / 100) * 2.2);
+    const base = SHIMMER_HEX[traits.shimmerColor];
+    const bright = traits.shimmerColor === "Gold" ? "#fff2c2" : "#ffffff";
+    const grad = ctx.createLinearGradient(bx, BODY_BBOX[1], bx + bw, BODY_BBOX[1] + BODY_BBOX[3]);
+    grad.addColorStop(0, base);
+    grad.addColorStop(0.5, bright);
+    grad.addColorStop(1, base);
     ctx.fillStyle = grad;
   } else {
     ctx.fillStyle = SHIMMER_HEX[traits.shimmerColor];

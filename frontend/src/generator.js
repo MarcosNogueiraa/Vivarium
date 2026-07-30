@@ -101,7 +101,7 @@ export const CONFIG = {
     finAmpMin: 0.15, finAmpMax: 0.75,
   },
   // Renda por peixe — espelha IncomeCalculator/TickConfig (manter em sincronia)
-  income: { base: 2.0, growth: 0.49, ref: 4.0 },
+  income: { base: 1.7, growth: 0.49, ref: 4.0 },
   synergy: { perMatch: 0.15, maxBonus: 0.80 },
   closestPartColor: {
     Gold: "Yellow", Silver: "PureWhite", Bluish: "Blue", Emerald: "Green",

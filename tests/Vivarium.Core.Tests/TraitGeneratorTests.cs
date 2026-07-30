@@ -155,6 +155,61 @@ public class TraitGeneratorTests
         Assert.True(comExtremo.RarityScore > 3.4);
     }
 
+    [Fact]
+    public void ShimmerLendario_DominaOScore()
+    {
+        // Com ShimmerScoreWeight = 2.5, o tier lendário (P=0.2%) sozinho contribui
+        // 2.5 × -log10(0.002) ≈ 6.75; somado às partes (mínimo ~2.3) qualquer peixe
+        // lendário passa de 8. Se o peso fosse 1, ficaria em ~5 e o teste falharia.
+        var lendarios = ManySeeds(200_000)
+            .Select(s => TraitGenerator.Generate(s))
+            .Where(t => t.ShimmerTier == ShimmerTier.Legendary)
+            .ToList();
+
+        Assert.NotEmpty(lendarios);
+        Assert.All(lendarios, t => Assert.True(t.RarityScore > 8.0,
+            $"lendário deveria dominar o score, mas veio {t.RarityScore:0.00}"));
+    }
+
+    [Fact]
+    public void BonusDeConjunto_Monocromatico_ReconstroiOScoreExato()
+    {
+        // Peixe deliberadamente simples pra tornar o score fechado e conferível:
+        // sem shimmer, todas as partes sem padrão, 3 cores de base iguais e
+        // velocidades não-extremas. Score = tier None (×peso) + 3×cor + 3×padrão None
+        // + bônus de mesma-cor-3. Valida de uma vez: ShimmerScoreWeight, probabilidades
+        // e SameColor3Bonus.
+        var (seed, t) = ManySeeds(2_000_000)
+            .Select(s => (s, t: TraitGenerator.Generate(s)))
+            .First(x =>
+                x.t.ShimmerTier == ShimmerTier.None
+                && x.t.Tail.Pattern == PatternType.None
+                && x.t.Dorsal.Pattern == PatternType.None
+                && x.t.Pectoral.Pattern == PatternType.None
+                && x.t.Tail.Color == x.t.Dorsal.Color
+                && x.t.Dorsal.Color == x.t.Pectoral.Color
+                && !Extreme(x.t.Movement.TailSpeed) && !Extreme(x.t.Movement.FinSpeed));
+
+        // Probabilidade = peso / soma dos pesos da tabela (padrões não somam 100).
+        double ColorP(PartColor c) => TraitConfigV1.PartColors.First(e => e.Value == c).Weight
+            / TraitConfigV1.PartColors.Sum(e => e.Weight);
+        double noneTierP = TraitConfigV1.ShimmerTiers.First(e => e.Value == ShimmerTier.None).Weight
+            / TraitConfigV1.ShimmerTiers.Sum(e => e.Weight);
+        double nonePatternP = TraitConfigV1.PatternTypes.First(e => e.Value == PatternType.None).Weight
+            / TraitConfigV1.PatternTypes.Sum(e => e.Weight);
+
+        double expected =
+            TraitConfigV1.ShimmerScoreWeight * -Math.Log10(noneTierP)
+            + 3 * -Math.Log10(ColorP(t.Tail.Color))
+            + 3 * -Math.Log10(nonePatternP)
+            + TraitConfigV1.SameColor3Bonus;
+
+        Assert.Equal(expected, t.RarityScore, 9);
+
+        static bool Extreme(double v) =>
+            v < TraitConfigV1.MovementSpeedExtremeLow || v > TraitConfigV1.MovementSpeedExtremeHigh;
+    }
+
     private static IEnumerable<long> ManySeeds(int count = 5_000)
         => Enumerable.Range(1, count).Select(i => (long)i * 7919);
 

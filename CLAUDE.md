@@ -59,15 +59,23 @@ Paleta curada e fechada (não hue contínuo), pra garantir combinação visual s
 
 Cada uma das 3 partes (cauda, dorsal, peitoral) sorteia **independentemente** dessa tabela — mas veja a regra de correlação abaixo, que ajusta os pesos condicionalmente.
 
-### Padrão sobre a parte (estria/bolinha) — aplicado igualmente às 3 partes
+### Padrão sobre a parte — aplicado igualmente às 3 partes
+
+Tabela **v2 (29/07/2026)**: "Sem padrão" domina mais (76%) e há 11 tipos, os novos com pesos baixos de propósito (raro = valioso). Ocelo e Mármore são a caça de topo. Cada parte sorteia 1 padrão desta mesma tabela.
 
 | Tipo de padrão | Peso (%) |
 |---|---|
-| Sem padrão | 65% |
-| Estria | 15% |
-| Bolinha | 15% |
-| Degradê | 4% |
-| Manchado | 1% |
+| Sem padrão | 76% |
+| Estria | 8% |
+| Bolinha | 8% |
+| Escamas | 3% |
+| Raios | 1.6% |
+| Ziguezague | 1.2% |
+| Rede | 0.9% |
+| Degradê | 0.6% |
+| Manchado | 0.35% |
+| Ocelo | 0.2% |
+| Mármore | 0.05% |
 
 Se houver padrão (qualquer tipo ≠ "sem padrão"):
 - **Tamanho do padrão**: sorteio contínuo 0–100 (pequeno a grande), com peso maior no meio (distribuição normal), tiers extremos (muito pequeno <10 ou muito grande >90) contam como "raro" e entram no cálculo de rarity score.
@@ -94,19 +102,21 @@ Onde cada `P_x` é a probabilidade (peso/100) do valor sorteado naquele trait. U
 
 Isso pode ser calculado uma vez na criação do peixe e cacheado no banco (não precisa recalcular a cada exibição).
 
-**Faixas de exibição ao jogador** — recalibradas via simulação de 100k seeds (28/07/2026, já com traits de movimento no score), produzindo a pirâmide 50% / 30% / 15% / 4.8% / 0.2%:
-- Comum: score < 5.0
-- Incomum: 5.0–6.7
-- Raro: 6.7–8.4
-- Épico: 8.4–11.2
-- Lendário: 11.2+
+**Faixas de exibição ao jogador** — recalibradas via simulação de 100k seeds (**29/07/2026**, raridade v2: corpo pesa 2.5× no score, bônus de conjunto coeso, 11 padrões), produzindo a pirâmide 50% / 30% / 15% / 4.8% / 0.2%:
+- Comum: score < 5.4
+- Incomum: 5.4–7.5
+- Raro: 7.5–9.8
+- Épico: 9.8–14.0
+- Lendário: 14.0+
 
-> O score mínimo possível é ~2.6 (mesmo o peixe mais comum carrega a informação dos traits base), então as faixas antigas começando em 0 não funcionavam. Recalibrar essas faixas sempre que os pesos do `TraitWeightConfig` mudarem (rodar `dotnet run --project tools/Vivarium.Simulation`).
+> Distribuição v2 (100k): min ~2.73, p50 5.36, p99.8 14.01, max ~18.9. O corpo pesar mais e os bônus de conjunto **subiram e alongaram a cauda** (antes máx ~14; a raridade v1 começava em ~2.6 e topava em 11.2). Recalibrar essas faixas sempre que os pesos do `TraitWeightConfig` mudarem (rodar `dotnet run --project tools/Vivarium.Simulation` e copiar os cortes p50/p80/p95/p99.8 pra `fishRenderer BANDS` + `App.jsx RARITY_RANGES`).
 
 ### 5.1 Decisões de implementação do score (v1)
 
 - **Base do log:** log10 (`score = Σ -log10(P)` de cada trait sorteado).
-- **Entram no score:** tier de shimmer do corpo; por parte (cauda/dorsal/peitoral): cor base (com probabilidade **já ajustada** pela correlação, quando ativa), tipo de padrão, cor do padrão (paleta renormalizada sem a cor base) e, apenas quando extremos, tamanho e opacidade do padrão; velocidade de cauda e de nadadeira **apenas nos extremos**, com peso reduzido (ver Movimento).
+- **Entram no score:** tier de shimmer do corpo (**× `ShimmerScoreWeight` = 2.5** — o corpo é a área de destaque e domina a raridade; ver Corpo pesa mais abaixo); por parte (cauda/dorsal/peitoral): cor base (com probabilidade **já ajustada** pela correlação, quando ativa), tipo de padrão, cor do padrão (paleta renormalizada sem a cor base) e, apenas quando extremos, tamanho e opacidade do padrão; velocidade de cauda e de nadadeira **apenas nos extremos**, com peso reduzido (ver Movimento); **bônus de conjunto coeso** (ver abaixo).
+- **Corpo pesa mais (v2, 29/07/2026):** a contribuição do tier de shimmer é multiplicada por `ShimmerScoreWeight = 2.5` (`TraitConfigV1`). Conserta o caso do iridescente (tier lendário, P=0.2%) que sem o peso ficava abaixo de um mero degradê de nadadeira. Como o peso multiplica só a informação do tier já existente, **não é** mudança de algoritmo de trait — mas mudou o *score*, então recalibramos as faixas (seção 5).
+- **Bônus de conjunto coeso (v2, 29/07/2026):** somado ao score quando as 3 partes "combinam" — recompensa peixes visualmente coerentes e cria demanda de mercado por partes específicas. Mesmo **padrão** (≠ Sem padrão) em 2 partes: +1.0; nas 3: +2.5. Mesma **cor de base** em 2 partes: +0.8; nas 3 (monocromático): +2.0 (`SamePattern2/3Bonus`, `SameColor2/3Bonus`). É um bônus fixo (não `-log10`), calibrado por simulação. Implementado em `TraitGenerator.SetBonus` (C#) e espelhado em `generator.js rarityBreakdown` e no port do protótipo.
 - **Não entram:** cor do shimmer dentro do tier (uniforme — a raridade já está capturada pelo tier), opacidade do shimmer (uniforme na faixa do tier) e as amplitudes de movimento (uniformes, só estética).
 - **Tamanho do padrão:** normal(média 50, desvio 20) clampada em 0–100; extremos <10 ou >90 têm P≈2.3% cada.
 - **Opacidade do padrão:** uniforme 20–90; extremos <30 ou >80 têm P=1/7 cada.
@@ -252,7 +262,7 @@ Lógica pura em `HabitatTicker.ProcessTick` (recebe estado + "agora", devolve o 
 
 Renda passiva: cada peixe no tanque farma soft continuamente, escalado pela raridade. Lógica pura em `Vivarium.Core/Gameplay/IncomeCalculator.cs`; parâmetros em `TickConfig`; acumulada no tick preguiçoso (`GameService.ApplyTickAsync`) e **creditada automática** na carteira (idle puro, sem clique).
 
-- **Fórmula:** `coinsPorHora(score) = IncomeBasePerHour · exp(IncomeGrowth · (score − IncomeRefScore))` — **base 2** (reduzida p/ ritmo lento em 29/07), growth 0.49, ref 4. Comum ~2/h, raro ~11/h, épico ~35/h, lendário ~68–164/h. Topo íngreme = lendário cobiçado.
+- **Fórmula:** `coinsPorHora(score) = IncomeBasePerHour · exp(IncomeGrowth · (score − IncomeRefScore))` — **base 1.7** (reduzida de 2.0 em 29/07 pra compensar o +19% de renda mediana que a raridade v2 trouxe — score mediano subiu 5.0→5.36; baixar a base escala tudo uniforme, mantendo o prêmio *relativo* do lendário), growth 0.49, ref 4. Comum (score ~5) ~3/h, raro ~9/h, épico ~30/h, lendário (14+) centenas/h (score 15 ≈ 370/h). Topo íngreme = lendário cobiçado.
 - **Sinergia por cor de cauda (29/07):** N peixes com a mesma cor de cauda no tanque → cada um multiplica a renda por `1 + SynergyPerMatch·(N−1)` com teto `SynergyMaxBonus` (0.15 / +80%). Ex.: 5 de cauda azul → +60% cada. Cria demanda por peixes específicos no mercado ("montar tanque temático") = uso inteligente das moedas. `GameService` deriva a cor via `TraitGenerator`; `IncomeCalculator.FishIncome`/`SynergyMultiplier`. O cliente exibe a sinergia no tanque (`generator.js: synergyMultiplier`).
 - **Geração (29/07):** `GenerationIntervalMinutes = 25` (era 15) → mais lento + lendário ~1/mês pro jogador ativo (~2 sem. pro dedicado; sim: `Vivarium.Simulation economy`).
 - **Fator água:** `(maint/100)^0.7` — água cheia 100%, 40 → 53%, 15 → 26%, 0 → 0%.

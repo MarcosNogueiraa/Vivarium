@@ -134,15 +134,16 @@ static void EconomyReport()
     var cfg = TickConfig.Default;
     int interval = HabitatDefaults.GenerationIntervalMinutes;
 
-    // Probabilidade de lendário (score >= 11.2) por peixe coletado
+    // Probabilidade de lendário (score >= 14.0, faixa v2) por peixe coletado
+    const double LegendaryCut = 14.0;
     int N = 200_000, leg = 0;
     var rng = new Random(7);
     for (int i = 0; i < N; i++)
-        if ((double)TraitGenerator.Generate(rng.NextInt64()).RarityScore >= 11.2) leg++;
+        if ((double)TraitGenerator.Generate(rng.NextInt64()).RarityScore >= LegendaryCut) leg++;
     double p = leg / (double)N;
 
     Console.WriteLine($"Geração: 1 peixe / {interval} min = {60.0 / interval:0.0}/h online");
-    Console.WriteLine($"P(lendário, score>=11.2) = {p * 100:0.000}%\n");
+    Console.WriteLine($"P(lendário, score>={LegendaryCut}) = {p * 100:0.000}%\n");
     Console.WriteLine("Cadência de lendário por perfil (coleta online contínua):");
     foreach (var (name, hrs) in new[] { ("casual 2h/dia", 2.0), ("ativo 8h/dia", 8.0), ("dedicado 16h/dia", 16.0) })
     {
@@ -160,7 +161,7 @@ static void EconomyReport()
     ReportTank("10 raros MESMA cor", MakeTank(10, 7.5m, true), cfg);
     ReportTank("25 raros variados", MakeTank(25, 7.5m, false), cfg);
     ReportTank("25 raros MESMA cor", MakeTank(25, 7.5m, true), cfg);
-    ReportTank("1 lendário (score 12)", MakeTank(1, 12m, false), cfg);
+    ReportTank("1 lendário (score 15)", MakeTank(1, 15m, false), cfg);
 
     Console.WriteLine("\nPreço do upgrade de tanque (base 50 × 1.5^(cap-3)):");
     for (int cap = 3; cap <= 9; cap++)
