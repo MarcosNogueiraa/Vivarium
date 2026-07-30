@@ -25,13 +25,15 @@ export const PT = {
   },
 };
 
-// Faixas calibradas via simulação (CLAUDE.md seção 5)
+// Faixas calibradas via simulação (CLAUDE.md seção 5). Cores vibrantes e fundas o
+// bastante pra ler tanto no aquário claro quanto nas superfícies claras da UI
+// (espelham os --r-* do styles.css).
 export const BANDS = [
-  { max: 5.4, name: "Comum", color: "#93a7b0" },
-  { max: 7.5, name: "Incomum", color: "#57b876" },
-  { max: 9.8, name: "Raro", color: "#4d8fe0" },
-  { max: 14.0, name: "Épico", color: "#a86ce4" },
-  { max: Infinity, name: "Lendário", color: "#f0b93b" },
+  { max: 5.4, name: "Comum", color: "#5f7b86" },
+  { max: 7.5, name: "Incomum", color: "#12a35a" },
+  { max: 9.8, name: "Raro", color: "#2f7ff0" },
+  { max: 14.0, name: "Épico", color: "#9333ea" },
+  { max: Infinity, name: "Lendário", color: "#e0850f" },
 ];
 export const bandOf = (score) => BANDS.find((b) => score < b.max);
 
@@ -409,27 +411,27 @@ function drawPlantClump(ctx, baseX, baseY, clump, time, alpha, sat, light) {
 export function drawTankBackground(ctx, W, H, time, quality = 100) {
   const murk = murkOf(quality);
 
-  // 1. Profundidade da água — limpa (teal) → turva (verde-podre) conforme a sujeira
+  // 1. Profundidade da água — limpa (ciano claro ensolarado) → turva (verde-podre)
   const water = ctx.createLinearGradient(0, 0, 0, H);
-  water.addColorStop(0, mixHex("#0e4d5b", "#2f4420", murk));
-  water.addColorStop(0.35, mixHex("#0a3543", "#243714", murk));
-  water.addColorStop(0.72, mixHex("#072530", "#182611", murk));
-  water.addColorStop(1, mixHex("#03151c", "#0d160a", murk));
+  water.addColorStop(0, mixHex("#cdeef6", "#b7bd6b", murk));
+  water.addColorStop(0.35, mixHex("#9cdcec", "#93a552", murk));
+  water.addColorStop(0.72, mixHex("#63bad9", "#6f8340", murk));
+  water.addColorStop(1, mixHex("#3f9fc6", "#4f6630", murk));
   ctx.fillStyle = water;
   ctx.fillRect(0, 0, W, H);
 
   // Névoa verde (aumenta com a sujeira)
   if (murk > 0.02) {
-    ctx.fillStyle = `rgba(90, 130, 45, ${0.28 * murk})`;
+    ctx.fillStyle = `rgba(110, 140, 55, ${0.30 * murk})`;
     ctx.fillRect(0, 0, W, H);
   }
 
   // 2. Brilho da superfície + linha d'água ondulando
-  const surf = ctx.createLinearGradient(0, 0, 0, 70);
-  surf.addColorStop(0, "rgba(150, 240, 235, 0.22)");
-  surf.addColorStop(1, "rgba(150, 240, 235, 0)");
+  const surf = ctx.createLinearGradient(0, 0, 0, 80);
+  surf.addColorStop(0, "rgba(255, 255, 255, 0.42)");
+  surf.addColorStop(1, "rgba(255, 255, 255, 0)");
   ctx.fillStyle = surf;
-  ctx.fillRect(0, 0, W, 70);
+  ctx.fillRect(0, 0, W, 80);
 
   // 3. Raios de luz cáustica (diagonais, oscilando) — água suja bloqueia a luz
   ctx.save();
@@ -440,8 +442,8 @@ export function drawTankBackground(ctx, W, H, time, quality = 100) {
     const sway = Math.sin(time / 4200 + i * 1.4) * 34;
     const x = (i + 0.5) * (W / beams) + sway;
     const grad = ctx.createLinearGradient(x, 0, x + 70, H * 0.92);
-    grad.addColorStop(0, `rgba(130, 235, 224, ${(0.10 + 0.04 * Math.sin(time / 3000 + i)) * clarity})`);
-    grad.addColorStop(1, "rgba(130, 235, 224, 0)");
+    grad.addColorStop(0, `rgba(255, 250, 224, ${(0.10 + 0.04 * Math.sin(time / 3000 + i)) * clarity})`);
+    grad.addColorStop(1, "rgba(255, 250, 224, 0)");
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.moveTo(x - 26, 0);
@@ -457,20 +459,20 @@ export function drawTankBackground(ctx, W, H, time, quality = 100) {
   for (const clump of PLANTS_BACK)
     drawPlantClump(ctx, clump.x * W, H - 30, clump, time, 0.5, 42, 24);
 
-  // 5. Substrato (areia/cascalho)
+  // 5. Substrato (areia clara/cascalho)
   const bandH = 52;
   const sub = ctx.createLinearGradient(0, H - bandH, 0, H);
-  sub.addColorStop(0, "rgba(12, 46, 44, 0)");
-  sub.addColorStop(0.35, "#0c302e");
-  sub.addColorStop(1, "#123a34");
+  sub.addColorStop(0, "rgba(226, 216, 170, 0)");
+  sub.addColorStop(0.35, "#dcd0a0");
+  sub.addColorStop(1, "#cbbd86");
   ctx.fillStyle = sub;
   ctx.fillRect(0, H - bandH, W, bandH);
   for (let i = 0; i < 46; i++) {
     const px = hash01(i * 3.3 + 1) * W;
     const py = H - hash01(i * 3.3 + 2) * bandH * 0.7;
     const r = 1.5 + hash01(i * 3.3 + 3) * 4;
-    const l = 26 + hash01(i * 3.3 + 4) * 22;
-    ctx.fillStyle = `hsl(${160 + hash01(i) * 20}, 24%, ${l}%)`;
+    const l = 62 + hash01(i * 3.3 + 4) * 20;
+    ctx.fillStyle = `hsl(${44 + hash01(i) * 20}, 34%, ${l}%)`;
     ctx.beginPath();
     ctx.ellipse(px, py, r, r * 0.72, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -545,17 +547,17 @@ export function drawTankForeground(ctx, W, H, time, quality = 100) {
   }
   ctx.restore();
 
-  // Vinheta + escurecimento das bordas (sensação de olhar pra dentro do vidro)
-  const vg = ctx.createRadialGradient(W / 2, H * 0.46, H * 0.28, W / 2, H * 0.5, H * 0.92);
-  vg.addColorStop(0, "rgba(0, 0, 0, 0)");
-  vg.addColorStop(1, "rgba(1, 12, 16, 0.6)");
+  // Vinheta suave e fria nas bordas (sensação de vidro, sem escurecer a cena clara)
+  const vg = ctx.createRadialGradient(W / 2, H * 0.46, H * 0.30, W / 2, H * 0.5, H * 0.94);
+  vg.addColorStop(0, "rgba(9, 60, 80, 0)");
+  vg.addColorStop(1, "rgba(9, 60, 80, 0.20)");
   ctx.fillStyle = vg;
   ctx.fillRect(0, 0, W, H);
 
   // Reflexo de vidro no topo (leve faixa clara)
   const glass = ctx.createLinearGradient(0, 0, W * 0.4, H * 0.35);
-  glass.addColorStop(0, "rgba(200, 245, 250, 0.06)");
-  glass.addColorStop(1, "rgba(200, 245, 250, 0)");
+  glass.addColorStop(0, "rgba(255, 255, 255, 0.14)");
+  glass.addColorStop(1, "rgba(255, 255, 255, 0)");
   ctx.fillStyle = glass;
   ctx.fillRect(0, 0, W, H * 0.4);
 }
