@@ -1,0 +1,216 @@
+import { useState } from "react";
+import { api } from "../lib/api.js";
+import { bandOf, PART_HEX, PT } from "../lib/fishRenderer.js";
+import { nextFishEta, tankFishSorted, tankPotential, tankSynergy } from "../lib/tankMath.js";
+import { AquariumCanvas } from "../components/AquariumCanvas.jsx";
+import { FishCanvas } from "../components/FishCanvas.jsx";
+import { Coin } from "../components/Coin.jsx";
+import { FishDetail } from "./FishDetail.jsx";
+import { RarityGuide } from "./RarityGuide.jsx";
+
+export function TankView({ tank, refresh, notify }) {
+  const [selectedId, setSelectedId] = useState(null);
+  const [showGuide, setShowGuide] = useState(false);
+  const [listOpen, setListOpen] = useState(() => localStorage.getItem("tankListOpen") !== "false");
+  const toggleList = () => setListOpen((v) => { localStorage.setItem("tankListOpen", String(!v)); return !v; });
+  const selected = tank.creatures.find((c) => c.id === selectedId) ?? null;
+  const lowWater = Number(tank.maintenanceLevel) < 40;
+
+  const current = Number(tank.coinsPerHour ?? 0);
+  const synergy = tankSynergy(tank.creatures);
+  const potential = tankPotential(tank.creatures);
+  const nextFish = nextFishEta(tank);
+  const listFish = tankFishSorted(tank.creatures);
+
+  async function collect(itemId) {
+    try { await api.collect(itemId); await refresh(); }
+    catch (err) { notify(err.message); }
+  }
+  async function devSpawn() {
+    try { await api.devSpawn(); await refresh(); }
+    catch (err) { notify(err.message); }
+  }
+  async function devClear() {
+    try {
+      const { removed } = await api.devClear();
+      setSelectedId(null);
+      notify(`${removed} peixe(s) removido(s).`);
+      await refresh();
+    } catch (err) { notify(err.message); }
+  }
+  async function buyFilter() {
+    try { await api.buyItem("filter_basic"); notify("Água restaurada!"); await refresh(); }
+    catch (err) { notify(err.message); }
+  }
+  async function sell(creature) {
+    const price = window.prompt("Preço em moeda soft:", "50");
+    if (!price) return;
+    try {
+      await api.createListing(creature.id, Number(price));
+      notify("Peixe listado no mercado.");
+      setSelectedId(null);
+      await refresh();
+    } catch (err) { notify(err.message); }
+  }
+  async function transfer(creature) {
+    const toUsername = window.prompt("Transferir para qual jogador (username)?");
+    if (!toUsername) return;
+    try {
+      await api.transferCreature(creature.id, toUsername.trim());
+      notify(`Transferido para ${toUsername.trim()}.`);
+      setSelectedId(null);
+      await refresh();
+    } catch (err) { notify(err.message); }
+  }
+  async function store(creature) {
+    try {
+      await api.storeCreature(creature.id);
+      notify("Guardado na mochila.");
+      setSelectedId(null);
+      await refresh();
+    } catch (err) { notify(err.message); }
+  }
+
+  return (
+    <div className="tank-layout">
+      <div className="tank-stage">
+        <div className="tank-hud">
+          <span className={`status-pill ${tank.online ? "on" : "off"}`}>
+            <span className="led" />{tank.online ? "Online" : "Offline"}
+          </span>
+          <span className="capacity-chip" title="Peixes ativos no tanque / capacidade">
+            🐟 {tank.creatures.length}/{tank.capacity}
+          </span>
+          <button className="guide-btn" onClick={() => setShowGuide(true)} title="Como funciona a raridade">?</button>
+          <span className="spacer" style={{ flex: 1 }} />
+          <span className="income-chip" title={
+            potential > current + 0.05
+              ? `Produção atual (com a água). Potencial a água cheia: ${potential.toFixed(1)}/h`
+              : "Moedas por hora que seu tanque farma"
+          }>
+            <Coin />+{current.toFixed(1)}<small>/h</small>
+            {potential > current + 0.05 && <em className="of-potential"> de {potential.toFixed(0)}</em>}
+          </span>
+          <span className="water-gauge">
+            <span className="label">Água</span>
+            <span className="water-track">
+              <span className={`water-fill${lowWater ? " low" : ""}`} style={{ width: `${tank.maintenanceLevel}%` }} />
+            </span>
+            <span className="val">{Number(tank.maintenanceLevel).toFixed(0)}</span>
+          </span>
+          <button onClick={buyFilter} title="Restaura a qualidade da água pra 100">Filtro · 20</button>
+        </div>
+
+        <AquariumCanvas
+          creatures={tank.creatures} selectedId={selectedId}
+          onSelect={setSelectedId} quality={Number(tank.maintenanceLevel)}
+        />
+
+        {tank.creatures.length === 0 && (
+          <div className="tank-empty">
+            <strong>Seu aquário está esperando</strong>
+            <span className="muted">Colete um peixe da fila para começar.</span>
+          </div>
+        )}
+      </div>
+
+      {synergy.length > 0 && (
+        <div className="synergy-bar glass">
+          <span className="eyebrow">Sinergia de cor</span>
+          {synergy.map((g) => (
+            <span key={g.color} className="synergy-chip" style={{ "--tier": PART_HEX[g.color] }}>
+              <span className="dot-color" /> {PT.color[g.color]} ×{g.n} <em>+{(g.bonus * 100).toFixed(0)}%</em>
+            </span>
+          ))}
+        </div>
+      )}
+      {tank.creatures.length > 0 && !selected && (
+        <p className="hint">Clique num peixe para ver os detalhes, guardar, vender ou transferir.</p>
+      )}
+      {selected && (
+        <FishDetail creature={selected} onClose={() => setSelectedId(null)}>
+          <button onClick={() => store(selected)} title="Guardar na mochila (não farma)">Guardar</button>
+          <button onClick={() => sell(selected)}>Vender</button>
+          <button onClick={() => transfer(selected)}>Transferir</button>
+        </FishDetail>
+      )}
+      {showGuide && <RarityGuide onClose={() => setShowGuide(false)} />}
+
+      {tank.creatures.length > 0 && (
+        <section>
+          <div className="section-head">
+            <button className="collapse-btn" onClick={toggleList} aria-expanded={listOpen}
+              title={listOpen ? "Recolher lista" : "Expandir lista"}>
+              <span className={`chevron${listOpen ? " open" : ""}`}>▾</span>
+            </button>
+            <span className="eyebrow">Peixes no tanque</span>
+            <span className="count">{tank.creatures.length}/{tank.capacity}</span>
+            <span className="spacer" />
+            {listOpen && <span className="faint" style={{ fontSize: "0.82rem" }}>clique para detalhes</span>}
+          </div>
+          {listOpen && (
+          <div className="fish-list">
+            {listFish.map(({ c, traits, col, colorLabel, prod }) => {
+              const band = bandOf(Number(c.rarityScore));
+              return (
+                <button key={c.id} className="fish-row" onClick={() => setSelectedId(c.id)} style={{ "--tier": band.color }}>
+                  <span className="fr-thumb"><FishCanvas seed={c.seed} width={72} /></span>
+                  <span className="fr-body">
+                    <span className="fr-line1">
+                      <span className="badge" style={{ "--tier": band.color }}><span className="gem" /> {band.name}</span>
+                      <span className="fr-score mono">{Number(c.rarityScore).toFixed(1)}</span>
+                    </span>
+                    <span className="fr-line2">
+                      <span className="fr-color"><span className="dot-color" style={{ background: PART_HEX[col] }} /> {colorLabel}</span>
+                      {traits.shimmerTier !== "None" && <span className="shimmer-label">✦ {PT.shimmer[traits.shimmerColor]}</span>}
+                    </span>
+                  </span>
+                  <span className="fr-prod mono"><Coin /> ~{prod.toFixed(1)}<small>/h</small></span>
+                </button>
+              );
+            })}
+          </div>
+          )}
+        </section>
+      )}
+
+      <section>
+        <div className="section-head">
+          <span className="eyebrow">Fila de criação</span>
+          <span className="count">{tank.queue.length}/{tank.queueCap}</span>
+          <span className="spacer" />
+          {import.meta.env.DEV && (
+            <button className="dev-btn" onClick={devSpawn} title="Só existe em dev">Gerar peixe (dev)</button>
+          )}
+          {import.meta.env.DEV && tank.creatures.length > 0 && (
+            <button className="dev-btn" onClick={devClear} title="Só existe em dev">Limpar (dev)</button>
+          )}
+        </div>
+        {nextFish.full ? (
+          <p className="hint">Fila cheia — colete peixes para liberar espaço.</p>
+        ) : (
+          <div className="next-fish">
+            <span className="nf-label">
+              Próximo peixe {nextFish.mins < 1 ? "em instantes" : `em ~${Math.ceil(nextFish.mins)} min`}
+              {!tank.online && " (offline, mais devagar)"}
+            </span>
+            <span className="nf-track"><span style={{ width: `${(nextFish.fraction * 100).toFixed(0)}%` }} /></span>
+          </div>
+        )}
+        <div className="queue">
+          {tank.queue.map((item) => (
+            <div key={item.id} className={`queue-item glass ${item.isSick ? "sick" : ""}`}>
+              <span className="q-label">
+                <span>{item.isSick ? "Doente" : "Pronto"}</span>
+                <small>{item.isSick ? "raridade reduzida" : "aguardando coleta"}</small>
+              </span>
+              <button className="btn-primary" disabled={!item.isReady} onClick={() => collect(item.id)}>
+                Coletar
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
