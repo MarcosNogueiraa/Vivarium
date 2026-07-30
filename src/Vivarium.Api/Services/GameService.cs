@@ -75,6 +75,13 @@ public class GameService(VivariumDbContext db)
         }
     }
 
+    // Cor da cauda é derivada do seed (imutável e determinística), mas gerar os traits
+    // inteiros custa vários SHA256. Cacheamos por seed pra não recalcular a cada tick.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<long, PartColor> TailColorCache = new();
+
+    private static PartColor TailColorOf(long seed)
+        => TailColorCache.GetOrAdd(seed, s => TraitGenerator.Generate(s).Tail.Color);
+
     /// <summary>Peixes ativos do tanque como entrada de renda (raridade + cor de cauda pra sinergia).</summary>
     private async Task<List<FishIncome>> TankFishAsync(Habitat habitat)
     {
@@ -84,7 +91,7 @@ public class GameService(VivariumDbContext db)
             .ToListAsync();
         var list = new List<FishIncome>(rows.Count);
         foreach (var r in rows)
-            list.Add(new FishIncome(r.RarityScore, TraitGenerator.Generate(r.Seed).Tail.Color));
+            list.Add(new FishIncome(r.RarityScore, TailColorOf(r.Seed)));
         return list;
     }
 
@@ -96,7 +103,7 @@ public class GameService(VivariumDbContext db)
             return;
 
         decimal earned = IncomeCalculator.Accrue(
-            fish, outcome.MaintenanceAtStart,
+            fish, outcome.MaintenanceAtStart, outcome.MaintenanceLevel,
             outcome.OnlineMinutes, outcome.OfflineMinutes,
             habitat.OnlineGenerationRate, habitat.OfflineGenerationRate,
             TickConfig.Default);
@@ -105,13 +112,14 @@ public class GameService(VivariumDbContext db)
         decimal whole = Math.Floor(habitat.CoinAccrual);
         if (whole < 1)
             return;
-        habitat.CoinAccrual -= whole;
 
         int softId = await db.CurrencyTypes.Where(c => c.Code == "SOFT").Select(c => c.Id).FirstAsync();
         var wallet = await db.WalletBalances
             .FirstOrDefaultAsync(w => w.UserId == habitat.UserId && w.CurrencyTypeId == softId);
-        if (wallet is not null)
-            wallet.Amount += whole;
+        if (wallet is null)
+            return; // sem carteira não credita — não descontar o acúmulo (evita perder moedas)
+        wallet.Amount += whole;
+        habitat.CoinAccrual -= whole;
         // Renda passiva não vai pro TransactionLog (inundaria a auditoria); mercado/transferência continuam logados.
     }
 

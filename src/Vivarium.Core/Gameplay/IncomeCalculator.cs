@@ -53,12 +53,15 @@ public static class IncomeCalculator
 
     /// <summary>
     /// Moedas ganhas na janela do tick. Online full, offline a offlineRate e com teto
-    /// (IncomeOfflineCapMinutes). Usa a água do início da janela (o tick roda com
-    /// frequência; ausência longa é dominada pelo teto offline).
+    /// (IncomeOfflineCapMinutes). O fator de água é a MÉDIA do início e do fim da janela:
+    /// numa ausência longa a água decai (às vezes até 0), então a renda offline reflete
+    /// esse decaimento em vez de creditar tudo a "água cheia". Online com ticks frequentes,
+    /// início≈fim, então é igual ao valor instantâneo.
     /// </summary>
     public static decimal Accrue(
         IReadOnlyList<FishIncome> fish,
-        decimal maintenanceLevel,
+        decimal maintenanceStart,
+        decimal maintenanceEnd,
         decimal onlineMinutes,
         decimal offlineMinutes,
         decimal onlineRate,
@@ -70,7 +73,7 @@ public static class IncomeCalculator
         if (effectiveMinutes <= 0)
             return 0;
 
-        double water = WaterFactor(maintenanceLevel, config);
+        double water = 0.5 * (WaterFactor(maintenanceStart, config) + WaterFactor(maintenanceEnd, config));
         double perHour = 0;
         foreach (var r in PerFishRates(fish, config))
             perHour += r;

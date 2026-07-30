@@ -368,8 +368,12 @@ function mixHex(a, b, t) {
   const bl = Math.round(ca[2] + (cb[2] - ca[2]) * t);
   return `rgb(${r}, ${g}, ${bl})`;
 }
-// Fator de sujeira 0 (água limpa) → 1 (água podre) a partir da qualidade 0-100
-const murkOf = (quality) => Math.min(1, Math.max(0, 1 - quality / 100));
+// Fator de sujeira 0 (água limpa) → 1 (água podre). A água só COMEÇA a ficar feia
+// abaixo de MURK_CLEAN_ABOVE (acima disso está visualmente limpa); daí desce
+// linearmente até podre em 0.
+const MURK_CLEAN_ABOVE = 80;
+const murkOf = (quality) =>
+  Math.min(1, Math.max(0, (MURK_CLEAN_ABOVE - quality) / MURK_CLEAN_ABOVE));
 
 // Clumps de plantas (posições fixas). back = atrás dos peixes, front = na frente.
 const PLANTS_BACK = [

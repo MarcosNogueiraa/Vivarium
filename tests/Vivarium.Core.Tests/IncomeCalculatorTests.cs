@@ -62,17 +62,33 @@ public class IncomeCalculatorTests
     public void Accrue_OfflineRendeMenosQueOnline()
     {
         var fish = Distinct(5m, 5m);
-        decimal online = IncomeCalculator.Accrue(fish, 100m, 60m, 0m, 1.0m, 0.45m, Cfg);
-        decimal offline = IncomeCalculator.Accrue(fish, 100m, 0m, 60m, 1.0m, 0.45m, Cfg);
+        decimal online = IncomeCalculator.Accrue(fish, 100m, 100m, 60m, 0m, 1.0m, 0.45m, Cfg);
+        decimal offline = IncomeCalculator.Accrue(fish, 100m, 100m, 0m, 60m, 1.0m, 0.45m, Cfg);
 
         Assert.True(offline < online);
         Assert.Equal(0.45, (double)(offline / online), 2);
     }
 
     [Fact]
+    public void Accrue_OfflineComAguaDecaida_UsaMediaDoFator()
+    {
+        // Ausência longa: água caiu de 100 -> 0 na janela. A renda offline usa a MÉDIA
+        // do fator (não a água cheia do início), então rende menos que se a água tivesse
+        // ficado cheia, mas mais que zero.
+        var fish = Distinct(6m);
+        decimal decaiu = IncomeCalculator.Accrue(fish, 100m, 0m, 0m, 8 * 60m, 1.0m, 0.45m, Cfg);
+        decimal aguaCheia = IncomeCalculator.Accrue(fish, 100m, 100m, 0m, 8 * 60m, 1.0m, 0.45m, Cfg);
+
+        Assert.True(decaiu > 0m);
+        Assert.True(decaiu < aguaCheia);
+        // fator médio = (WaterFactor(100) + WaterFactor(0))/2 = (1 + 0)/2 = 0.5
+        Assert.Equal(0.5, (double)(decaiu / aguaCheia), 3);
+    }
+
+    [Fact]
     public void Accrue_AguaSecaZeraRenda()
     {
-        decimal earned = IncomeCalculator.Accrue(Distinct(8m), 0m, 120m, 0m, 1.0m, 0.45m, Cfg);
+        decimal earned = IncomeCalculator.Accrue(Distinct(8m), 0m, 0m, 120m, 0m, 1.0m, 0.45m, Cfg);
         Assert.Equal(0m, earned);
     }
 
@@ -80,8 +96,8 @@ public class IncomeCalculatorTests
     public void Accrue_TetoOfflineDe8Horas()
     {
         var fish = Distinct(6m);
-        decimal tresDias = IncomeCalculator.Accrue(fish, 100m, 0m, 3 * 24 * 60m, 1.0m, 0.45m, Cfg);
-        decimal oitoHoras = IncomeCalculator.Accrue(fish, 100m, 0m, 8 * 60m, 1.0m, 0.45m, Cfg);
+        decimal tresDias = IncomeCalculator.Accrue(fish, 100m, 100m, 0m, 3 * 24 * 60m, 1.0m, 0.45m, Cfg);
+        decimal oitoHoras = IncomeCalculator.Accrue(fish, 100m, 100m, 0m, 8 * 60m, 1.0m, 0.45m, Cfg);
 
         Assert.Equal(oitoHoras, tresDias);
     }
@@ -89,7 +105,7 @@ public class IncomeCalculatorTests
     [Fact]
     public void Accrue_SemPeixes_SemJanela_RendeZero()
     {
-        Assert.Equal(0m, IncomeCalculator.Accrue([], 100m, 60m, 0m, 1.0m, 0.45m, Cfg));
-        Assert.Equal(0m, IncomeCalculator.Accrue(Distinct(5m), 100m, 0m, 0m, 1.0m, 0.45m, Cfg));
+        Assert.Equal(0m, IncomeCalculator.Accrue([], 100m, 100m, 60m, 0m, 1.0m, 0.45m, Cfg));
+        Assert.Equal(0m, IncomeCalculator.Accrue(Distinct(5m), 100m, 100m, 0m, 0m, 1.0m, 0.45m, Cfg));
     }
 }
