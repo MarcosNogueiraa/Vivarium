@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Vivarium.Api.Contracts;
 using Vivarium.Api.Data;
+using Vivarium.Api.Http;
 using Vivarium.Api.Services;
 using Vivarium.Core.Domain;
 using Vivarium.Core.Gameplay;
@@ -9,22 +11,6 @@ namespace Vivarium.Api.Endpoints;
 
 public static class GameEndpoints
 {
-    public record QueueItemDto(long Id, DateTime ReadyAt, bool IsReady, bool IsSick);
-    public record TransferRequest(string ToUsername);
-    // Seed como string: 63 bits não cabem num JSON number (double trunca acima de 2^53)
-    public record CreatureDto(long Id, int SpeciesId, string Seed, int TraitConfigVersion, decimal RarityScore, DateTime CreatedAt);
-    public record TankResponse(
-        bool Online,
-        decimal MaintenanceLevel,
-        int Capacity,
-        int QueueCap,
-        IReadOnlyList<QueueItemDto> Queue,
-        IReadOnlyList<CreatureDto> Creatures,
-        Dictionary<string, decimal> Wallet,
-        decimal CoinsPerHour,
-        decimal GenerationProgressMinutes,
-        int GenerationIntervalMinutes);
-
     public static void MapGameEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/game").RequireAuthorization();
@@ -82,7 +68,7 @@ public static class GameEndpoints
             var creatures = (await db.CreatureInstances
                 .Where(c => c.HabitatId == habitat.Id)
                 .ToListAsync())
-                .Select(c => new CreatureDto(c.Id, c.SpeciesId, c.Seed.ToString(), c.TraitConfigVersion, c.RarityScore, c.CreatedAt))
+                .Select(CreatureDto.From)
                 .ToList();
             var wallet = await db.WalletBalances
                 .Where(w => w.UserId == userId)
@@ -112,26 +98,26 @@ public static class GameEndpoints
             var creature = await db.CreatureInstances
                 .FirstOrDefaultAsync(c => c.Id == creatureId && c.OwnerId == userId);
             if (creature is null)
-                return Results.NotFound(new { error = "Criatura não encontrada" });
+                return ApiError.NotFound("Criatura não encontrada");
             // Só transfere do tanque ou da mochila; se listada, cancele antes.
             bool listed = await db.MarketListings.AnyAsync(m =>
                 m.CreatureInstanceId == creature.Id && m.Status == ListingStatus.Active);
             if (listed)
-                return Results.BadRequest(new { error = "Criatura está no mercado — cancele a listagem antes" });
+                return ApiError.BadRequest("Criatura está no mercado — cancele a listagem antes");
 
             var target = await db.Users.FirstOrDefaultAsync(u => u.Username == req.ToUsername);
             if (target is null)
-                return Results.NotFound(new { error = "Jogador destinatário não encontrado" });
+                return ApiError.NotFound("Jogador destinatário não encontrado");
             if (target.Id == userId)
-                return Results.BadRequest(new { error = "Não dá pra transferir pra si mesmo" });
+                return ApiError.BadRequest("Não dá pra transferir pra si mesmo");
 
             var targetHabitat = await game.FindHabitatAsync(target.Id);
             if (targetHabitat is null)
-                return Results.BadRequest(new { error = "Destinatário não tem habitat" });
+                return ApiError.BadRequest("Destinatário não tem habitat");
 
             creature.OwnerId = target.Id;
             if (!await game.TryPlaceAsync(creature, targetHabitat))
-                return Results.BadRequest(new { error = "O tanque e a mochila do destinatário estão cheios." });
+                return ApiError.BadRequest("O tanque e a mochila do destinatário estão cheios.");
 
             db.TransactionLogs.Add(new TransactionLog
             {
@@ -147,7 +133,7 @@ public static class GameEndpoints
             }
             catch (DbUpdateConcurrencyException)
             {
-                return Results.Conflict(new { error = "O peixe mudou de estado — atualize e tente de novo." });
+                return ApiError.Conflict("O peixe mudou de estado — atualize e tente de novo.");
             }
             return Results.Ok(new { transferredTo = target.Username });
         });
@@ -163,7 +149,7 @@ public static class GameEndpoints
             await game.ApplyTickAsync(habitat, now);
             var (creature, error) = await game.CollectAsync(habitat, queueItemId, now);
             if (creature is null)
-                return Results.BadRequest(new { error });
+                return ApiError.BadRequest(error!);
 
             try
             {
@@ -171,11 +157,9 @@ public static class GameEndpoints
             }
             catch (DbUpdateConcurrencyException)
             {
-                return Results.Conflict(new { error = "Operação concorrente — tente de novo." });
+                return ApiError.Conflict("Operação concorrente — tente de novo.");
             }
-            return Results.Ok(new CreatureDto(
-                creature.Id, creature.SpeciesId, creature.Seed.ToString(),
-                creature.TraitConfigVersion, creature.RarityScore, creature.CreatedAt));
+            return Results.Ok(CreatureDto.From(creature));
         });
 
         // ---------- Mochila (storage) ----------
@@ -184,10 +168,9 @@ public static class GameEndpoints
         {
             long userId = TokenService.GetUserId(principal);
             var creatures = (await game.BackpackQuery(userId).ToListAsync())
-                .Select(c => new CreatureDto(c.Id, c.SpeciesId, c.Seed.ToString(),
-                    c.TraitConfigVersion, c.RarityScore, c.CreatedAt))
+                .Select(CreatureDto.From)
                 .ToList();
-            return Results.Ok(new { capacity = HabitatDefaults.BackpackCapacity, creatures });
+            return Results.Ok(new BackpackResponse(HabitatDefaults.BackpackCapacity, creatures));
         });
 
         // Tanque → mochila
@@ -201,7 +184,7 @@ public static class GameEndpoints
             if (error is not null)
                 return Results.BadRequest(new { error });
             try { await db.SaveChangesAsync(); }
-            catch (DbUpdateConcurrencyException) { return Results.Conflict(new { error = "Tente de novo." }); }
+            catch (DbUpdateConcurrencyException) { return ApiError.Conflict("Tente de novo."); }
             return Results.Ok();
         });
 
@@ -216,7 +199,7 @@ public static class GameEndpoints
             if (error is not null)
                 return Results.BadRequest(new { error });
             try { await db.SaveChangesAsync(); }
-            catch (DbUpdateConcurrencyException) { return Results.Conflict(new { error = "Tente de novo." }); }
+            catch (DbUpdateConcurrencyException) { return ApiError.Conflict("Tente de novo."); }
             return Results.Ok();
         });
     }

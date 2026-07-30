@@ -1,6 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using Vivarium.Api.Contracts;
 using Vivarium.Api.Data;
+using Vivarium.Api.Http;
 using Vivarium.Api.Services;
+using Vivarium.Api.Validation;
 using Vivarium.Core.Domain;
 using Vivarium.Core.Gameplay;
 
@@ -8,29 +11,22 @@ namespace Vivarium.Api.Endpoints;
 
 public static class AuthEndpoints
 {
-    public record RegisterRequest(string Username, string Email, string Password);
-    public record LoginRequest(string UsernameOrEmail, string Password);
-    public record AuthResponse(long UserId, string Username, string Token);
-
     public static void MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/auth").RequireRateLimiting("auth");
 
         group.MapPost("/register", async (RegisterRequest req, VivariumDbContext db, TokenService tokens) =>
         {
-            if (string.IsNullOrWhiteSpace(req.Username) || req.Username.Length is < 3 or > 32
-                || !req.Username.All(c => char.IsLetterOrDigit(c) || c is '_' or '-'))
-                return Results.BadRequest(new { error = "Username: 3–32 caracteres, só letras, números, _ ou -" });
-            if (string.IsNullOrWhiteSpace(req.Email) || req.Email.Length > 256
-                || !System.Net.Mail.MailAddress.TryCreate(req.Email, out _))
-                return Results.BadRequest(new { error = "Email inválido" });
-            if (string.IsNullOrEmpty(req.Password) || req.Password.Length < 8)
-                return Results.BadRequest(new { error = "Senha deve ter pelo menos 8 caracteres" });
+            var invalid = AccountValidation.Username(req.Username)
+                ?? AccountValidation.Email(req.Email)
+                ?? AccountValidation.Password(req.Password);
+            if (invalid is not null)
+                return ApiError.BadRequest(invalid);
 
             if (await db.Users.AnyAsync(u => u.Username == req.Username))
-                return Results.Conflict(new { error = "Username já em uso" });
+                return ApiError.Conflict("Username já em uso");
             if (await db.Users.AnyAsync(u => u.Email == req.Email))
-                return Results.Conflict(new { error = "Email já cadastrado" });
+                return ApiError.Conflict("Email já cadastrado");
 
             var now = DateTime.UtcNow;
             var user = new User

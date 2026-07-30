@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Vivarium.Api.Contracts;
 using Vivarium.Api.Data;
+using Vivarium.Api.Http;
 using Vivarium.Api.Services;
 using Vivarium.Core.Domain;
 using Vivarium.Core.Gameplay;
@@ -9,8 +11,6 @@ namespace Vivarium.Api.Endpoints;
 
 public static class ItemEndpoints
 {
-    public record ItemDto(string Key, string Name, string Category, decimal Price, bool Owned);
-
     public static void MapItemEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/items").RequireAuthorization();
@@ -46,7 +46,7 @@ public static class ItemEndpoints
                 return Results.NotFound();
 
             if (item.Category == ItemCategory.AutoFilter && await OwnedAutoFilterAsync(db, userId))
-                return Results.BadRequest(new { error = "Você já tem o filtro automático" });
+                return ApiError.BadRequest("Você já tem o filtro automático");
 
             // Tick antes: a degradação pendente é aplicada antes de restaurar/pagar
             await game.ApplyTickAsync(habitat, now);
@@ -55,7 +55,7 @@ public static class ItemEndpoints
             int softId = await db.CurrencyTypes.Where(c => c.Code == "SOFT").Select(c => c.Id).FirstAsync();
             var wallet = await db.WalletBalances.FirstAsync(w => w.UserId == userId && w.CurrencyTypeId == softId);
             if (wallet.Amount < price)
-                return Results.BadRequest(new { error = "Saldo insuficiente" });
+                return ApiError.BadRequest("Saldo insuficiente");
             wallet.Amount -= price;
 
             switch (item.Category)
@@ -90,7 +90,7 @@ public static class ItemEndpoints
             }
             catch (DbUpdateConcurrencyException)
             {
-                return Results.Conflict(new { error = "Compra concorrente — tente de novo." });
+                return ApiError.Conflict("Compra concorrente — tente de novo.");
             }
             return Results.Ok(new
             {

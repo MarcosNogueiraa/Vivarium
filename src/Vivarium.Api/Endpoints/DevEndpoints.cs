@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Vivarium.Api.Data;
+using Vivarium.Api.Http;
 using Vivarium.Api.Services;
 using Vivarium.Core.Domain;
 
@@ -26,7 +27,7 @@ public static class DevEndpoints
             int pending = await db.GenerationQueueItems
                 .CountAsync(q => q.HabitatId == habitat.Id && q.Status == QueueItemStatus.Pending);
             if (pending >= habitat.QueueCap)
-                return Results.BadRequest(new { error = "Fila cheia — colete antes de gerar mais" });
+                return ApiError.BadRequest("Fila cheia — colete antes de gerar mais");
 
             int speciesId = await db.Species
                 .Where(s => s.HabitatTypeId == habitat.HabitatTypeId)

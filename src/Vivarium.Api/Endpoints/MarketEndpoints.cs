@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Vivarium.Api.Contracts;
 using Vivarium.Api.Data;
+using Vivarium.Api.Http;
 using Vivarium.Api.Services;
 using Vivarium.Core.Domain;
 using Vivarium.Core.Gameplay;
@@ -9,12 +11,6 @@ namespace Vivarium.Api.Endpoints;
 
 public static class MarketEndpoints
 {
-    public record CreateListingRequest(long CreatureInstanceId, decimal PriceSoft);
-    // Seed como string: 63 bits não cabem num JSON number (double trunca acima de 2^53)
-    public record ListingDto(
-        long Id, decimal PriceSoft, long SellerId, string SellerName,
-        long CreatureId, int SpeciesId, string Seed, int TraitConfigVersion, decimal RarityScore);
-
     public static void MapMarketEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/market").RequireAuthorization();
@@ -46,15 +42,15 @@ public static class MarketEndpoints
             CreateListingRequest req, ClaimsPrincipal principal, VivariumDbContext db) =>
         {
             if (req.PriceSoft <= 0)
-                return Results.BadRequest(new { error = "Preço deve ser maior que zero" });
+                return ApiError.BadRequest("Preço deve ser maior que zero");
 
             long userId = TokenService.GetUserId(principal);
             var creature = await db.CreatureInstances
                 .FirstOrDefaultAsync(c => c.Id == req.CreatureInstanceId && c.OwnerId == userId);
             if (creature is null)
-                return Results.NotFound(new { error = "Criatura não encontrada" });
+                return ApiError.NotFound("Criatura não encontrada");
             if (creature.HabitatId is null)
-                return Results.BadRequest(new { error = "Criatura já está no mercado ou em trânsito" });
+                return ApiError.BadRequest("Criatura já está no mercado ou em trânsito");
 
             creature.HabitatId = null; // sai do tanque enquanto listada
             var listing = new MarketListing
@@ -72,7 +68,7 @@ public static class MarketEndpoints
             }
             catch (DbUpdateConcurrencyException)
             {
-                return Results.Conflict(new { error = "Esse peixe mudou de estado — atualize e tente de novo." });
+                return ApiError.Conflict("Esse peixe mudou de estado — atualize e tente de novo.");
             }
             return Results.Ok(new { listing.Id });
         });
@@ -87,7 +83,7 @@ public static class MarketEndpoints
             if (listing is null)
                 return Results.NotFound();
             if (listing.Status != ListingStatus.Active)
-                return Results.BadRequest(new { error = "Listagem não está ativa" });
+                return ApiError.BadRequest("Listagem não está ativa");
 
             listing.Status = ListingStatus.Cancelled;
             listing.ResolvedAt = DateTime.UtcNow;
@@ -98,7 +94,7 @@ public static class MarketEndpoints
             }
             catch (DbUpdateConcurrencyException)
             {
-                return Results.Conflict(new { error = "A listagem mudou — atualize e tente de novo." });
+                return ApiError.Conflict("A listagem mudou — atualize e tente de novo.");
             }
             return Results.Ok();
         });
@@ -115,9 +111,9 @@ public static class MarketEndpoints
                 .Include(m => m.CreatureInstance)
                 .FirstOrDefaultAsync(m => m.Id == id);
             if (listing is null || listing.Status != ListingStatus.Active)
-                return Results.NotFound(new { error = "Listagem não encontrada ou não está ativa" });
+                return ApiError.NotFound("Listagem não encontrada ou não está ativa");
             if (listing.SellerId == buyerId)
-                return Results.BadRequest(new { error = "Você não pode comprar sua própria listagem" });
+                return ApiError.BadRequest("Você não pode comprar sua própria listagem");
 
             var buyerHabitat = await game.FindHabitatAsync(buyerId);
             if (buyerHabitat is null)
@@ -126,13 +122,13 @@ public static class MarketEndpoints
             bool tankSpace = await db.CreatureInstances.CountAsync(c => c.HabitatId == buyerHabitat.Id) < buyerHabitat.Capacity;
             bool backpackSpace = await game.CountBackpackAsync(buyerId) < HabitatDefaults.BackpackCapacity;
             if (!tankSpace && !backpackSpace)
-                return Results.BadRequest(new { error = "Seu tanque e mochila estão cheios." });
+                return ApiError.BadRequest("Seu tanque e mochila estão cheios.");
 
             int softId = await db.CurrencyTypes.Where(c => c.Code == "SOFT").Select(c => c.Id).FirstAsync();
             var buyerWallet = await db.WalletBalances
                 .FirstAsync(w => w.UserId == buyerId && w.CurrencyTypeId == softId);
             if (buyerWallet.Amount < listing.PriceSoft)
-                return Results.BadRequest(new { error = "Saldo insuficiente" });
+                return ApiError.BadRequest("Saldo insuficiente");
             var sellerWallet = await db.WalletBalances
                 .FirstAsync(w => w.UserId == listing.SellerId && w.CurrencyTypeId == softId);
 
@@ -167,7 +163,7 @@ public static class MarketEndpoints
             {
                 // Concorrência: outro comprador levou a listagem (ou o saldo mudou).
                 // A transação é descartada (rollback) — nada é cobrado nem transferido.
-                return Results.Conflict(new { error = "Essa listagem acabou de ser comprada ou alterada." });
+                return ApiError.Conflict("Essa listagem acabou de ser comprada ou alterada.");
             }
             return Results.Ok(new { creatureId = creature.Id, paid = listing.PriceSoft });
         });
