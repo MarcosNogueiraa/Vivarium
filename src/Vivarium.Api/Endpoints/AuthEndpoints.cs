@@ -64,6 +64,22 @@ public static class AuthEndpoints
                 LastTickAt = now,
                 CreatedAt = now,
             });
+
+            var breedingTypeId = await db.HabitatTypes
+                .Where(h => h.Code == "Breeding").Select(h => h.Id).FirstAsync();
+            db.Habitats.Add(new Habitat
+            {
+                UserId = user.Id,
+                HabitatTypeId = breedingTypeId,
+                Capacity = 2,
+                MaintenanceLevel = 100m,
+                QueueCap = 0,
+                GenerationIntervalMinutes = int.MaxValue, // nunca gera fila; nunca passa por ApplyTickAsync
+                OnlineGenerationRate = 0m,
+                OfflineGenerationRate = 0m,
+                LastTickAt = now,
+                CreatedAt = now,
+            });
             await db.SaveChangesAsync();
 
             return Results.Ok(new AuthResponse(user.Id, user.Username, tokens.CreateToken(user)));

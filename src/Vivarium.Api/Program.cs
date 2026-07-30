@@ -42,6 +42,7 @@ builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<GameService>();
 builder.Services.AddScoped<MarketService>();
 builder.Services.AddScoped<ItemService>();
+builder.Services.AddScoped<BreedingService>();
 
 // Front roda em outro domínio (Cloudflare Pages) — origens via config
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
@@ -87,6 +88,7 @@ app.MapAuthEndpoints();
 app.MapGameEndpoints();
 app.MapMarketEndpoints();
 app.MapItemEndpoints();
+app.MapBreedingEndpoints();
 
 if (app.Environment.IsDevelopment())
     app.MapDevEndpoints();

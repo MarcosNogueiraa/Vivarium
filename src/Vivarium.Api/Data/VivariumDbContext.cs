@@ -19,6 +19,7 @@ public class VivariumDbContext(DbContextOptions<VivariumDbContext> options) : Db
     public DbSet<UserInventory> UserInventories => Set<UserInventory>();
     public DbSet<MarketListing> MarketListings => Set<MarketListing>();
     public DbSet<TransactionLog> TransactionLogs => Set<TransactionLog>();
+    public DbSet<BreedingSlot> BreedingSlots => Set<BreedingSlot>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -73,7 +74,9 @@ public class VivariumDbContext(DbContextOptions<VivariumDbContext> options) : Db
             e.Property(h => h.Code).HasMaxLength(32);
             e.Property(h => h.Name).HasMaxLength(64);
             e.HasIndex(h => h.Code).IsUnique();
-            e.HasData(new HabitatType { Id = 1, Code = "Aquarium", Name = "Aquário" });
+            e.HasData(
+                new HabitatType { Id = 1, Code = "Aquarium", Name = "Aquário" },
+                new HabitatType { Id = 2, Code = "Breeding", Name = "Ninho" });
         });
 
         modelBuilder.Entity<Habitat>(e =>
@@ -167,6 +170,16 @@ public class VivariumDbContext(DbContextOptions<VivariumDbContext> options) : Db
             e.HasIndex(t => t.FromUserId);
             e.HasIndex(t => t.ToUserId);
             e.HasIndex(t => t.CreatedAt);
+        });
+
+        modelBuilder.Entity<BreedingSlot>(e =>
+        {
+            e.Property(s => s.Status).HasConversion<string>().HasMaxLength(16);
+            e.HasIndex(s => new { s.UserId, s.Status });
+            e.HasIndex(s => s.HabitatId);
+            e.HasOne(s => s.ParentA).WithMany().HasForeignKey(s => s.ParentAId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(s => s.ParentB).WithMany().HasForeignKey(s => s.ParentBId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(s => s.ChildCreature).WithMany().HasForeignKey(s => s.ChildCreatureId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

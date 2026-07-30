@@ -16,7 +16,7 @@ public class TransferTests : IClassFixture<VivariumApiFactory>
         long creatureId = 0;
         await _factory.WithDbAsync(async db =>
         {
-            var habitat = await db.Habitats.FirstAsync(h => h.UserId == userId);
+            var habitat = await db.Habitats.FirstAsync(h => h.UserId == userId && h.HabitatType!.Code == "Aquarium");
             var creature = new CreatureInstance
             {
                 SpeciesId = 1, OwnerId = userId, HabitatId = habitat.Id,

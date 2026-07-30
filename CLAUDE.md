@@ -290,19 +290,20 @@ Um peixe do jogador tem **três estados** (fonte de verdade: `HabitatId` + lista
 - **Endpoints:** `GET /api/game/backpack`, `POST /api/game/creatures/{id}/store` (tanque→mochila), `POST /api/game/creatures/{id}/deploy` (mochila→tanque). Front: aba "Mochila".
 - **É a fundação do breeding** (8.8): os pais podem vir da mochila.
 
-### 8.8 Breeding — proposta de design (v2, ainda não implementado)
+### 8.8 Breeding — implementado (30/07/2026)
 
-O motor já está pronto pra isso: `CreatureInstance.ParentAId/ParentBId` existem, e como cada trait vem de um `Hash(seed, salt)` **independente**, dá pra fazer **herança trait-a-trait**.
+Resolve o **gap #1** da economia ([[revisao-economia]]): não havia sink recorrente que escalasse com a riqueza. Breeding é sink de soft (custo imediato) + sink de tempo (os pais ficam fora do tanque principal, sem render renda, durante a gestação).
 
-- **Herança:** para cada trait (cor da cauda, brilho do corpo, velocidade…), o filho puxa o valor do pai A ou do pai B (50/50), com uma **chance de mutação** (re-sorteia do próprio seed do filho). Implementação: um `BreedTraits(seedFilho, pais, configVersion)` paralelo ao `Generate`, escolhendo por trait a fonte via `Hash(seedFilho, salt + "_inherit")`.
-- **Anti "fábrica de lendários" (crítico p/ economia):** a chance de o filho **superar** os pais tem que ser pequena — mutação para cima rara. Senão destrói o "lendário raro e caro" (seção 5). Breeding tem **custo real** (soft + tempo de gestação + travar/consumir os pais) e passa pelo `TransactionLog` (cria valor do nada → auditável).
-- **Persistência:** o filho é um `CreatureInstance` normal com `ParentAId/ParentBId` preenchidos e `TraitConfigVersion` própria; nasce na fila/mochila.
-- **Decisões abertas:** consumir os pais ou só travá-los por um tempo? Gestação (fila) ou instantâneo pago? Recalibrar a raridade dos filhos por simulação antes de soltar.
+- **Habitat de reprodução dedicado:** novo `HabitatType` (`Code = "Breeding"`, id 2), um `Habitat` capacity=2 por usuário (criado no registro — `AuthEndpoints` — e sob demanda pra contas antigas — `BreedingService.FindOrCreateBreedingHabitatAsync`). Ao iniciar, os 2 pais têm `CreatureInstance.HabitatId` movido pra esse habitat — sem flag de lock nova, reaproveitando o princípio "`Habitat` genérico" (§9.1): mercado/mochila/transferência já assumem "possuído + `HabitatId` aponta pro lugar certo", nenhum precisou mudar. O habitat de breeding **nunca** passa por `HabitatTicker.ProcessTick` (só o principal do usuário é ticado), então não gera fila nem conta renda — os pais saem do cálculo de `TankFishAsync` automaticamente por não estarem mais no habitat principal.
+- **Gestação escala com a raridade combinada dos pais** (não é fixa): mesma linguagem exponencial da renda (`IncomeCalculator.CoinsPerHour`) — `BreedingCalculator.GestationHours(scoreA, scoreB) = BaseGestationHours · exp(GestationGrowth · (scoreA+scoreB − GestationRefScore))`, clampada em `[MinGestationHours, MaxGestationHours]`. Constantes em `BreedingDefaults` (`Gameplay/BreedingConfig.cs`): base 8h, growth 0.12, ref 10, mín 4h, máx 240h (10 dias — teto pro par mais raro possível). Validado por simulação (`Vivarium.Simulation breed`): 2 comuns ~8h, 2 raros ~16h, 2 épicos ~34h, 2 lendários ~88h, 2 lendários máx ~225h — cai dentro do teto.
+- **Herança trait-a-trait** (`TraitGenerator.BreedTraits`, paralelo ao `Generate`): por trait, um roll independente (`Roll01(childSeed, salt+"_source")`) decide mutação (re-sorteia do zero pela MESMA tabela de peso — legendário continua ~0.2% mesmo mutando, sem lógica assimétrica) vs. herança (`Roll01(childSeed, salt+"_inherit")` escolhe pai A/B). Subtraits condicionais (cor/opacidade de shimmer, cor/tamanho/opacidade de padrão) seguem a MESMA fonte do trait pai (tier ou tipo de padrão) — nunca herdam de um pai que não tinha aquele subtrait; colisão rara (cor de padrão herdada = cor de base do filho) cai num sorteio fresco. RarityScore recalculado a partir da probabilidade real de cada valor final (nunca copiado dos pais) — usa `WeightedTable.ProbabilityOf` (novo). Validado por simulação: legendário nos filhos (0.19%) não infla acima do baseline populacional (0.21%).
+- **Fluxo:** `BreedingService.StartAsync` (valida donos/distintos/não listados/não já em gestação/sem gestação concorrente do usuário/saldo ≥ `CostSoft`=150; debita, move os pais, cria `TransactionLog` tipo `Breeding`, transação explícita). `GetStatusAsync` (slot ativo, se houver). `CollectAsync` (bloqueia se não pronto; sorteia `childSeed` fresco **na coleta**, nunca antes — mesmo princípio de 8.1; cria o filho com `ParentAId/ParentBId`, posiciona via tanque-se-couber-senão-mochila; devolve os pais ao tanque/mochila).
+- **Endpoints:** `GET /api/breeding` (status), `POST /api/breeding/start`, `POST /api/breeding/collect` — `BreedingService`/`BreedingEndpoints`, mesmo padrão `ServiceResult` da fase 4b.
+- **Frontend:** aba "Ninho" (`BreedingView.jsx`) — picker de 2 peixes (tanque+mochila) quando sem gestação ativa; `AquariumCanvas` com `theme="breeding"` (tingimento rosado sutil na água + bolhas em formato de coração, `fishRenderer.js`) mostrando o casal + contagem regressiva quando ativa. Hook `useBreeding.js` com polling de 30s.
 
 ### 8.9 Fora do escopo do MVP
 
 - **Alimentação**: cortada do MVP para não duplicar a função de "sink de manutenção" já coberta pela qualidade da água. Candidata a entrar na v2 como boost opcional (não como necessidade punitiva).
-- **Breeding**: projetado em 8.8; implementação fica para v2, depois da mochila e do mercado validados.
 
 ---
 
@@ -431,13 +432,24 @@ MarketListing
 
 TransactionLog
 - Id (PK)
-- Type (MarketSale | DirectTransfer | CurrencyPurchase | ItemPurchase | Sink)
+- Type (MarketSale | DirectTransfer | CurrencyPurchase | ItemPurchase | Sink | Breeding)
 - FromUserId (FK -> User, nullable)
 - ToUserId (FK -> User, nullable)
 - CreatureInstanceId (FK -> CreatureInstance, nullable)
 - CurrencyTypeId (FK -> CurrencyType, nullable)
 - Amount (decimal, nullable)
 - CreatedAt
+
+BreedingSlot -- par em gestação (8.8); habitat de reprodução dedicado (HabitatType "Breeding")
+- Id (PK)
+- UserId (FK -> User)
+- HabitatId (FK -> Habitat) -- o habitat de reprodução do usuário
+- ParentAId (FK -> CreatureInstance)
+- ParentBId (FK -> CreatureInstance)
+- StartedAt
+- ReadyAt -- StartedAt + BreedingCalculator.GestationHours(scoreA, scoreB)
+- Status (InProgress | Collected)
+- ChildCreatureId (FK -> CreatureInstance, nullable) -- preenchido na coleta
 ```
 
 ### 9.3 Por que isso escala bem sem over-engineering
@@ -471,7 +483,8 @@ Vale notar: esse nível de desacoplamento (`Habitat` genérico, `CurrencyType` c
 MVP jogável de ponta a ponta, rodando local contra o Neon. Feito:
 - ✅ Motor de geração seed→traits (`Vivarium.Core/Generation`), simulação de pesos e faixas de raridade calibradas
 - ✅ **Traits de movimento** (velocidade/amplitude de cauda e nadadeira; extremos no score com peso 0.5) — seção 5.1
-- ✅ Backend completo (auth JWT, loop de jogo com tick lazy, mercado, loja de itens, transferência direta) — seção 12; **58 testes verdes** (Core + API)
+- ✅ Backend completo (auth JWT, loop de jogo com tick lazy, mercado, loja de itens, transferência direta, camada de serviço `ServiceResult` — fase 4b) — seção 12; **91 testes verdes** (Core + API)
+- ✅ **Breeding** (30/07/2026, seção 8.8) — habitat de reprodução dedicado, gestação escalada por raridade combinada, herança trait-a-trait; resolve o gap #1 de sink recorrente
 - ✅ Banco no **Neon** (sa-east-1) com migrations aplicadas; connection string em user-secrets local
 - ✅ Frontend React/Vite: auth, **aquário animado** (peixes nadando, seleção por clique), mercado, loja
 - ✅ **Cauda com onda viajante** (undulação em S via sprite + blit por fatias) em `fishRenderer.js` e no protótipo — 100% renderização, tunável em `MOVEMENT_TUNING`
@@ -514,6 +527,9 @@ Falta pra ir ao ar (depende de contas do usuário):
 | POST | `/api/market/listings/{id}/buy` | ✓ | compra (transacional + TransactionLog) |
 | GET | `/api/items/` | ✓ | catálogo (preço de upgrade calculado pelo nível atual) |
 | POST | `/api/items/{key}/buy` | ✓ | compra e aplica efeito; registra `ItemPurchase` (sink) |
+| GET | `/api/breeding` | ✓ | gestação em andamento do usuário, se houver (8.8) |
+| POST | `/api/breeding/start` | ✓ | leva 2 peixes próprios pro habitat de reprodução; debita `CostSoft`; registra `Breeding` (sink) |
+| POST | `/api/breeding/collect` | ✓ | coleta o filhote quando pronto (herança trait-a-trait); devolve os pais ao tanque/mochila |
 
 **Itens do MVP** (seed via migration `SeedItemDefinitions`): `filter_basic` (20 soft, restaura água pra 100 — tick roda antes, pra degradação pendente ser aplicada primeiro), `auto_filter` (500 soft, permanente via UserInventory, tick lê e degrada na metade), `tank_upgrade` (base 50 soft, +1 capacidade, preço = base × 1.5^(capacidade − 3) — seção 8.4). Filtro e upgrade aplicam na hora (sem inventário); só o auto_filter fica em UserInventory.
 
@@ -531,13 +547,13 @@ Falta pra ir ao ar (depende de contas do usuário):
 
 - `Vivarium.slnx` — solution (.NET 10)
 - `src/Vivarium.Core` — domínio e motor de geração (sem dependência de web/banco; testável isolado); entidades do schema da seção 9 em `Domain/`
-- `src/Vivarium.Api` — ASP.NET Core minimal API + EF Core/Npgsql; `Data/VivariumDbContext` (índices, enums como string, seed de CurrencyType/HabitatType/Species) e migrations em `Data/Migrations`. `Endpoints/` (auth, game, market — ver seção 12), `Services/` (TokenService, PasswordHasher, GameService). Connection string `Vivarium` (dev aponta pra localhost; produção via env var `ConnectionStrings__Vivarium` no Neon)
+- `src/Vivarium.Api` — ASP.NET Core minimal API + EF Core/Npgsql; `Data/VivariumDbContext` (índices, enums como string, seed de CurrencyType/HabitatType/Species) e migrations em `Data/Migrations`. `Endpoints/` (auth, game, market, item, breeding — ver seção 12), `Services/` (TokenService, PasswordHasher, GameService, MarketService, ItemService, BreedingService — todos devolvendo `Http/ServiceResult`, fase 4b). Connection string `Vivarium` (dev aponta pra localhost; produção via env var `ConnectionStrings__Vivarium` no Neon)
 - `tests/Vivarium.Api.Tests` — testes de integração da API (WebApplicationFactory + SQLite in-memory)
 - `frontend/` — React + Vite (stack da seção 10). **Arquitetura modular (29/07/2026)** — o antigo `App.jsx` monolítico (~960 linhas) foi quebrado em:
   - `src/lib/` — sem React: `api.js` (cliente HTTP), `generator.js` (port do motor de traits, verificado contra o C#), `fishRenderer.js` (desenho do peixe + ambiente do tanque), `format.js` (rótulos/formatação PT-BR), `tankMath.js` (cálculos derivados do tanque: sinergia, produção, ETA), `motion.js` (`reducedMotion`).
-  - `src/hooks/` — `useGame` (tanque + heartbeat/refresh + userId), `useToast`.
-  - `src/components/` — primitivos reutilizáveis: `Coin`, `TraitRow`, `RarityBadge`, `ShimmerLabel`, `Toast`, `Modal` (casca de modal com Esc/backdrop), `FishCanvas` (1 peixe), `AquariumCanvas` (aquário animado + aura).
-  - `src/views/` — telas: `AuthView`, `GameView` (shell + tabs), `TankView`, `MarketView`, `StoreView`, `BackpackView`, `FishDetail`, `RarityGuide`.
+  - `src/hooks/` — `useGame` (tanque + heartbeat/refresh + userId), `useToast`, `useBreeding` (status da gestação, polling 30s — 8.8).
+  - `src/components/` — primitivos reutilizáveis: `Coin`, `TraitRow`, `RarityBadge`, `ShimmerLabel`, `Toast`, `Modal` (casca de modal com Esc/backdrop), `FishCanvas` (1 peixe), `AquariumCanvas` (aquário animado + aura; prop `theme` — `"breeding"` tinge a água de rosa e troca as bolhas por corações sutis, `fishRenderer.js`).
+  - `src/views/` — telas: `AuthView`, `GameView` (shell + tabs), `TankView`, `MarketView`, `StoreView`, `BackpackView`, `FishDetail`, `RarityGuide`, `BreedingView` (aba "Ninho" — 8.8).
   - `src/App.jsx` fica só com o gate de auth. Heartbeat a cada 60s + refresh do tanque a cada 30s (em `useGame`). `generator.js` é o mesmo port JS verificado do protótipo (traits derivados client-side do seed; rarity score vem da API). Dev: `npm run dev` (proxy pra API local). Deploy Cloudflare Pages: build `npm run build`, output `frontend/dist`, env `VITE_API_URL` apontando pro backend
   - **Identidade visual (v2, 30/07/2026 — claro/vibrante):** tema "águas rasas ensolaradas" — fundo claro (ciano→branco), glass **branco** frosted, sombras frias e suaves, acentos vibrantes (teal `--glow`, azul `--glow-2`, coral, âmbar `--gold`). Substituiu o antigo "aquário profundo" escuro. Tipografia editorial mantida: **Fraunces** (display) + **Hanken Grotesk** (UI), via Google Fonts no `index.html`. Design tokens no topo de `src/styles.css` (todos os seletores retematizados; um único tema, sem modo escuro). Raridade: `--r-*` do CSS espelham as cores das `BANDS` em `lib/fishRenderer.js` (comum #5f7b86, incomum #12a35a, raro #2f7ff0, épico #9333ea, lendário #e0850f), fundas o bastante pra ler no claro. Arte do tanque em `fishRenderer.js`: `drawTankBackground` (água ciano clara → verde-turva conforme a sujeira, raios de sol quentes, plantas, substrato de areia clara) e `drawTankForeground` (partículas, bolhas, vinheta fria suave) envolvem os peixes no `AquariumCanvas`. Auth é um hero com aquário ambiente atrás de um cartão de vidro branco.
 - `tests/Vivarium.Core.Tests` — xUnit

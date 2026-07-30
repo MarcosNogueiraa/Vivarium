@@ -8,6 +8,7 @@ import { TankView } from "./TankView.jsx";
 import { BackpackView } from "./BackpackView.jsx";
 import { MarketView } from "./MarketView.jsx";
 import { StoreView } from "./StoreView.jsx";
+import { BreedingView } from "./BreedingView.jsx";
 
 export function GameView({ onLogout }) {
   const { tank, userId, refreshTank } = useGame();
@@ -33,6 +34,7 @@ export function GameView({ onLogout }) {
           <button className={tab === "backpack" ? "active" : ""} onClick={() => setTab("backpack")}>Mochila</button>
           <button className={tab === "market" ? "active" : ""} onClick={() => setTab("market")}>Mercado</button>
           <button className={tab === "store" ? "active" : ""} onClick={() => setTab("store")}>Loja</button>
+          <button className={tab === "breeding" ? "active" : ""} onClick={() => setTab("breeding")}>Ninho</button>
         </nav>
         <span className="spacer" />
         <span className="wallet-chip"><Coin />{soft.toFixed(0)} <small>soft</small></span>
@@ -47,6 +49,7 @@ export function GameView({ onLogout }) {
         {tab === "backpack" && <BackpackView refreshTank={refreshTank} notify={notify} />}
         {tab === "market" && <MarketView userId={userId} refreshTank={refreshTank} notify={notify} />}
         {tab === "store" && <StoreView refreshTank={refreshTank} notify={notify} />}
+        {tab === "breeding" && <BreedingView tank={tank} refreshTank={refreshTank} notify={notify} />}
       </main>
 
       <Toast message={toast} />

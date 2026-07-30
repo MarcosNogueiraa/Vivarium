@@ -29,7 +29,7 @@ public class ItemTests : IClassFixture<VivariumApiFactory>
         var (client, userId) = await _factory.RegisterAsync("lojista2");
         await _factory.WithDbAsync(async db =>
         {
-            var habitat = await db.Habitats.FirstAsync(h => h.UserId == userId);
+            var habitat = await db.Habitats.FirstAsync(h => h.UserId == userId && h.HabitatType!.Code == "Aquarium");
             habitat.MaintenanceLevel = 30m;
         });
 

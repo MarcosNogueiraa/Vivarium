@@ -64,6 +64,177 @@ public static class TraitGenerator
         return new CreatureTraits(tier, shimmerColor, shimmerOpacity, tail, dorsal, pectoral, movement, score);
     }
 
+    /// <summary>
+    /// Cruza dois peixes: cada trait é herdado 50/50 de um dos pais ou, com pequena
+    /// chance, mutado (sorteado do zero pelas mesmas tabelas de peso — legendário
+    /// continua raro mesmo mutando, sem lógica assimétrica extra). RarityScore é
+    /// recalculado a partir da probabilidade real de cada valor herdado/mutado —
+    /// nunca copiado dos pais. Subtraits condicionais (cor/opacidade de shimmer,
+    /// cor/tamanho/opacidade de padrão) seguem a MESMA fonte do trait pai (tier ou
+    /// tipo de padrão) pra nunca herdar um subtrait de um pai que não o tinha.
+    /// </summary>
+    public static CreatureTraits BreedTraits(
+        long childSeed, long parentASeed, long parentBSeed, int configVersion, double mutationChance)
+    {
+        if (configVersion != TraitConfigV1.Version)
+            throw new ArgumentException($"Versão de config desconhecida: {configVersion}", nameof(configVersion));
+
+        var a = Generate(parentASeed, configVersion);
+        var b = Generate(parentBSeed, configVersion);
+
+        double score = 0;
+
+        var tierPick = InheritOrMutate(childSeed, "body_shimmer", mutationChance, a.ShimmerTier, b.ShimmerTier, TraitConfigV1.ShimmerTiers);
+        score += TraitConfigV1.ShimmerScoreWeight * SelfInformation(tierPick.Probability);
+        ShimmerTier tier = tierPick.Value;
+
+        ShimmerColor? shimmerColor = null;
+        double shimmerOpacity = 0;
+        if (tier != ShimmerTier.None)
+        {
+            var tierSource = tierPick.FromA ? a : b;
+            if (!tierPick.Mutated && tierSource.ShimmerTier == tier)
+            {
+                shimmerColor = tierSource.ShimmerColor;
+                shimmerOpacity = tierSource.ShimmerOpacity;
+            }
+            else
+            {
+                var palette = TraitConfigV1.ShimmerColorsByTier[tier];
+                shimmerColor = palette[(int)(DeterministicHash.Roll01(childSeed, "body_shimmer_color") * palette.Length)];
+                var (min, max) = TraitConfigV1.ShimmerOpacityByTier[tier];
+                shimmerOpacity = min + DeterministicHash.Roll01(childSeed, "body_shimmer_opacity") * (max - min);
+            }
+        }
+
+        PartColor? boosted = tier >= ShimmerTier.Vibrant && shimmerColor is { } sc
+            ? TraitConfigV1.ClosestPartColor(sc)
+            : null;
+        var partColorTable = ApplyCorrelation(TraitConfigV1.PartColors, boosted);
+
+        var tail = BreedPart(childSeed, "tail", mutationChance, a.Tail, b.Tail, partColorTable, ref score);
+        var dorsal = BreedPart(childSeed, "dorsal", mutationChance, a.Dorsal, b.Dorsal, partColorTable, ref score);
+        var pectoral = BreedPart(childSeed, "pectoral", mutationChance, a.Pectoral, b.Pectoral, partColorTable, ref score);
+
+        score += SetBonus(tail, dorsal, pectoral);
+
+        double tailSpeed = BreedContinuousNormal(childSeed, "tail_speed", mutationChance,
+            a.Movement.TailSpeed, b.Movement.TailSpeed, TraitConfigV1.MovementSpeedMean, TraitConfigV1.MovementSpeedStdDev);
+        score += MovementExtremeInfo(tailSpeed);
+        double tailAmplitude = BreedContinuousUniform(childSeed, "tail_wag_amplitude", mutationChance,
+            a.Movement.TailAmplitude, b.Movement.TailAmplitude, TraitConfigV1.TailAmplitudeMin, TraitConfigV1.TailAmplitudeMax);
+
+        double finSpeed = BreedContinuousNormal(childSeed, "fin_speed", mutationChance,
+            a.Movement.FinSpeed, b.Movement.FinSpeed, TraitConfigV1.MovementSpeedMean, TraitConfigV1.MovementSpeedStdDev);
+        score += MovementExtremeInfo(finSpeed);
+        double finAmplitude = BreedContinuousUniform(childSeed, "fin_wag_amplitude", mutationChance,
+            a.Movement.FinAmplitude, b.Movement.FinAmplitude, TraitConfigV1.FinAmplitudeMin, TraitConfigV1.FinAmplitudeMax);
+
+        var movement = new MovementTraits(tailSpeed, tailAmplitude, finSpeed, finAmplitude);
+
+        return new CreatureTraits(tier, shimmerColor, shimmerOpacity, tail, dorsal, pectoral, movement, score);
+    }
+
+    private readonly record struct InheritedPick<T>(T Value, double Probability, bool Mutated, bool FromA);
+
+    /// <summary>Decide, por um hash independente, se o trait muta (sorteia do zero) ou é herdado de A/B.</summary>
+    private static InheritedPick<T> InheritOrMutate<T>(
+        long childSeed, string salt, double mutationChance,
+        T valueA, T valueB, IReadOnlyList<WeightedValue<T>> table)
+    {
+        bool mutated = DeterministicHash.Roll01(childSeed, salt + "_source") < mutationChance;
+        if (mutated)
+        {
+            var (value, p) = WeightedTable.Pick(table, DeterministicHash.Roll01(childSeed, salt));
+            return new InheritedPick<T>(value, p, true, false);
+        }
+        bool fromA = DeterministicHash.Roll01(childSeed, salt + "_inherit") < 0.5;
+        T v = fromA ? valueA : valueB;
+        return new InheritedPick<T>(v, WeightedTable.ProbabilityOf(table, v), false, fromA);
+    }
+
+    private static double BreedContinuousNormal(
+        long childSeed, string salt, double mutationChance, double valueA, double valueB, double mean, double stdDev)
+    {
+        if (DeterministicHash.Roll01(childSeed, salt + "_source") < mutationChance)
+            return NormalPick(childSeed, salt, mean, stdDev);
+        return DeterministicHash.Roll01(childSeed, salt + "_inherit") < 0.5 ? valueA : valueB;
+    }
+
+    private static double BreedContinuousUniform(
+        long childSeed, string salt, double mutationChance, double valueA, double valueB, double min, double max)
+    {
+        if (DeterministicHash.Roll01(childSeed, salt + "_source") < mutationChance)
+            return min + DeterministicHash.Roll01(childSeed, salt) * (max - min);
+        return DeterministicHash.Roll01(childSeed, salt + "_inherit") < 0.5 ? valueA : valueB;
+    }
+
+    private static PartTraits BreedPart(
+        long childSeed, string partSalt, double mutationChance,
+        PartTraits a, PartTraits b, IReadOnlyList<WeightedValue<PartColor>> colorTable, ref double score)
+    {
+        var colorPick = InheritOrMutate(childSeed, partSalt + "_color", mutationChance, a.Color, b.Color, colorTable);
+        score += SelfInformation(colorPick.Probability);
+        PartColor color = colorPick.Value;
+
+        var patternPick = InheritOrMutate(childSeed, partSalt + "_pattern", mutationChance, a.Pattern, b.Pattern, TraitConfigV1.PatternTypes);
+        score += SelfInformation(patternPick.Probability);
+        PatternType pattern = patternPick.Value;
+
+        if (pattern == PatternType.None)
+            return new PartTraits(color, pattern, null, null, null);
+
+        var patternSource = patternPick.FromA ? a : b;
+        bool subtraitsFromSource = !patternPick.Mutated && patternSource.Pattern == pattern
+            && patternSource.PatternColor != color; // evita herdar cor de padrão igual à cor de base do FILHO
+
+        PartColor patternColor;
+        double patternSize;
+        double patternOpacity;
+        if (subtraitsFromSource)
+        {
+            patternColor = patternSource.PatternColor!.Value;
+            patternSize = patternSource.PatternSize!.Value;
+            patternOpacity = patternSource.PatternOpacity!.Value;
+        }
+        else
+        {
+            var patternPalette = TraitConfigV1.PartColors.Where(e => e.Value != color).ToArray();
+            var (pc, _) = WeightedTable.Pick(patternPalette, DeterministicHash.Roll01(childSeed, partSalt + "_pattern_color"));
+            patternColor = pc;
+            patternSize = NormalPick(childSeed, partSalt + "_pattern_size", TraitConfigV1.PatternSizeMean, TraitConfigV1.PatternSizeStdDev);
+            patternOpacity = TraitConfigV1.PatternOpacityMin
+                + DeterministicHash.Roll01(childSeed, partSalt + "_pattern_opacity")
+                * (TraitConfigV1.PatternOpacityMax - TraitConfigV1.PatternOpacityMin);
+        }
+
+        var scoringPalette = TraitConfigV1.PartColors.Where(e => e.Value != color).ToArray();
+        score += SelfInformation(WeightedTable.ProbabilityOf(scoringPalette, patternColor));
+        score += PatternSizeExtremeInfo(patternSize);
+        score += PatternOpacityExtremeInfo(patternOpacity);
+
+        return new PartTraits(color, pattern, patternColor, patternSize, patternOpacity);
+    }
+
+    private static double PatternSizeExtremeInfo(double size)
+    {
+        if (size < TraitConfigV1.PatternSizeExtremeLow)
+            return SelfInformation(NormalCdf(TraitConfigV1.PatternSizeExtremeLow, TraitConfigV1.PatternSizeMean, TraitConfigV1.PatternSizeStdDev));
+        if (size > TraitConfigV1.PatternSizeExtremeHigh)
+            return SelfInformation(1 - NormalCdf(TraitConfigV1.PatternSizeExtremeHigh, TraitConfigV1.PatternSizeMean, TraitConfigV1.PatternSizeStdDev));
+        return 0;
+    }
+
+    private static double PatternOpacityExtremeInfo(double opacity)
+    {
+        double range = TraitConfigV1.PatternOpacityMax - TraitConfigV1.PatternOpacityMin;
+        if (opacity < TraitConfigV1.PatternOpacityExtremeLow)
+            return SelfInformation((TraitConfigV1.PatternOpacityExtremeLow - TraitConfigV1.PatternOpacityMin) / range);
+        if (opacity > TraitConfigV1.PatternOpacityExtremeHigh)
+            return SelfInformation((TraitConfigV1.PatternOpacityMax - TraitConfigV1.PatternOpacityExtremeHigh) / range);
+        return 0;
+    }
+
     private static double MovementExtremeInfo(double speed)
     {
         double probability;

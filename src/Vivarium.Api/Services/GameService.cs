@@ -15,8 +15,9 @@ namespace Vivarium.Api.Services;
 /// </summary>
 public class GameService(VivariumDbContext db)
 {
+    /// <summary>Aquário principal do usuário (não o habitat de reprodução — ver BreedingService).</summary>
     public async Task<Habitat?> FindHabitatAsync(long userId)
-        => await db.Habitats.FirstOrDefaultAsync(h => h.UserId == userId);
+        => await db.Habitats.FirstOrDefaultAsync(h => h.UserId == userId && h.HabitatType!.Code == "Aquarium");
 
     public async Task ApplyTickAsync(Habitat habitat, DateTime nowUtc)
     {

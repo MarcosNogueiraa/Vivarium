@@ -28,4 +28,20 @@ public static class WeightedTable
         var last = table[^1];
         return (last.Value, last.Weight / total);
     }
+
+    /// <summary>
+    /// Probabilidade de um valor já conhecido (peso/total), sem sortear — usado no
+    /// breeding quando o filho herda um valor de um pai em vez de sortear um novo.
+    /// </summary>
+    public static double ProbabilityOf<T>(IReadOnlyList<WeightedValue<T>> table, T value)
+    {
+        double total = 0, match = 0;
+        foreach (var entry in table)
+        {
+            total += entry.Weight;
+            if (EqualityComparer<T>.Default.Equals(entry.Value, value))
+                match = entry.Weight;
+        }
+        return match / total;
+    }
 }

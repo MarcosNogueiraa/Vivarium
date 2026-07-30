@@ -16,7 +16,7 @@ public class IncomeTests : IClassFixture<VivariumApiFactory>
     {
         await _factory.WithDbAsync(async db =>
         {
-            var habitat = await db.Habitats.FirstAsync(h => h.UserId == userId);
+            var habitat = await db.Habitats.FirstAsync(h => h.UserId == userId && h.HabitatType!.Code == "Aquarium");
             habitat.LastHeartbeatAt = DateTime.UtcNow;               // online
             habitat.LastTickAt = DateTime.UtcNow - sinceLastTick;    // janela decorrida
             db.CreatureInstances.Add(new CreatureInstance
@@ -61,7 +61,7 @@ public class IncomeTests : IClassFixture<VivariumApiFactory>
         var (client, userId) = await _factory.RegisterAsync("aguasuja");
         await _factory.WithDbAsync(async db =>
         {
-            var habitat = await db.Habitats.FirstAsync(h => h.UserId == userId);
+            var habitat = await db.Habitats.FirstAsync(h => h.UserId == userId && h.HabitatType!.Code == "Aquarium");
             habitat.MaintenanceLevel = 20m; // água ruim
             habitat.LastHeartbeatAt = DateTime.UtcNow;
             db.CreatureInstances.Add(new CreatureInstance

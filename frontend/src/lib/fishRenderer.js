@@ -360,6 +360,7 @@ const hash01 = (n) => {
 
 // Interpolação de cor hex → hex (pra água limpa → turva conforme a qualidade)
 function hexToRgb(h) {
+  if (h.startsWith("rgb")) return h.match(/[\d.]+/g).map(Number); // mixHex encadeado devolve "rgb(...)"
   const n = parseInt(h.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
@@ -407,16 +408,19 @@ function drawPlantClump(ctx, baseX, baseY, clump, time, alpha, sat, light) {
   }
 }
 
+/** Tinge levemente de rosa/quente pro tema "breeding" (ninho) — sutil, sem exagero. */
+const romanticTint = (hex, theme) => (theme === "breeding" ? mixHex(hex, "#ff9fb8", 0.16) : hex);
+
 /** Fundo: gradiente de água, raios de luz, plantas de trás, substrato. */
-export function drawTankBackground(ctx, W, H, time, quality = 100) {
+export function drawTankBackground(ctx, W, H, time, quality = 100, theme = "default") {
   const murk = murkOf(quality);
 
   // 1. Profundidade da água — limpa (ciano claro ensolarado) → turva (verde-podre)
   const water = ctx.createLinearGradient(0, 0, 0, H);
-  water.addColorStop(0, mixHex("#cdeef6", "#b7bd6b", murk));
-  water.addColorStop(0.35, mixHex("#9cdcec", "#93a552", murk));
-  water.addColorStop(0.72, mixHex("#63bad9", "#6f8340", murk));
-  water.addColorStop(1, mixHex("#3f9fc6", "#4f6630", murk));
+  water.addColorStop(0, romanticTint(mixHex("#cdeef6", "#b7bd6b", murk), theme));
+  water.addColorStop(0.35, romanticTint(mixHex("#9cdcec", "#93a552", murk), theme));
+  water.addColorStop(0.72, romanticTint(mixHex("#63bad9", "#6f8340", murk), theme));
+  water.addColorStop(1, romanticTint(mixHex("#3f9fc6", "#4f6630", murk), theme));
   ctx.fillStyle = water;
   ctx.fillRect(0, 0, W, H);
 
@@ -479,8 +483,22 @@ export function drawTankBackground(ctx, W, H, time, quality = 100) {
   }
 }
 
+function drawHeart(ctx, x, y, size, alpha) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = "#ff8fab";
+  ctx.beginPath();
+  ctx.moveTo(x, y + size * 0.3);
+  ctx.bezierCurveTo(x, y, x - size, y, x - size, y + size * 0.35);
+  ctx.bezierCurveTo(x - size, y + size * 0.7, x, y + size * 0.9, x, y + size * 1.1);
+  ctx.bezierCurveTo(x, y + size * 0.9, x + size, y + size * 0.7, x + size, y + size * 0.35);
+  ctx.bezierCurveTo(x + size, y, x, y, x, y + size * 0.3);
+  ctx.fill();
+  ctx.restore();
+}
+
 /** Frente: plantas da frente, partículas suspensas, bolhas, sujeira, vinheta de vidro. */
-export function drawTankForeground(ctx, W, H, time, quality = 100) {
+export function drawTankForeground(ctx, W, H, time, quality = 100, theme = "default") {
   const murk = murkOf(quality);
 
   // Plantas da frente (um pouco mais claras)
@@ -546,6 +564,21 @@ export function drawTankForeground(ctx, W, H, time, quality = 100) {
     ctx.fill();
   }
   ctx.restore();
+
+  // Corações subindo, bem sutis — só no tema "breeding" (ninho)
+  if (theme === "breeding") {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (let i = 0; i < 6; i++) {
+      const col = hash01(i * 5.7 + 50) * W;
+      const speed = 18 + hash01(i * 3.1 + 50) * 16;
+      const bx = col + Math.sin(time / 1400 + i * 2.1) * 14;
+      const by = H - (((time / 1000) * speed + hash01(i * 2.9 + 50) * H) % (H + 40));
+      const size = 6 + hash01(i * 4.4 + 50) * 5;
+      drawHeart(ctx, bx, by, size, 0.14 + hash01(i * 1.3 + 50) * 0.1);
+    }
+    ctx.restore();
+  }
 
   // Vinheta suave e fria nas bordas (sensação de vidro, sem escurecer a cena clara)
   const vg = ctx.createRadialGradient(W / 2, H * 0.46, H * 0.30, W / 2, H * 0.5, H * 0.94);

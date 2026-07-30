@@ -62,7 +62,9 @@ function drawAura(ctx, sprite, cx, cy, flip, alpha) {
 }
 
 /** O aquário animado: peixes nadando, aura pra raros+, seleção por clique. */
-export function AquariumCanvas({ creatures, selectedId, onSelect, interactive = true, ambient = false, quality = 100 }) {
+export function AquariumCanvas({
+  creatures, selectedId, onSelect, interactive = true, ambient = false, quality = 100, theme = "default",
+}) {
   const W = 960;
   const H = 480;
   const SCALE = 0.34;
@@ -71,6 +73,7 @@ export function AquariumCanvas({ creatures, selectedId, onSelect, interactive = 
   const creaturesRef = useRef([]);
   const selectedRef = useRef(null);
   const qualityRef = useRef(100);
+  const themeRef = useRef("default");
   const [hover, setHover] = useState(null);
 
   creaturesRef.current = useMemo(
@@ -82,6 +85,7 @@ export function AquariumCanvas({ creatures, selectedId, onSelect, interactive = 
   );
   selectedRef.current = selectedId;
   qualityRef.current = quality;
+  themeRef.current = theme;
 
   useEffect(() => {
     const ctx = canvasRef.current.getContext("2d");
@@ -96,8 +100,9 @@ export function AquariumCanvas({ creatures, selectedId, onSelect, interactive = 
       const q = qualityRef.current;
       const speedFactor = 0.5 + 0.5 * (q / 100); // água suja → peixes mais lentos
 
+      const th = themeRef.current;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      drawTankBackground(ctx, W, H, time, q);
+      drawTankBackground(ctx, W, H, time, q, th);
 
       for (const c of creaturesRef.current) {
         let s = statesRef.current.get(c.id);
@@ -137,7 +142,7 @@ export function AquariumCanvas({ creatures, selectedId, onSelect, interactive = 
         ctx.restore();
       }
 
-      drawTankForeground(ctx, W, H, time, q);
+      drawTankForeground(ctx, W, H, time, q, th);
 
       if (!reducedMotion) raf = requestAnimationFrame(frame);
     }

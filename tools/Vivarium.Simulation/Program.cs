@@ -25,6 +25,12 @@ if (args.Length >= 1 && args[0] == "economy")
     return;
 }
 
+if (args.Length >= 1 && args[0] == "breed")
+{
+    BreedReport();
+    return;
+}
+
 int n = args.Length > 0 && int.TryParse(args[0], out var parsed) ? parsed : 100_000;
 Console.WriteLine($"Gerando {n:N0} criaturas...\n");
 
@@ -185,6 +191,56 @@ static void ReportTank(string label, List<FishIncome> tank, TickConfig cfg)
     double upkeep = degPerHour * 0.2; // ~20 soft por 100 pontos de água (filtro)
     Console.WriteLine($"  {label,-26}: bruto {gross,7:0.0}/h   upkeep {upkeep,5:0.0}/h   líquido {(double)gross - upkeep,7:0.0}/h");
 }
+
+static void BreedReport()
+{
+    const int N = 50_000;
+    var rngPop = new Random(2026);
+    var baseline = new List<CreatureTraits>(N);
+    for (int i = 0; i < N; i++)
+        baseline.Add(TraitGenerator.Generate(rngPop.NextInt64()));
+    double baseLegendaryPct = baseline.Count(t => t.ShimmerTier == ShimmerTier.Legendary) / (double)N * 100;
+
+    var gestationHours = new List<double>(N);
+    int childLegendary = 0, exceedsMaxParent = 0;
+    var rngPairs = new Random(4242);
+    for (int i = 0; i < N; i++)
+    {
+        long seedA = rngPairs.NextInt64();
+        long seedB = rngPairs.NextInt64();
+        var a = TraitGenerator.Generate(seedA);
+        var b = TraitGenerator.Generate(seedB);
+        long childSeed = rngPairs.NextInt64();
+        var child = TraitGenerator.BreedTraits(childSeed, seedA, seedB, TraitConfigV1.Version, BreedingDefaults.MutationChance);
+
+        gestationHours.Add(BreedingCalculator.GestationHours((decimal)a.RarityScore, (decimal)b.RarityScore));
+        if (child.ShimmerTier == ShimmerTier.Legendary) childLegendary++;
+        if (child.RarityScore > Math.Max(a.RarityScore, b.RarityScore)) exceedsMaxParent++;
+    }
+
+    Console.WriteLine($"BREEDING — {N:N0} pares aleatórios (população base, não filtrada por raridade)\n");
+    Console.WriteLine($"MutationChance = {BreedingDefaults.MutationChance:0.00}\n");
+    Console.WriteLine($"Baseline legendário na população: {baseLegendaryPct:0.000}%");
+    Console.WriteLine($"Legendário nos filhos:            {(childLegendary / (double)N * 100):0.000}%");
+    Console.WriteLine($"Filhos que superam o score do pai mais raro: {(exceedsMaxParent / (double)N * 100):0.00}%\n");
+
+    var gh = gestationHours.OrderBy(h => h).ToArray();
+    Console.WriteLine("HORAS DE GESTAÇÃO (percentis, pares aleatórios da população base):");
+    foreach (var p in new[] { 1, 10, 25, 50, 75, 90, 99 })
+        Console.WriteLine($"  p{p,-4} {Percentile(gh, p),7:0.0}h");
+    Console.WriteLine($"  min  {gh[0],7:0.0}h\n  max  {gh[^1],7:0.0}h");
+
+    Console.WriteLine("\nCASOS DE REFERÊNCIA (score combinado -> horas):");
+    ReportGestationPair("2 comuns (5+5)", 5m, 5m);
+    ReportGestationPair("comum + raro (5+8)", 5m, 8m);
+    ReportGestationPair("2 raros (8+8)", 8m, 8m);
+    ReportGestationPair("2 épicos (11+11)", 11m, 11m);
+    ReportGestationPair("2 lendários (15+15)", 15m, 15m);
+    ReportGestationPair("2 lendários máx (18.9+18.9)", 18.9m, 18.9m);
+}
+
+static void ReportGestationPair(string label, decimal scoreA, decimal scoreB)
+    => Console.WriteLine($"  {label,-28}: {BreedingCalculator.GestationHours(scoreA, scoreB),6:0.0}h");
 
 static double Percentile(double[] sorted, double p)
 {

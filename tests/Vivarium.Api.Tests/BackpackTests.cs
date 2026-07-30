@@ -15,7 +15,7 @@ public class BackpackTests : IClassFixture<VivariumApiFactory>
     private async Task<long> HabitatIdOf(long userId)
     {
         long id = 0;
-        await _factory.WithDbAsync(async db => id = (await db.Habitats.FirstAsync(h => h.UserId == userId)).Id);
+        await _factory.WithDbAsync(async db => id = (await db.Habitats.FirstAsync(h => h.UserId == userId && h.HabitatType!.Code == "Aquarium")).Id);
         return id;
     }
 
@@ -81,7 +81,7 @@ public class BackpackTests : IClassFixture<VivariumApiFactory>
         long creatureId = 0;
         await _factory.WithDbAsync(async db =>
         {
-            var habitat = await db.Habitats.FirstAsync(h => h.UserId == sellerId);
+            var habitat = await db.Habitats.FirstAsync(h => h.UserId == sellerId && h.HabitatType!.Code == "Aquarium");
             var c = new CreatureInstance
             {
                 SpeciesId = 1, OwnerId = sellerId, HabitatId = habitat.Id,

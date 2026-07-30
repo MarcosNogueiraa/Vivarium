@@ -58,4 +58,8 @@ export const api = {
   devCoins: (amount = 1000) => request("POST", `/api/dev/coins?amount=${amount}`),
   transferCreature: (id, toUsername) =>
     request("POST", `/api/game/creatures/${id}/transfer`, { toUsername }),
+  breedingStatus: () => request("GET", "/api/breeding"),
+  startBreeding: (parentAId, parentBId) =>
+    request("POST", "/api/breeding/start", { parentAId, parentBId }),
+  collectBreeding: () => request("POST", "/api/breeding/collect"),
 };
