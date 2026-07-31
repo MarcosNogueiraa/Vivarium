@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.js";
 import { useBreeding } from "../hooks/useBreeding.js";
 import { AquariumCanvas } from "../components/AquariumCanvas.jsx";
@@ -8,6 +8,63 @@ import { Modal } from "../components/Modal.jsx";
 import { Coin } from "../components/Coin.jsx";
 import { CollectCelebration } from "../components/CollectCelebration.jsx";
 import { bandOf, PT } from "../lib/fishRenderer.js";
+import { breedingPreview, traitsOf } from "../lib/generator.js";
+import { PART_PT, partSummary } from "../lib/format.js";
+
+function ParentPreviewCard({ label, creature, traits }) {
+  const score = Number(creature.rarityScore);
+  const band = bandOf(score);
+  return (
+    <div className="parent-preview-card">
+      <span className="eyebrow">{label}</span>
+      <FishCanvas
+        seed={creature.seed} width={220}
+        isBred={creature.isBred} parentASeed={creature.parentASeed} parentBSeed={creature.parentBSeed}
+      />
+      <span className="badge" style={{ "--tier": band.color }}><span className="gem" /> {band.name} · {score.toFixed(1)}</span>
+      <div className="peek-row">
+        {traits.shimmerTier === "None" ? "Corpo sem brilho" : `${PT.tier[traits.shimmerTier]} · ${PT.shimmer[traits.shimmerColor]}`}
+      </div>
+      <div className="peek-row">Cauda: {partSummary(traits.tail)}</div>
+      <div className="peek-row">Dorsal: {partSummary(traits.dorsal)}</div>
+      <div className="peek-row">Nadadeira peitoral: {partSummary(traits.pectoral)}</div>
+    </div>
+  );
+}
+
+function DistBars({ dist, labelOf }) {
+  const top = dist.slice(0, 4);
+  const restProb = dist.slice(4).reduce((sum, d) => sum + d.prob, 0);
+  const rows = restProb > 0.004 ? [...top, { value: "__rest", prob: restProb }] : top;
+  return (
+    <div className="breakdown">
+      {rows.map((d, i) => (
+        <div className="bd-row" key={i}>
+          <span className="bd-label">{d.value === "__rest" ? "Outras" : labelOf(d.value)}</span>
+          <span className="bd-bar"><span style={{ width: `${d.prob * 100}%` }} /></span>
+          <span className="bd-prob mono">{(d.prob * 100).toFixed(1)}%</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PeekPanel({ creature }) {
+  const traits = traitsOf(creature);
+  const score = Number(creature.rarityScore);
+  const band = bandOf(score);
+  return (
+    <div className="peek-card">
+      <div className="peek-title" style={{ color: band.color }}>{band.name} · {score.toFixed(2)}</div>
+      <div className="peek-row">
+        {traits.shimmerTier === "None" ? "Corpo sem brilho" : `${PT.tier[traits.shimmerTier]} · ${PT.shimmer[traits.shimmerColor]}`}
+      </div>
+      <div className="peek-row">Cauda: {partSummary(traits.tail)}</div>
+      <div className="peek-row">Dorsal: {partSummary(traits.dorsal)}</div>
+      <div className="peek-row">Nadadeira peitoral: {partSummary(traits.pectoral)}</div>
+    </div>
+  );
+}
 
 function timeLeft(readyAt) {
   const ms = new Date(readyAt).getTime() - Date.now();
@@ -30,6 +87,8 @@ export function BreedingView({ tank, refreshTank, notify }) {
   const [pickB, setPickB] = useState(null);
   const [quote, setQuote] = useState(null); // null = fechado, "loading" = carregando, objeto = pronto
   const [celebrate, setCelebrate] = useState(null); // { child, parentLosses }
+  const [peek, setPeek] = useState(null); // { x, y, creature } — janela flutuante ao pairar 1s
+  const peekTimer = useRef(null);
   const [, forceTick] = useState(0);
 
   const loadBackpack = useCallback(async () => { setBackpack(await api.backpack()); }, []);
@@ -56,10 +115,17 @@ export function BreedingView({ tank, refreshTank, notify }) {
   }
 
   async function collect() {
+    // Snapshot dos pais ANTES de coletar: depois de coletar a gestação vira inativa
+    // e `status.slot` some — sem isso não teríamos o retrato de quem não sobreviveu.
+    const parentA = status.slot?.parentA;
+    const parentB = status.slot?.parentB;
     try {
       const result = await api.collectBreeding();
-      const parentLosses = [result.parentADied, result.parentBDied].filter(Boolean);
-      setCelebrate({ child: result.child, parentLosses });
+      const deadParents = [
+        result.parentADied ? parentA : null,
+        result.parentBDied ? parentB : null,
+      ].filter(Boolean);
+      setCelebrate({ child: result.child, deadParents });
       await Promise.all([refresh(), refreshTank(), loadBackpack()]);
     } catch (e) { notify(e.message); }
   }
@@ -69,6 +135,14 @@ export function BreedingView({ tank, refreshTank, notify }) {
       await api.devFinishBreeding();
       notify("Gestação zerada (dev).");
       await refresh();
+    } catch (e) { notify(e.message); }
+  }
+
+  async function rush() {
+    try {
+      await api.rushBreeding();
+      notify("Gestação acelerada!");
+      await Promise.all([refresh(), refreshTank()]);
     } catch (e) { notify(e.message); }
   }
 
@@ -93,8 +167,21 @@ export function BreedingView({ tank, refreshTank, notify }) {
     await start();
   }
 
+  function schedulePeek(e, c) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    clearTimeout(peekTimer.current);
+    peekTimer.current = setTimeout(() => {
+      setPeek({ x: rect.left + rect.width / 2, y: rect.top, creature: c });
+    }, 1000);
+  }
+  function cancelPeek() {
+    clearTimeout(peekTimer.current);
+    setPeek(null);
+  }
+
   const candidates = [...tank.creatures, ...backpack.creatures];
   const bothPicked = pickA && pickB;
+  const preview = bothPicked ? breedingPreview(pickA, pickB) : null;
 
   const content = status.active ? (
     <>
@@ -116,6 +203,11 @@ export function BreedingView({ tank, refreshTank, notify }) {
         <button className="btn-primary" disabled={!status.slot.isReady} onClick={collect}>
           {status.slot.isReady ? "Coletar filhote" : "Aguardando…"}
         </button>
+        {!status.slot.isReady && (
+          <button className="rush-btn" onClick={rush} title="Pula a espera pagando moeda premium — a única forma de acelerar">
+            ⚡ {Number(status.slot.rushCostPremium).toFixed(0)}
+          </button>
+        )}
         {import.meta.env.DEV && !status.slot.isReady && (
           <button className="dev-btn" onClick={devFinish} title="Só existe em dev">
             Terminar gestação
@@ -146,6 +238,8 @@ export function BreedingView({ tank, refreshTank, notify }) {
                     "--tier": bandOf(Number(c.rarityScore)).color,
                     ...(picked ? { borderColor: "var(--tier)", boxShadow: "0 0 0 2px var(--tier)" } : {}),
                   }}
+                  onMouseEnter={(e) => schedulePeek(e, c)}
+                  onMouseLeave={cancelPeek}
                 >
                   <button className="fish-stage as-button" onClick={() => togglePick(c)} title="Selecionar">
                     <FishCanvas seed={c.seed} isBred={c.isBred} parentASeed={c.parentASeed} parentBSeed={c.parentBSeed} />
@@ -161,6 +255,7 @@ export function BreedingView({ tank, refreshTank, notify }) {
       {bothPicked && (
         <div className="sticky-bar">
           <span className="hint" style={{ padding: 0 }}>2 peixes selecionados</span>
+          <button onClick={() => { setPickA(null); setPickB(null); }}>Desselecionar</button>
           <button className="btn-primary" onClick={openQuote}>Ver chances e cruzar</button>
         </div>
       )}
@@ -171,14 +266,21 @@ export function BreedingView({ tank, refreshTank, notify }) {
     <>
       {content}
 
-      {quote && (
-        <Modal onClose={() => setQuote(null)}>
+      {quote && preview && (
+        <Modal onClose={() => setQuote(null)} className="wide">
           <div className="eyebrow">Prévia do cruzamento</div>
+
+          <div className="breed-parents">
+            <ParentPreviewCard label="Peixe A" creature={pickA} traits={preview.parentA} />
+            <span className="breed-plus">+</span>
+            <ParentPreviewCard label="Peixe B" creature={pickB} traits={preview.parentB} />
+          </div>
+
           {quote === "loading" ? (
             <p className="hint">Calculando…</p>
           ) : (
             <>
-              <div className="card-row" style={{ marginTop: 10 }}>
+              <div className="card-row" style={{ marginTop: 16 }}>
                 <span>Custo</span>
                 <span className="mono"><Coin /> {quote.costSoft.toFixed(0)} soft</span>
               </div>
@@ -202,15 +304,25 @@ export function BreedingView({ tank, refreshTank, notify }) {
                 </div>
               </div>
 
+              {["tail", "dorsal", "pectoral"].map((part) => (
+                <div className="detail-section" key={part}>
+                  <div className="eyebrow">{PART_PT[part]} do filhote</div>
+                  <p className="bd-help" style={{ marginBottom: 4 }}>Cor</p>
+                  <DistBars dist={preview[part].color} labelOf={(v) => PT.color[v]} />
+                  <p className="bd-help" style={{ margin: "10px 0 4px" }}>Padrão</p>
+                  <DistBars dist={preview[part].pattern} labelOf={(v) => PT.pattern[v]} />
+                </div>
+              ))}
+
               <div className="detail-section">
                 <div className="eyebrow">Risco de morte dos pais</div>
                 <p className="bd-help">Cada cruzamento completado aumenta o risco do próximo — nunca garantido, mas cresce com o uso.</p>
                 <div className="card-row">
-                  <span>Pai A ({quote.parentABreedCount}× cruzado)</span>
+                  <span>Peixe A ({quote.parentABreedCount}× cruzado)</span>
                   <span className="mono">{(quote.parentADeathChance * 100).toFixed(0)}%</span>
                 </div>
                 <div className="card-row">
-                  <span>Pai B ({quote.parentBBreedCount}× cruzado)</span>
+                  <span>Peixe B ({quote.parentBBreedCount}× cruzado)</span>
                   <span className="mono">{(quote.parentBDeathChance * 100).toFixed(0)}%</span>
                 </div>
               </div>
@@ -228,9 +340,15 @@ export function BreedingView({ tank, refreshTank, notify }) {
         <CollectCelebration
           creature={celebrate.child}
           variant="breeding"
-          parentLosses={celebrate.parentLosses}
+          deadParents={celebrate.deadParents}
           onClose={() => setCelebrate(null)}
         />
+      )}
+
+      {peek && (
+        <div className="peek-anchor" style={{ left: peek.x, top: peek.y }}>
+          <PeekPanel creature={peek.creature} />
+        </div>
       )}
     </>
   );

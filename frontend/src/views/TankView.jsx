@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.js";
 import { bandOf, PART_HEX, PT } from "../lib/fishRenderer.js";
 import { nextFishEta, tankFishSorted, tankPotential, tankSynergy } from "../lib/tankMath.js";
-import { AquariumCanvas } from "../components/AquariumCanvas.jsx";
+import { AquariumCanvas, PIP_SUPPORTED } from "../components/AquariumCanvas.jsx";
 import { FishCanvas } from "../components/FishCanvas.jsx";
 import { Coin } from "../components/Coin.jsx";
 import { PromptModal } from "../components/PromptModal.jsx";
@@ -22,6 +22,26 @@ export function TankView({ tank, refresh, notify }) {
   const selected = tank.creatures.find((c) => c.id === selectedId) ?? null;
   const lowWater = Number(tank.maintenanceLevel) < 40;
 
+  // ---- Modo "enfeite de monitor": clique, tela cheia, modo aquário e pop-up ----
+  const [clickEnabled, setClickEnabled] = useState(() => localStorage.getItem("tankClicks") !== "false");
+  const toggleClicks = () => setClickEnabled((v) => { localStorage.setItem("tankClicks", String(!v)); return !v; });
+  const [aquariumMode, setAquariumMode] = useState(false);
+  const stageRef = useRef(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  useEffect(() => {
+    const onFsChange = () => setIsFullscreen(document.fullscreenElement === stageRef.current);
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+  async function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await stageRef.current?.requestFullscreen();
+    } catch { notify("Tela cheia não suportada neste navegador."); }
+  }
+  const aquariumRef = useRef(null);
+  const [pipActive, setPipActive] = useState(false);
+
   const current = Number(tank.coinsPerHour ?? 0);
   const synergy = tankSynergy(tank.creatures);
   const potential = tankPotential(tank.creatures);
@@ -36,6 +56,10 @@ export function TankView({ tank, refresh, notify }) {
       if (c && Number(c.rarityScore) >= 7.5) setCelebrate(c);
       else if (c) notify(`Peixe coletado! ${bandOf(Number(c.rarityScore)).name}`);
     } catch (err) { notify(err.message); }
+  }
+  async function rushQueue(itemId) {
+    try { await api.rushQueueItem(itemId); notify("Acelerado!"); await refresh(); }
+    catch (err) { notify(err.message); }
   }
   async function devSpawn() {
     try { await api.devSpawn(); await refresh(); }
@@ -79,7 +103,7 @@ export function TankView({ tank, refresh, notify }) {
 
   return (
     <div className="tank-layout">
-      {!onboardDone && (
+      {!onboardDone && !aquariumMode && (
         <div className="onboard glass">
           <div className="onboard-body">
             <span className="eyebrow">Bem-vindo ao seu aquário</span>
@@ -89,40 +113,65 @@ export function TankView({ tank, refresh, notify }) {
           <button className="btn-primary" onClick={dismissOnboard}>Entendi</button>
         </div>
       )}
-      <div className="tank-stage">
-        <div className="tank-hud">
-          <span className={`status-pill ${tank.online ? "on" : "off"}`}>
-            <span className="led" />{tank.online ? "Online" : "Offline"}
-          </span>
-          <span className="capacity-chip" title="Peixes ativos no tanque / capacidade">
-            🐟 {tank.creatures.length}/{tank.capacity}
-          </span>
-          <button className="guide-btn" onClick={() => setShowGuide(true)} title="Como funciona a raridade">?</button>
-          <span className="spacer" style={{ flex: 1 }} />
-          <span className="income-chip" title={
-            potential > current + 0.05
-              ? `Produção atual (com a água). Potencial a água cheia: ${potential.toFixed(1)}/h`
-              : "Moedas por hora que seu tanque farma"
-          }>
-            <Coin />+{current.toFixed(1)}<small>/h</small>
-            {potential > current + 0.05 && <em className="of-potential"> de {potential.toFixed(0)}</em>}
-          </span>
-          <span className="water-gauge">
-            <span className="label">Água</span>
-            <span className="water-track">
-              <span className={`water-fill${lowWater ? " low" : ""}`} style={{ width: `${tank.maintenanceLevel}%` }} />
+      <div className={`tank-stage${isFullscreen ? " is-fullscreen" : ""}${aquariumMode ? " aquarium-mode" : ""}`} ref={stageRef}>
+        {!aquariumMode && (
+          <div className="tank-hud">
+            <span className={`status-pill ${tank.online ? "on" : "off"}`}>
+              <span className="led" />{tank.online ? "Online" : "Offline"}
             </span>
-            <span className="val">{Number(tank.maintenanceLevel).toFixed(0)}</span>
-          </span>
-          <button onClick={buyFilter} title="Restaura a qualidade da água pra 100">Filtro · 20</button>
-        </div>
+            <span className="capacity-chip" title="Peixes ativos no tanque / capacidade">
+              🐟 {tank.creatures.length}/{tank.capacity}
+            </span>
+            <button className="guide-btn" onClick={() => setShowGuide(true)} title="Como funciona a raridade">?</button>
+            <span className="spacer" style={{ flex: 1 }} />
+            <span className="income-chip" title={
+              potential > current + 0.05
+                ? `Produção atual (com a água). Potencial a água cheia: ${potential.toFixed(1)}/h`
+                : "Moedas por hora que seu tanque farma"
+            }>
+              <Coin />+{current.toFixed(1)}<small>/h</small>
+              {potential > current + 0.05 && <em className="of-potential"> de {potential.toFixed(0)}</em>}
+            </span>
+            <span className="water-gauge">
+              <span className="label">Água</span>
+              <span className="water-track">
+                <span className={`water-fill${lowWater ? " low" : ""}`} style={{ width: `${tank.maintenanceLevel}%` }} />
+              </span>
+              <span className="val">{Number(tank.maintenanceLevel).toFixed(0)}</span>
+            </span>
+            <button onClick={buyFilter} title="Restaura a qualidade da água pra 100">Filtro · 20</button>
+          </div>
+        )}
 
         <AquariumCanvas
+          ref={aquariumRef}
           creatures={tank.creatures} selectedId={selectedId}
           onSelect={setSelectedId} quality={Number(tank.maintenanceLevel)}
+          interactive={clickEnabled} onPipChange={setPipActive}
         />
 
-        {tank.creatures.length === 0 && (
+        <div className="tank-tools">
+          <button className={`tool-btn${clickEnabled ? " active" : ""}`} onClick={toggleClicks}
+            title={clickEnabled ? "Cliques no peixe: ativados (clique pra desativar)" : "Cliques no peixe: desativados (clique pra ativar)"}>
+            {clickEnabled ? "🖱️" : "🚫"}
+          </button>
+          <button className={`tool-btn${aquariumMode ? " active" : ""}`} onClick={() => setAquariumMode((v) => !v)}
+            title={aquariumMode ? "Sair do modo aquário" : "Modo aquário — só o tanque, decorativo"}>
+            🐠
+          </button>
+          <button className={`tool-btn${isFullscreen ? " active" : ""}`} onClick={toggleFullscreen}
+            title={isFullscreen ? "Sair da tela cheia" : "Tela cheia"}>
+            {isFullscreen ? "⤢" : "⛶"}
+          </button>
+          {PIP_SUPPORTED && (
+            <button className={`tool-btn${pipActive ? " active" : ""}`} onClick={() => aquariumRef.current?.togglePip()}
+              title={pipActive ? "Fechar pop-up flutuante" : "Abrir aquário em pop-up flutuante"}>
+              📺
+            </button>
+          )}
+        </div>
+
+        {tank.creatures.length === 0 && !aquariumMode && (
           <div className="tank-empty">
             <strong>Seu aquário está esperando</strong>
             <span className="muted">Colete um peixe da fila para começar.</span>
@@ -130,7 +179,7 @@ export function TankView({ tank, refresh, notify }) {
         )}
       </div>
 
-      {synergy.length > 0 && (
+      {!aquariumMode && synergy.length > 0 && (
         <div className="synergy-bar glass">
           <span className="eyebrow">Sinergia de cor</span>
           {synergy.map((g) => (
@@ -140,7 +189,7 @@ export function TankView({ tank, refresh, notify }) {
           ))}
         </div>
       )}
-      {tank.creatures.length > 0 && !selected && (
+      {!aquariumMode && tank.creatures.length > 0 && !selected && (
         <p className="hint">Clique num peixe para ver os detalhes, guardar, vender ou transferir.</p>
       )}
       {selected && (
@@ -167,7 +216,7 @@ export function TankView({ tank, refresh, notify }) {
       )}
       {celebrate && <CollectCelebration creature={celebrate} onClose={() => setCelebrate(null)} />}
 
-      {tank.creatures.length > 0 && (
+      {!aquariumMode && tank.creatures.length > 0 && (
         <section>
           <div className="section-head">
             <button className="collapse-btn" onClick={toggleList} aria-expanded={listOpen}
@@ -208,6 +257,7 @@ export function TankView({ tank, refresh, notify }) {
         </section>
       )}
 
+      {!aquariumMode && (
       <section>
         <div className="section-head">
           <span className="eyebrow">Fila de criação</span>
@@ -238,6 +288,12 @@ export function TankView({ tank, refresh, notify }) {
                 <span>{item.isSick ? "Doente" : "Pronto"}</span>
                 <small>{item.isSick ? "raridade reduzida" : "aguardando coleta"}</small>
               </span>
+              {!item.isReady && (
+                <button className="rush-btn" onClick={() => rushQueue(item.id)}
+                  title="Pula a espera pagando moeda premium — a única forma de acelerar">
+                  ⚡ {Number(item.rushCostPremium).toFixed(0)}
+                </button>
+              )}
               <button className="btn-primary" disabled={!item.isReady} onClick={() => collect(item.id)}>
                 Coletar
               </button>
@@ -245,6 +301,7 @@ export function TankView({ tank, refresh, notify }) {
           ))}
         </div>
       </section>
+      )}
     </div>
   );
 }

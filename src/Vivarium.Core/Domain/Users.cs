@@ -7,6 +7,8 @@ public class User
     public required string Email { get; set; }
     public required string PasswordHash { get; set; }
     public DateTime CreatedAt { get; set; }
+    /// <summary>Último resgate da recompensa diária (UTC), nullable = nunca resgatou.</summary>
+    public DateTime? LastDailyRewardAt { get; set; }
 }
 
 // Separado do User (não um bool IsVip) para permitir histórico e, no futuro,

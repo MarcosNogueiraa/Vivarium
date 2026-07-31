@@ -3,7 +3,8 @@ namespace Vivarium.Api.Contracts;
 public record StartBreedingRequest(long ParentAId, long ParentBId);
 
 public record BreedingSlotDto(
-    long Id, CreatureDto ParentA, CreatureDto ParentB, DateTime StartedAt, DateTime ReadyAt, bool IsReady, decimal CostPaid);
+    long Id, CreatureDto ParentA, CreatureDto ParentB, DateTime StartedAt, DateTime ReadyAt, bool IsReady,
+    decimal CostPaid, decimal RushCostPremium);
 
 public record BreedingStatusResponse(bool Active, BreedingSlotDto? Slot);
 

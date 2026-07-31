@@ -8,10 +8,17 @@ namespace Vivarium.Core.Gameplay;
 /// </summary>
 public static class BreedingDefaults
 {
-    public const double BaseGestationHours = 8.0;
+    /// <summary>
+    /// Base 3x maior (8→24, 30/07/2026): mesmo casal mais comum agora leva o dia inteiro,
+    /// não só algumas horas — fricção deliberada anti-rush (ver `RushCalculator`/8.11). O
+    /// crescimento (`GestationGrowth`) não mudou, só o piso: a curva de rarity ainda escala
+    /// igual, só que 3x mais lenta em todo o espectro.
+    /// </summary>
+    public const double BaseGestationHours = 24.0;
     public const double GestationGrowth = 0.12;
     public const double GestationRefScore = 10.0;
-    public const double MinGestationHours = 4.0;
+    /// <summary>Piso também subiu (4→12h, 30/07/2026): nunca cruza em menos de meio dia.</summary>
+    public const double MinGestationHours = 12.0;
     public const double MaxGestationHours = 240.0;
     public const double MutationChance = 0.08;
 
@@ -22,6 +29,15 @@ public static class BreedingDefaults
     /// "lavagem" de lendário cruzando com um peixe comum qualquer.
     /// </summary>
     public const double RarityBiasStrength = 0.15;
+
+    /// <summary>
+    /// Chance (por "slot": brilho, cauda, dorsal, peitoral — 31/07/2026) de um filhote herdar
+    /// um traço de um AVÔ em vez do pai direto, quando esse pai é ele mesmo um filhote — um
+    /// traço "pulando uma geração", como recessivo. Deliberadamente MENOR que a chance de herdar
+    /// do pai direto (que domina o resto do tempo). Mesma ordem de grandeza do `RarityBiasStrength`
+    /// — ver `TraitGenerator.BreedTraits`/`EffectiveParentTraits`.
+    /// </summary>
+    public const double GrandparentReachChance = 0.15;
 
     // --- Custo dinâmico (soft) ---
     // O tempo de gestação já é o sink principal pra pares raros (um lendário

@@ -219,6 +219,46 @@ public class BreedingTests : IClassFixture<VivariumApiFactory>
     }
 
     [Fact]
+    public async Task FilhoteDeFilhote_DenormalizaOsSeedsDosAvosCorretamente()
+    {
+        // 31/07/2026: fecha o gap de consistência client/server do bug de traits fantasma —
+        // quando um FILHOTE (não só um peixe fresco) é usado como pai num novo cruzamento, o
+        // neto precisa denormalizar os seeds dos AVÓS (os pais do filhote-pai), não ficar sem
+        // essa informação (o que forçaria reconstruir esse pai com Generate(seed) errado).
+        var (client, userId) = await _factory.RegisterAsync("breed9");
+        await GiveSoft(userId, 10_000m);
+
+        // Geração 1: avós cruzam, produzindo um filhote.
+        long grandparentA = await CreateOwnedCreature(userId, 5m, 5001);
+        long grandparentB = await CreateOwnedCreature(userId, 6m, 5002);
+        (await client.PostAsJsonAsync("/api/breeding/start", new { parentAId = grandparentA, parentBId = grandparentB })).EnsureSuccessStatusCode();
+        await MakeSlotReadyNow(userId);
+        var firstCollect = await client.PostAsync("/api/breeding/collect", null);
+        firstCollect.EnsureSuccessStatusCode();
+        var firstChild = (await firstCollect.Content.ReadFromJsonAsync<CollectBreedingResponse>())!.Child;
+
+        // Geração 2: o filhote da 1ª geração cruza com um peixe fresco.
+        long freshMate = await CreateOwnedCreature(userId, 7m, 5003);
+        (await client.PostAsJsonAsync("/api/breeding/start", new { parentAId = firstChild.Id, parentBId = freshMate })).EnsureSuccessStatusCode();
+        await MakeSlotReadyNow(userId);
+        var secondCollect = await client.PostAsync("/api/breeding/collect", null);
+        secondCollect.EnsureSuccessStatusCode();
+        var grandchild = (await secondCollect.Content.ReadFromJsonAsync<CollectBreedingResponse>())!.Child;
+
+        await _factory.WithDbAsync(async db =>
+        {
+            var entity = await db.CreatureInstances.FirstAsync(c => c.Id == grandchild.Id);
+            // Lado A do neto é o filhote (parentA = firstChild) — os avós denormalizados
+            // devem ser os PAIS de firstChild (5001/5002), nunca Generate(firstChild.Seed).
+            Assert.Equal(5001, entity.ParentAGrandparentASeed);
+            Assert.Equal(5002, entity.ParentAGrandparentBSeed);
+            // Lado B é o peixe fresco — sem avós.
+            Assert.Null(entity.ParentBGrandparentASeed);
+            Assert.Null(entity.ParentBGrandparentBSeed);
+        });
+    }
+
+    [Fact]
     public async Task Collect_DuasVezesSeguidas_SegundaFalha()
     {
         var (client, userId) = await _factory.RegisterAsync("breed7");

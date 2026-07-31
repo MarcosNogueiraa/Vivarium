@@ -1,0 +1,12 @@
+{
+  "online": true,
+  "maintenanceLevel": 100,
+  "capacity": 3,
+  "queueCap": 5,
+  "queue": [],
+  "creatures": [],
+  "wallet": { "SOFT": 100, "PREMIUM": 0 },
+  "coinsPerHour": 0,
+  "generationProgressMinutes": 0,
+  "generationIntervalMinutes": 25
+}

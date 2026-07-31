@@ -6,7 +6,7 @@ public enum QueueItemStatus { Pending, Collected }
 
 public enum ListingStatus { Active, Sold, Cancelled }
 
-public enum TransactionType { MarketSale, DirectTransfer, CurrencyPurchase, ItemPurchase, Sink, Breeding, BreedingLoss }
+public enum TransactionType { MarketSale, DirectTransfer, CurrencyPurchase, ItemPurchase, Sink, Breeding, BreedingLoss, DailyReward, TimeSkip }
 
 public enum BreedingStatus { InProgress, Collected }
 

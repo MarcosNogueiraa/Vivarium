@@ -58,15 +58,18 @@ public static class DevEndpoints
             return Results.Ok(new { removed });
         });
 
-        // Credita fichas (moeda soft) no jogador logado, pra teste
-        group.MapPost("/coins", async (long? amount, ClaimsPrincipal principal, VivariumDbContext db) =>
+        // Credita moeda (soft por padrão; ?currency=PREMIUM pra testar o rush — 8.11)
+        // no jogador logado, pra teste. Sem isso não tem como testar o rush sem um
+        // processador de pagamento real, que este projeto ainda não integra.
+        group.MapPost("/coins", async (long? amount, string? currency, ClaimsPrincipal principal, VivariumDbContext db) =>
         {
             long userId = TokenService.GetUserId(principal);
             decimal credit = Math.Clamp(amount ?? 1000, 1, 1_000_000);
+            string code = string.Equals(currency, "PREMIUM", StringComparison.OrdinalIgnoreCase) ? "PREMIUM" : "SOFT";
 
-            int softId = await db.CurrencyTypes.Where(c => c.Code == "SOFT").Select(c => c.Id).FirstAsync();
+            int currencyId = await db.CurrencyTypes.Where(c => c.Code == code).Select(c => c.Id).FirstAsync();
             var wallet = await db.WalletBalances
-                .FirstOrDefaultAsync(w => w.UserId == userId && w.CurrencyTypeId == softId);
+                .FirstOrDefaultAsync(w => w.UserId == userId && w.CurrencyTypeId == currencyId);
             if (wallet is null)
                 return Results.NotFound();
 
@@ -75,12 +78,12 @@ public static class DevEndpoints
             {
                 Type = TransactionType.CurrencyPurchase,
                 ToUserId = userId,
-                CurrencyTypeId = softId,
+                CurrencyTypeId = currencyId,
                 Amount = credit,
                 CreatedAt = DateTime.UtcNow,
             });
             await db.SaveChangesAsync();
-            return Results.Ok(new { credited = credit, balance = wallet.Amount });
+            return Results.Ok(new { credited = credit, currency = code, balance = wallet.Amount });
         });
 
         // Zera o tempo de gestação restante (não muda o resultado, só a hora) — pra

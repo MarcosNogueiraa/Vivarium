@@ -22,5 +22,8 @@ public static class BreedingEndpoints
 
         group.MapPost("/collect", async (ClaimsPrincipal principal, BreedingService breeding) =>
             (await breeding.CollectAsync(TokenService.GetUserId(principal), DateTime.UtcNow)).ToHttp());
+
+        group.MapPost("/rush", async (ClaimsPrincipal principal, BreedingService breeding) =>
+            (await breeding.RushAsync(TokenService.GetUserId(principal), DateTime.UtcNow)).ToHttp());
     }
 }

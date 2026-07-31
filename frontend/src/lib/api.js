@@ -43,6 +43,8 @@ export const api = {
   tank: () => request("GET", "/api/game/tank"),
   heartbeat: () => request("POST", "/api/game/heartbeat"),
   collect: (queueItemId) => request("POST", `/api/game/collect/${queueItemId}`),
+  rushQueueItem: (queueItemId) => request("POST", `/api/game/queue/${queueItemId}/rush`),
+  rushBreeding: () => request("POST", "/api/breeding/rush"),
   listings: () => request("GET", "/api/market/listings"),
   createListing: (creatureInstanceId, priceSoft) =>
     request("POST", "/api/market/listings", { creatureInstanceId, priceSoft }),
@@ -55,7 +57,7 @@ export const api = {
   deployCreature: (id) => request("POST", `/api/game/creatures/${id}/deploy`),
   devSpawn: () => request("POST", "/api/dev/spawn"),
   devClear: () => request("POST", "/api/dev/clear"),
-  devCoins: (amount = 1000) => request("POST", `/api/dev/coins?amount=${amount}`),
+  devCoins: (amount = 1000, currency = "SOFT") => request("POST", `/api/dev/coins?amount=${amount}&currency=${currency}`),
   transferCreature: (id, toUsername) =>
     request("POST", `/api/game/creatures/${id}/transfer`, { toUsername }),
   breedingStatus: () => request("GET", "/api/breeding"),
@@ -65,4 +67,6 @@ export const api = {
     request("POST", "/api/breeding/start", { parentAId, parentBId }),
   collectBreeding: () => request("POST", "/api/breeding/collect"),
   devFinishBreeding: () => request("POST", "/api/dev/breeding/finish"),
+  dailyRewardStatus: () => request("GET", "/api/game/daily-reward"),
+  claimDailyReward: () => request("POST", "/api/game/daily-reward/claim"),
 };

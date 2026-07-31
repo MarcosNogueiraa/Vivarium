@@ -104,7 +104,7 @@ export const CONFIG = {
   income: { base: 1.7, growth: 0.49, ref: 4.0 },
   synergy: { perMatch: 0.15, maxBonus: 0.80 },
   // Breeding — espelha BreedingDefaults (Gameplay/BreedingConfig.cs, manter em sincronia)
-  breeding: { mutationChance: 0.08, rarityBias: 0.15 },
+  breeding: { mutationChance: 0.08, rarityBias: 0.15, grandparentReachChance: 0.15 },
   closestPartColor: {
     Gold: "Yellow", Silver: "PureWhite", Bluish: "Blue", Emerald: "Green",
     Purple: "Purple", Pink: "Red", Rainbow: "PureWhite", AbsoluteBlack: "Black",
@@ -229,11 +229,11 @@ function inheritContinuousUniform(seed, salt, mutationChance, valueA, valueB, mi
   return roll01(seed, salt + "_inherit") < 0.5 ? valueA : valueB;
 }
 
-function breedPart(seed, partSalt, mutationChance, a, b, colorTable) {
-  const colorPick = inheritOrMutate(seed, partSalt + "_color", mutationChance, a.color, b.color, colorTable);
+function breedPart(seed, partSalt, mutationChance, rarityBias, a, b, colorTable) {
+  const colorPick = inheritOrMutate(seed, partSalt + "_color", mutationChance, a.color, b.color, colorTable, rarityBias);
   const color = colorPick.value;
 
-  const patternPick = inheritOrMutate(seed, partSalt + "_pattern", mutationChance, a.pattern, b.pattern, CONFIG.patternTypes);
+  const patternPick = inheritOrMutate(seed, partSalt + "_pattern", mutationChance, a.pattern, b.pattern, CONFIG.patternTypes, rarityBias);
   const pattern = patternPick.value;
   if (pattern === "None")
     return { color, pattern, patternColor: null, patternSize: null, patternOpacity: null };
@@ -255,21 +255,53 @@ function breedPart(seed, partSalt, mutationChance, a, b, colorTable) {
   return { color, pattern, patternColor, patternSize, patternOpacity };
 }
 
+/** Traits reais de um pai — generateTraits direto se fresco, ou recomputa 1 nível (sem reach-back) se ele é filhote. */
+export function resolveOwnTraits(seed, grandparentASeed, grandparentBSeed, mutationChance, rarityBias) {
+  if (grandparentASeed != null && grandparentBSeed != null)
+    return breedTraits(seed, grandparentASeed, grandparentBSeed, mutationChance, rarityBias);
+  return generateTraits(seed);
+}
+
+/**
+ * Com `reachChance` de chance (só se os avós existirem), troca o candidato desse lado pelo
+ * de um dos avós (50/50 entre eles) em vez dos traits reais do pai direto. Retorna o objeto de
+ * traits INTEIRO (não um trait solto) pra manter subtraits coerentes com a mesma fonte.
+ */
+export function effectiveParentTraits(childSeed, salt, own, grandparent1, grandparent2, reachChance) {
+  if (grandparent1 == null || grandparent2 == null) return own;
+  if (roll01(childSeed, salt + "_reach") >= reachChance) return own;
+  return roll01(childSeed, salt + "_reach_which") < 0.5 ? grandparent1 : grandparent2;
+}
+
 /**
  * Traits do filhote — chame SEMPRE que `creature.isBred` for true, usando os
  * seeds dos pais (`ParentASeed`/`ParentBSeed` da API), nunca generateTraits(seed).
+ * `parentXGrandparentYSeed` (opcionais, vêm do `CreatureDto` quando o pai correspondente é
+ * ele mesmo um filhote): habilitam a chance de herdar um traço de um avô em vez do pai direto
+ * (31/07/2026) — ver `TraitGenerator.BreedTraits`/CLAUDE.md 8.8 pro mecanismo espelhado aqui.
  */
 export function breedTraits(childSeed, parentASeed, parentBSeed,
-  mutationChance = CONFIG.breeding.mutationChance, rarityBias = CONFIG.breeding.rarityBias) {
-  const a = generateTraits(parentASeed);
-  const b = generateTraits(parentBSeed);
+  mutationChance = CONFIG.breeding.mutationChance, rarityBias = CONFIG.breeding.rarityBias,
+  parentAGrandparentASeed = null, parentAGrandparentBSeed = null,
+  parentBGrandparentASeed = null, parentBGrandparentBSeed = null,
+  grandparentReachChance = CONFIG.breeding.grandparentReachChance) {
+  const ownA = resolveOwnTraits(parentASeed, parentAGrandparentASeed, parentAGrandparentBSeed, mutationChance, rarityBias);
+  const ownB = resolveOwnTraits(parentBSeed, parentBGrandparentASeed, parentBGrandparentBSeed, mutationChance, rarityBias);
+  const gpA1 = parentAGrandparentASeed != null ? generateTraits(parentAGrandparentASeed) : null;
+  const gpA2 = parentAGrandparentBSeed != null ? generateTraits(parentAGrandparentBSeed) : null;
+  const gpB1 = parentBGrandparentASeed != null ? generateTraits(parentBGrandparentASeed) : null;
+  const gpB2 = parentBGrandparentBSeed != null ? generateTraits(parentBGrandparentBSeed) : null;
 
-  const tierPick = inheritOrMutate(childSeed, "body_shimmer", mutationChance, a.shimmerTier, b.shimmerTier, CONFIG.shimmerTiers, rarityBias);
+  const effA = (slotSalt) => effectiveParentTraits(childSeed, slotSalt + "_a", ownA, gpA1, gpA2, grandparentReachChance);
+  const effB = (slotSalt) => effectiveParentTraits(childSeed, slotSalt + "_b", ownB, gpB1, gpB2, grandparentReachChance);
+
+  const shimmerA = effA("body_shimmer"), shimmerB = effB("body_shimmer");
+  const tierPick = inheritOrMutate(childSeed, "body_shimmer", mutationChance, shimmerA.shimmerTier, shimmerB.shimmerTier, CONFIG.shimmerTiers, rarityBias);
   const tier = tierPick.value;
 
   let shimmerColor = null, shimmerOpacity = 0;
   if (tier !== "None") {
-    const tierSource = tierPick.fromA ? a : b;
+    const tierSource = tierPick.fromA ? shimmerA : shimmerB;
     if (!tierPick.mutated && tierSource.shimmerTier === tier) {
       shimmerColor = tierSource.shimmerColor;
       shimmerOpacity = tierSource.shimmerOpacity;
@@ -286,26 +318,87 @@ export function breedTraits(childSeed, parentASeed, parentBSeed,
     : null;
   const colorTable = applyCorrelation(CONFIG.partColors, boosted);
 
-  const tail = breedPart(childSeed, "tail", mutationChance, a.tail, b.tail, colorTable);
-  const dorsal = breedPart(childSeed, "dorsal", mutationChance, a.dorsal, b.dorsal, colorTable);
-  const pectoral = breedPart(childSeed, "pectoral", mutationChance, a.pectoral, b.pectoral, colorTable);
+  const tailA = effA("tail"), tailB = effB("tail");
+  const tail = breedPart(childSeed, "tail", mutationChance, rarityBias, tailA.tail, tailB.tail, colorTable);
+  const dorsalA = effA("dorsal"), dorsalB = effB("dorsal");
+  const dorsal = breedPart(childSeed, "dorsal", mutationChance, rarityBias, dorsalA.dorsal, dorsalB.dorsal, colorTable);
+  const pectoralA = effA("pectoral"), pectoralB = effB("pectoral");
+  const pectoral = breedPart(childSeed, "pectoral", mutationChance, rarityBias, pectoralA.pectoral, pectoralB.pectoral, colorTable);
 
   const mv = CONFIG.movement;
   const movement = {
-    tailSpeed: inheritContinuousNormal(childSeed, "tail_speed", mutationChance, a.movement.tailSpeed, b.movement.tailSpeed, mv.speedMean, mv.speedStdDev),
-    tailAmplitude: inheritContinuousUniform(childSeed, "tail_wag_amplitude", mutationChance, a.movement.tailAmplitude, b.movement.tailAmplitude, mv.tailAmpMin, mv.tailAmpMax),
-    finSpeed: inheritContinuousNormal(childSeed, "fin_speed", mutationChance, a.movement.finSpeed, b.movement.finSpeed, mv.speedMean, mv.speedStdDev),
-    finAmplitude: inheritContinuousUniform(childSeed, "fin_wag_amplitude", mutationChance, a.movement.finAmplitude, b.movement.finAmplitude, mv.finAmpMin, mv.finAmpMax),
+    tailSpeed: inheritContinuousNormal(childSeed, "tail_speed", mutationChance, ownA.movement.tailSpeed, ownB.movement.tailSpeed, mv.speedMean, mv.speedStdDev),
+    tailAmplitude: inheritContinuousUniform(childSeed, "tail_wag_amplitude", mutationChance, ownA.movement.tailAmplitude, ownB.movement.tailAmplitude, mv.tailAmpMin, mv.tailAmpMax),
+    finSpeed: inheritContinuousNormal(childSeed, "fin_speed", mutationChance, ownA.movement.finSpeed, ownB.movement.finSpeed, mv.speedMean, mv.speedStdDev),
+    finAmplitude: inheritContinuousUniform(childSeed, "fin_wag_amplitude", mutationChance, ownA.movement.finAmplitude, ownB.movement.finAmplitude, mv.finAmpMin, mv.finAmpMax),
   };
 
   return { shimmerTier: tier, shimmerColor, shimmerOpacity, tail, dorsal, pectoral, movement };
 }
 
+/**
+ * Distribuição de probabilidade fechada (sem RNG) do valor herdado/mutado de
+ * UM trait categórico, dado os valores dos dois pais — mesma matemática de
+ * `ChildTierDistribution` (C#), generalizada pra qualquer tabela categórica
+ * (cor de parte, tipo de padrão). Usada na prévia do ninho.
+ */
+export function traitDistribution(table, valueA, valueB, mutationChance, bias = 0) {
+  const total = table.reduce((sum, [, w]) => sum + w, 0);
+  const probA = probabilityOf(table, valueA);
+  const probB = probabilityOf(table, valueB);
+  const inheritAProb = (1 - mutationChance) * biasedInheritProbability(probA, probB, bias);
+  const inheritBProb = (1 - mutationChance) - inheritAProb;
+
+  const dist = new Map();
+  for (const [value, w] of table) dist.set(value, mutationChance * (w / total));
+  dist.set(valueA, (dist.get(valueA) ?? 0) + inheritAProb);
+  dist.set(valueB, (dist.get(valueB) ?? 0) + inheritBProb);
+
+  return [...dist.entries()]
+    .map(([value, prob]) => ({ value, prob }))
+    .sort((x, y) => y.prob - x.prob);
+}
+
+/**
+ * Prévia completa do cruzamento: traits reais dos dois pais (já resolve
+ * filhotes-de-filhote via `traitsOf`) + distribuição de chances do filho por
+ * atributo (tier de brilho, cor e padrão de cada parte). Não cobre os
+ * sub-traits contínuos (opacidade/tamanho do padrão, movimento) — esses são
+ * herdados junto do padrão/tier escolhido ou resorteados só na mutação.
+ */
+export function breedingPreview(parentACreature, parentBCreature,
+  mutationChance = CONFIG.breeding.mutationChance, rarityBias = CONFIG.breeding.rarityBias) {
+  const a = traitsOf(parentACreature);
+  const b = traitsOf(parentBCreature);
+
+  const shimmerTier = traitDistribution(CONFIG.shimmerTiers, a.shimmerTier, b.shimmerTier, mutationChance, rarityBias);
+
+  function partPreview(key) {
+    const pa = a[key], pb = b[key];
+    return {
+      parentA: pa,
+      parentB: pb,
+      color: traitDistribution(CONFIG.partColors, pa.color, pb.color, mutationChance, rarityBias),
+      pattern: traitDistribution(CONFIG.patternTypes, pa.pattern, pb.pattern, mutationChance, rarityBias),
+    };
+  }
+
+  return {
+    parentA: a, parentB: b, shimmerTier,
+    tail: partPreview("tail"), dorsal: partPreview("dorsal"), pectoral: partPreview("pectoral"),
+  };
+}
+
+const bigOrNull = (v) => (v != null ? BigInt(v) : null);
+
 /** Traits de qualquer creature (pai normal ou filhote) — escolhe o motor certo. */
 export function traitsOf(creature) {
   const seed = BigInt(creature.seed);
   if (creature.isBred && creature.parentASeed && creature.parentBSeed)
-    return breedTraits(seed, BigInt(creature.parentASeed), BigInt(creature.parentBSeed));
+    return breedTraits(seed, BigInt(creature.parentASeed), BigInt(creature.parentBSeed),
+      CONFIG.breeding.mutationChance, CONFIG.breeding.rarityBias,
+      bigOrNull(creature.parentAGrandparentASeed), bigOrNull(creature.parentAGrandparentBSeed),
+      bigOrNull(creature.parentBGrandparentASeed), bigOrNull(creature.parentBGrandparentBSeed));
   return generateTraits(seed);
 }
 
@@ -313,7 +406,10 @@ export function traitsOf(creature) {
 export function rarityBreakdownOf(creature) {
   const seed = BigInt(creature.seed);
   if (creature.isBred && creature.parentASeed && creature.parentBSeed)
-    return bredRarityBreakdown(seed, BigInt(creature.parentASeed), BigInt(creature.parentBSeed));
+    return bredRarityBreakdown(seed, BigInt(creature.parentASeed), BigInt(creature.parentBSeed),
+      CONFIG.breeding.mutationChance, CONFIG.breeding.rarityBias,
+      bigOrNull(creature.parentAGrandparentASeed), bigOrNull(creature.parentAGrandparentBSeed),
+      bigOrNull(creature.parentBGrandparentASeed), bigOrNull(creature.parentBGrandparentBSeed));
   return rarityBreakdown(seed);
 }
 
@@ -445,22 +541,33 @@ export function rarityBreakdown(seed) {
  * livre. Mesma regra de "por que é raro": soma de −log10(P) de cada valor real.
  */
 export function bredRarityBreakdown(childSeed, parentASeed, parentBSeed,
-  mutationChance = CONFIG.breeding.mutationChance, rarityBias = CONFIG.breeding.rarityBias) {
-  const a = generateTraits(parentASeed);
-  const b = generateTraits(parentBSeed);
+  mutationChance = CONFIG.breeding.mutationChance, rarityBias = CONFIG.breeding.rarityBias,
+  parentAGrandparentASeed = null, parentAGrandparentBSeed = null,
+  parentBGrandparentASeed = null, parentBGrandparentBSeed = null,
+  grandparentReachChance = CONFIG.breeding.grandparentReachChance) {
+  const ownA = resolveOwnTraits(parentASeed, parentAGrandparentASeed, parentAGrandparentBSeed, mutationChance, rarityBias);
+  const ownB = resolveOwnTraits(parentBSeed, parentBGrandparentASeed, parentBGrandparentBSeed, mutationChance, rarityBias);
+  const gpA1 = parentAGrandparentASeed != null ? generateTraits(parentAGrandparentASeed) : null;
+  const gpA2 = parentAGrandparentBSeed != null ? generateTraits(parentAGrandparentBSeed) : null;
+  const gpB1 = parentBGrandparentASeed != null ? generateTraits(parentBGrandparentASeed) : null;
+  const gpB2 = parentBGrandparentBSeed != null ? generateTraits(parentBGrandparentBSeed) : null;
+  const effA = (slotSalt) => effectiveParentTraits(childSeed, slotSalt + "_a", ownA, gpA1, gpA2, grandparentReachChance);
+  const effB = (slotSalt) => effectiveParentTraits(childSeed, slotSalt + "_b", ownB, gpB1, gpB2, grandparentReachChance);
+
   const factors = [];
   const selfInfo = (p) => -Math.log10(p);
   const push = (key, part, value, prob) =>
     factors.push({ key, part, value, probPct: prob * 100, points: selfInfo(prob) });
 
-  const tierPick = inheritOrMutate(childSeed, "body_shimmer", mutationChance, a.shimmerTier, b.shimmerTier, CONFIG.shimmerTiers, rarityBias);
+  const shimmerA = effA("body_shimmer"), shimmerB = effB("body_shimmer");
+  const tierPick = inheritOrMutate(childSeed, "body_shimmer", mutationChance, shimmerA.shimmerTier, shimmerB.shimmerTier, CONFIG.shimmerTiers, rarityBias);
   const tier = tierPick.value;
   const tierProb = probabilityOf(CONFIG.shimmerTiers, tier);
   factors.push({ key: "shimmerTier", part: null, value: tier, probPct: tierProb * 100, points: CONFIG.shimmerScoreWeight * selfInfo(tierProb) });
 
   let shimmerColor = null;
   if (tier !== "None") {
-    const tierSource = tierPick.fromA ? a : b;
+    const tierSource = tierPick.fromA ? shimmerA : shimmerB;
     shimmerColor = (!tierPick.mutated && tierSource.shimmerTier === tier)
       ? tierSource.shimmerColor
       : CONFIG.shimmerColorsByTier[tier][Math.floor(roll01(childSeed, "body_shimmer_color") * CONFIG.shimmerColorsByTier[tier].length)];
@@ -471,14 +578,14 @@ export function bredRarityBreakdown(childSeed, parentASeed, parentBSeed,
   const colorTable = applyCorrelation(CONFIG.partColors, boosted);
 
   const partColors = [], partPatterns = [];
-  const parts = { tail: [a.tail, b.tail], dorsal: [a.dorsal, b.dorsal], pectoral: [a.pectoral, b.pectoral] };
+  const parts = { tail: [effA("tail").tail, effB("tail").tail], dorsal: [effA("dorsal").dorsal, effB("dorsal").dorsal], pectoral: [effA("pectoral").pectoral, effB("pectoral").pectoral] };
   for (const part of ["tail", "dorsal", "pectoral"]) {
     const [pa, pb] = parts[part];
-    const colorPick = inheritOrMutate(childSeed, part + "_color", mutationChance, pa.color, pb.color, colorTable);
+    const colorPick = inheritOrMutate(childSeed, part + "_color", mutationChance, pa.color, pb.color, colorTable, rarityBias);
     push("partColor", part, colorPick.value, probabilityOf(colorTable, colorPick.value));
     partColors.push(colorPick.value);
 
-    const patternPick = inheritOrMutate(childSeed, part + "_pattern", mutationChance, pa.pattern, pb.pattern, CONFIG.patternTypes);
+    const patternPick = inheritOrMutate(childSeed, part + "_pattern", mutationChance, pa.pattern, pb.pattern, CONFIG.patternTypes, rarityBias);
     push("patternType", part, patternPick.value, probabilityOf(CONFIG.patternTypes, patternPick.value));
     partPatterns.push(patternPick.value);
     if (patternPick.value === "None") continue;
@@ -515,8 +622,8 @@ export function bredRarityBreakdown(childSeed, parentASeed, parentBSeed,
 
   const mv = CONFIG.movement;
   for (const [salt, which, pa, pb] of [
-    ["tail_speed", "tail", a.movement.tailSpeed, b.movement.tailSpeed],
-    ["fin_speed", "fin", a.movement.finSpeed, b.movement.finSpeed],
+    ["tail_speed", "tail", ownA.movement.tailSpeed, ownB.movement.tailSpeed],
+    ["fin_speed", "fin", ownA.movement.finSpeed, ownB.movement.finSpeed],
   ]) {
     const speed = inheritContinuousNormal(childSeed, salt, mutationChance, pa, pb, mv.speedMean, mv.speedStdDev);
     let prob = null, value = null;

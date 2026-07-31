@@ -154,10 +154,51 @@ public class BreedingService(VivariumDbContext db, GameService game)
         if (slot is null)
             return ServiceResult.Success(new BreedingStatusResponse(false, null));
 
+        var now = DateTime.UtcNow;
+        bool ready = slot.ReadyAt <= now;
+        decimal rushCost = ready ? 0m : RushCalculator.GestationRushCost((decimal)(slot.ReadyAt - now).TotalHours);
         var dto = new BreedingSlotDto(
             slot.Id, CreatureDto.From(slot.ParentA!), CreatureDto.From(slot.ParentB!),
-            slot.StartedAt, slot.ReadyAt, slot.ReadyAt <= DateTime.UtcNow, slot.CostPaid);
+            slot.StartedAt, slot.ReadyAt, ready, slot.CostPaid, rushCost);
         return ServiceResult.Success(new BreedingStatusResponse(true, dto));
+    }
+
+    /// <summary>Pula o tempo restante de gestação pagando premium (8.11) — mesma ideia do rush da fila.</summary>
+    public async Task<ServiceResult> RushAsync(long userId, DateTime now)
+    {
+        var slot = await db.BreedingSlots.FirstOrDefaultAsync(s => s.UserId == userId && s.Status == BreedingStatus.InProgress);
+        if (slot is null)
+            return ServiceResult.NotFound("Nenhuma gestação em andamento");
+        if (slot.ReadyAt <= now)
+            return ServiceResult.Bad("Já está pronta — não precisa acelerar");
+
+        decimal cost = RushCalculator.GestationRushCost((decimal)(slot.ReadyAt - now).TotalHours);
+        int premiumId = await db.CurrencyTypes.Where(c => c.Code == "PREMIUM").Select(c => c.Id).FirstAsync();
+        var wallet = await db.WalletBalances.FirstAsync(w => w.UserId == userId && w.CurrencyTypeId == premiumId);
+        if (wallet.Amount < cost)
+            return ServiceResult.Bad("Saldo de moeda premium insuficiente");
+
+        wallet.Amount -= cost;
+        slot.ReadyAt = now;
+
+        db.TransactionLogs.Add(new TransactionLog
+        {
+            Type = TransactionType.TimeSkip,
+            FromUserId = userId,
+            CurrencyTypeId = premiumId,
+            Amount = cost,
+            CreatedAt = now,
+        });
+
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return ServiceResult.Conflict("Operação concorrente — tente de novo.");
+        }
+        return ServiceResult.Success(new { paid = cost, readyAt = slot.ReadyAt });
     }
 
     public async Task<ServiceResult> CollectAsync(long userId, DateTime now)
@@ -186,9 +227,15 @@ public class BreedingService(VivariumDbContext db, GameService game)
             return ServiceResult.Bad("Tanque e mochila cheios — abra espaço antes de coletar.");
 
         long childSeed = CreatureCollector.NewRandomSeed();
+        // Ancestralidade de cada pai: se ele mesmo é filhote, ParentASeed/BSeed (já carregados
+        // nesta entidade, zero query extra) SÃO os seeds dos avós do lado dele — habilita a
+        // chance de herdar um traço de um avô em vez do pai direto (8.8, 31/07/2026) e evita
+        // reconstruir esse pai com Generate(seed) quando na verdade ele é um filhote.
+        var ancestryA = new TraitGenerator.ParentAncestry(parentA.Seed, parentA.ParentASeed, parentA.ParentBSeed);
+        var ancestryB = new TraitGenerator.ParentAncestry(parentB.Seed, parentB.ParentASeed, parentB.ParentBSeed);
         var traits = TraitGenerator.BreedTraits(
-            childSeed, parentA.Seed, parentB.Seed, TraitConfigV1.Version,
-            BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
+            childSeed, ancestryA, ancestryB, TraitConfigV1.Version,
+            BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance);
 
         var child = new CreatureInstance
         {
@@ -204,6 +251,13 @@ public class BreedingService(VivariumDbContext db, GameService game)
             // sem precisar de join — os seeds dos pais nunca mudam.
             ParentASeed = parentA.Seed,
             ParentBSeed = parentB.Seed,
+            // Idem, uma geração mais fundo: se ESTE filhote virar pai de outro cruzamento no
+            // futuro, esses seeds são os avós daquele filho — sem eles, `BreedTraits` teria que
+            // reconstruir este filhote com Generate(seed), o mesmo bug corrigido aqui.
+            ParentAGrandparentASeed = parentA.ParentASeed,
+            ParentAGrandparentBSeed = parentA.ParentBSeed,
+            ParentBGrandparentASeed = parentB.ParentASeed,
+            ParentBGrandparentBSeed = parentB.ParentBSeed,
             CreatedAt = now,
         };
         db.CreatureInstances.Add(child);

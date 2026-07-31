@@ -1,7 +1,7 @@
 // Rótulos e formatação humana (PT-BR) dos traits e do breakdown de raridade.
 import { PT } from "./fishRenderer.js";
 
-export const PART_PT = { tail: "Cauda", dorsal: "Nadadeira dorsal", pectoral: "Barbatana peitoral" };
+export const PART_PT = { tail: "Cauda", dorsal: "Nadadeira dorsal", pectoral: "Nadadeira peitoral" };
 
 export const RARITY_RANGES = ["menos de 5.4", "5.4 – 7.5", "7.5 – 9.8", "9.8 – 14.0", "14.0 ou mais"];
 

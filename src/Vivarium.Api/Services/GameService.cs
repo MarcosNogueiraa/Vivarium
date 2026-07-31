@@ -279,6 +279,101 @@ public class GameService(VivariumDbContext db)
         return ServiceResult.Success(new { online = true, maintenanceLevel = habitat.MaintenanceLevel });
     }
 
+    /// <summary>Resgatável 1x por dia (calendário UTC) — sem streak, sem penalidade por ausência (CLAUDE.md 8.10).</summary>
+    private static bool CanClaimDailyReward(User user, DateTime now)
+        => user.LastDailyRewardAt is not { } last || now.Date > last.Date;
+
+    public async Task<ServiceResult> GetDailyRewardStatusAsync(long userId, DateTime now)
+    {
+        var user = await db.Users.FindAsync(userId);
+        if (user is null)
+            return ServiceResult.NotFound("Usuário não encontrado");
+
+        bool canClaim = CanClaimDailyReward(user, now);
+        DateTime? nextAvailable = canClaim ? null : user.LastDailyRewardAt!.Value.Date.AddDays(1);
+        return ServiceResult.Success(new DailyRewardStatusDto(canClaim, EconomyDefaults.DailyRewardSoft, nextAvailable));
+    }
+
+    public async Task<ServiceResult> ClaimDailyRewardAsync(long userId, DateTime now)
+    {
+        var user = await db.Users.FindAsync(userId);
+        if (user is null)
+            return ServiceResult.NotFound("Usuário não encontrado");
+        if (!CanClaimDailyReward(user, now))
+            return ServiceResult.Bad("Recompensa diária já resgatada hoje.");
+
+        int softId = await db.CurrencyTypes.Where(c => c.Code == "SOFT").Select(c => c.Id).FirstAsync();
+        var wallet = await db.WalletBalances.FirstAsync(w => w.UserId == userId && w.CurrencyTypeId == softId);
+        wallet.Amount += EconomyDefaults.DailyRewardSoft;
+        user.LastDailyRewardAt = now;
+
+        db.TransactionLogs.Add(new TransactionLog
+        {
+            Type = TransactionType.DailyReward,
+            ToUserId = userId,
+            CurrencyTypeId = softId,
+            Amount = EconomyDefaults.DailyRewardSoft,
+            CreatedAt = now,
+        });
+
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return ServiceResult.Conflict("Resgate concorrente — tente de novo.");
+        }
+        return ServiceResult.Success(new { amount = EconomyDefaults.DailyRewardSoft, wallet = wallet.Amount });
+    }
+
+    /// <summary>
+    /// Pula a espera de um item da fila pagando premium (8.11) — a única forma de acelerar
+    /// a geração, que por design é lenta. Não muda o resultado (seed sorteado na coleta
+    /// continua igual), só a hora em que fica pronto.
+    /// </summary>
+    public async Task<ServiceResult> RushQueueItemAsync(long userId, long queueItemId, DateTime now)
+    {
+        var habitat = await FindHabitatAsync(userId);
+        if (habitat is null)
+            return ServiceResult.NotFound("Habitat não encontrado");
+
+        var item = await db.GenerationQueueItems.FirstOrDefaultAsync(q =>
+            q.Id == queueItemId && q.HabitatId == habitat.Id && q.Status == QueueItemStatus.Pending);
+        if (item is null)
+            return ServiceResult.NotFound("Item não encontrado");
+        if (item.ReadyAt <= now)
+            return ServiceResult.Bad("Já está pronto — não precisa acelerar");
+
+        decimal cost = RushCalculator.QueueRushCost((decimal)(item.ReadyAt - now).TotalMinutes);
+        int premiumId = await db.CurrencyTypes.Where(c => c.Code == "PREMIUM").Select(c => c.Id).FirstAsync();
+        var wallet = await db.WalletBalances.FirstAsync(w => w.UserId == userId && w.CurrencyTypeId == premiumId);
+        if (wallet.Amount < cost)
+            return ServiceResult.Bad("Saldo de moeda premium insuficiente");
+
+        wallet.Amount -= cost;
+        item.ReadyAt = now;
+
+        db.TransactionLogs.Add(new TransactionLog
+        {
+            Type = TransactionType.TimeSkip,
+            FromUserId = userId,
+            CurrencyTypeId = premiumId,
+            Amount = cost,
+            CreatedAt = now,
+        });
+
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return ServiceResult.Conflict("Operação concorrente — tente de novo.");
+        }
+        return ServiceResult.Success(new { paid = cost, readyAt = item.ReadyAt });
+    }
+
     public async Task<ServiceResult> GetTankAsync(long userId, DateTime now)
     {
         var habitat = await FindHabitatAsync(userId);
@@ -297,11 +392,15 @@ public class GameService(VivariumDbContext db)
             habitat = (await FindHabitatAsync(userId))!;
         }
 
-        var queue = await db.GenerationQueueItems
+        // Materializa antes de mapear: RushCalculator não traduz pra SQL.
+        var queueRaw = await db.GenerationQueueItems
             .Where(q => q.HabitatId == habitat.Id && q.Status == QueueItemStatus.Pending)
             .OrderBy(q => q.ReadyAt)
-            .Select(q => new QueueItemDto(q.Id, q.ReadyAt, q.ReadyAt <= now, q.IsSick))
             .ToListAsync();
+        var queue = queueRaw.Select(q => new QueueItemDto(
+            q.Id, q.ReadyAt, q.ReadyAt <= now, q.IsSick,
+            q.ReadyAt <= now ? 0m : RushCalculator.QueueRushCost((decimal)(q.ReadyAt - now).TotalMinutes)))
+            .ToList();
         var creatures = (await db.CreatureInstances
             .Where(c => c.HabitatId == habitat.Id)
             .ToListAsync())

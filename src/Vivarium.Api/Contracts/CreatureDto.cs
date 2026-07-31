@@ -8,9 +8,13 @@ namespace Vivarium.Api.Contracts;
 /// </summary>
 public record CreatureDto(
     long Id, int SpeciesId, string Seed, int TraitConfigVersion, decimal RarityScore, DateTime CreatedAt, bool IsBred,
-    string? ParentASeed, string? ParentBSeed, int BreedCount)
+    string? ParentASeed, string? ParentBSeed, int BreedCount,
+    string? ParentAGrandparentASeed, string? ParentAGrandparentBSeed,
+    string? ParentBGrandparentASeed, string? ParentBGrandparentBSeed)
 {
     public static CreatureDto From(CreatureInstance c) =>
         new(c.Id, c.SpeciesId, c.Seed.ToString(), c.TraitConfigVersion, c.RarityScore, c.CreatedAt, c.ParentAId.HasValue,
-            c.ParentASeed?.ToString(), c.ParentBSeed?.ToString(), c.BreedCount);
+            c.ParentASeed?.ToString(), c.ParentBSeed?.ToString(), c.BreedCount,
+            c.ParentAGrandparentASeed?.ToString(), c.ParentAGrandparentBSeed?.ToString(),
+            c.ParentBGrandparentASeed?.ToString(), c.ParentBGrandparentBSeed?.ToString());
 }

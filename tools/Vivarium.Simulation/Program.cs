@@ -31,6 +31,12 @@ if (args.Length >= 1 && args[0] == "breed")
     return;
 }
 
+if (args.Length >= 1 && args[0] == "simulate")
+{
+    SimulateReport();
+    return;
+}
+
 if (args.Length >= 1 && args[0] == "breeddump")
 {
     int count = args.Length > 1 && int.TryParse(args[1], out var bc) ? bc : 500;
@@ -40,6 +46,28 @@ if (args.Length >= 1 && args[0] == "breeddump")
         long parentBSeed = -(i * 104729L + 3);
         long childSeed = i * 131071L + 17;
         BreedDumpLine(childSeed, parentASeed, parentBSeed);
+    }
+    return;
+}
+
+if (args.Length >= 1 && args[0] == "grandparentdump")
+{
+    // Crosscheck do mecanismo de avós (31/07/2026) contra o port JS — mesmo princípio do
+    // breeddump: seeds determinísticos, alguns pares COM ancestralidade de avós (pai é
+    // filhote), outros sem (pai fresco), pra cobrir os dois ramos de EffectiveParentTraits.
+    int count = args.Length > 1 && int.TryParse(args[1], out var gc) ? gc : 500;
+    for (int i = 1; i <= count; i++)
+    {
+        long parentASeed = i * 7919L - i;
+        long parentBSeed = -(i * 104729L + 3);
+        long childSeed = i * 131071L + 17;
+        // Metade dos casos com avós no lado A, outra metade também no lado B — cobre pai
+        // fresco/pai-filhote nas duas posições.
+        long? gpAA = i % 2 == 0 ? i * 271L + 11 : null;
+        long? gpAB = i % 2 == 0 ? -(i * 379L + 13) : null;
+        long? gpBA = i % 3 == 0 ? i * 431L + 17 : null;
+        long? gpBB = i % 3 == 0 ? -(i * 521L + 19) : null;
+        GrandparentDumpLine(childSeed, parentASeed, gpAA, gpAB, parentBSeed, gpBA, gpBB);
     }
     return;
 }
@@ -173,6 +201,34 @@ static void BreedDumpLine(long childSeed, long parentASeed, long parentBSeed)
     Console.WriteLine(sb.ToString());
 }
 
+static void GrandparentDumpLine(long childSeed, long parentASeed, long? gpAA, long? gpAB, long parentBSeed, long? gpBA, long? gpBB)
+{
+    var ancestryA = new TraitGenerator.ParentAncestry(parentASeed, gpAA, gpAB);
+    var ancestryB = new TraitGenerator.ParentAncestry(parentBSeed, gpBA, gpBB);
+    var t = TraitGenerator.BreedTraits(childSeed, ancestryA, ancestryB, TraitConfigV1.Version,
+        BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance);
+    var inv = CultureInfo.InvariantCulture;
+    var sb = new System.Text.StringBuilder();
+    sb.Append(childSeed).Append(';').Append(parentASeed).Append(';').Append(gpAA?.ToString() ?? "-").Append(';').Append(gpAB?.ToString() ?? "-")
+      .Append(';').Append(parentBSeed).Append(';').Append(gpBA?.ToString() ?? "-").Append(';').Append(gpBB?.ToString() ?? "-")
+      .Append(';').Append(t.ShimmerTier)
+      .Append(';').Append(t.ShimmerColor?.ToString() ?? "-")
+      .Append(';').Append(t.ShimmerOpacity.ToString("F6", inv));
+    foreach (var p in new[] { t.Tail, t.Dorsal, t.Pectoral })
+    {
+        sb.Append(';').Append(p.Color).Append(';').Append(p.Pattern)
+          .Append(';').Append(p.PatternColor?.ToString() ?? "-")
+          .Append(';').Append(p.PatternSize?.ToString("F6", inv) ?? "-")
+          .Append(';').Append(p.PatternOpacity?.ToString("F6", inv) ?? "-");
+    }
+    sb.Append(';').Append(t.Movement.TailSpeed.ToString("F6", inv))
+      .Append(';').Append(t.Movement.TailAmplitude.ToString("F6", inv))
+      .Append(';').Append(t.Movement.FinSpeed.ToString("F6", inv))
+      .Append(';').Append(t.Movement.FinAmplitude.ToString("F6", inv));
+    sb.Append(';').Append(t.RarityScore.ToString("F6", inv));
+    Console.WriteLine(sb.ToString());
+}
+
 static void EconomyReport()
 {
     var cfg = TickConfig.Default;
@@ -278,6 +334,8 @@ static void BreedReport()
     ReportGestationPair("2 lendários máx (18.9+18.9)", 18.9m, 18.9m);
 
     ReportTierBiasScenarios();
+    ReportPartColorBiasScenarios();
+    ReportGrandparentReachEffect();
     ReportCostSustainability();
     ReportDeathRiskCurve();
 }
@@ -357,6 +415,258 @@ static void ReportTierBiasScenarios()
     Console.WriteLine($"  Lendário + Raro       -> filho Lendário: {PctLegendary(legendarySeed, rareSeed, 2):0.0}%");
     Console.WriteLine($"  Lendário + comum      -> filho Lendário: {PctLegendary(legendarySeed, commonSeed, 3):0.0}%  <- deve ficar bem abaixo do primeiro (anti-lavagem)");
     Console.WriteLine($"  2 pais comuns         -> filho Lendário: {PctLegendary(commonSeed, commonSeed, 4):0.0}%  (baseline, deve ficar perto de 0.2%)");
+}
+
+/// <summary>
+/// Simula um jogador sintético gastando em filtro + upgrade de tanque + breeding AO
+/// MESMO TEMPO por vários dias, ao contrário de `economy`/`breed` que checam cada sink
+/// isoladamente. Objetivo: ver se a economia trava (fica sem dinheiro pra nada) ou infla
+/// (dinheiro sobra sem sink que absorva) quando os três competem pelo mesmo saldo.
+///
+/// Granularidade de 1 dia por tick (não minuto a minuto como o backend real): a água pode
+/// bater 0 dentro do dia antes da compra de filtro "acontecer" no fim do dia — é uma
+/// aproximação propositalmente conservadora (pior caso) da manutenção real, não uma réplica
+/// exata dos números do backend. O que importa aqui é a tendência ao longo do tempo, não o
+/// valor exato em um dia específico.
+/// </summary>
+static void SimulateReport()
+{
+    Console.WriteLine("SIMULAÇÃO DE TRAJETÓRIA — filtro + upgrade de tanque + breeding competindo pelo mesmo saldo\n");
+    foreach (var (name, hoursOnline) in new[] { ("casual 2h/dia", 2.0), ("ativo 8h/dia", 8.0), ("dedicado 16h/dia", 16.0) })
+        RunPlayerSimulation(name, hoursOnline, days: 120, seed: 20260730);
+}
+
+static void RunPlayerSimulation(string label, double hoursOnlinePerDay, int days, int seed)
+{
+    // Espelha os preços reais de ItemService/SeedItemDefinitions — manter em sincronia.
+    const decimal FilterCost = 20m;
+    const decimal AutoFilterCost = 500m;
+    const decimal TankUpgradeBase = 50m;
+    decimal TankUpgradePrice(int capacity) => Math.Ceiling(TankUpgradeBase * (decimal)Math.Pow(1.5, capacity - HabitatDefaults.Capacity));
+
+    var cfg = TickConfig.Default;
+    var rng = new Random(seed);
+
+    decimal wallet = EconomyDefaults.StartingSoftBalance;
+    int capacity = HabitatDefaults.Capacity;
+    decimal maintenance = HabitatDefaults.MaintenanceLevel;
+    decimal progress = 0m;
+    bool hasAutoFilter = false;
+
+    var tank = new List<(long Seed, decimal Score, PartColor TailColor, int BreedCount)>();
+    int backpackOverflow = 0;
+
+    decimal spentFilter = 0, spentUpgrade = 0, spentBreeding = 0, totalEarned = 0;
+    int filtersBought = 0, upgradesBought = 0, breedingsStarted = 0, breedingDeaths = 0, legendariesFound = 0, fishCollected = 0;
+    var walletAtCheckpoint = new Dictionary<int, decimal>();
+
+    (int ReadyDay, long SeedA, long SeedB, decimal ScoreA, decimal ScoreB, int BreedCountA, int BreedCountB)? gestation = null;
+
+    // Tick de HORA em hora (não de dia em dia): com tick diário, um perfil bem ativo
+    // (ex: dedicado 16h/dia) acumula progresso pra dezenas de peixes num tick só, mas o
+    // QueueCap (5) descarta esse excedente (`Fila cheia não acumula estoque`, HabitatTicker) —
+    // um artefato da granularidade grossa, não um limite real (o backend real tica a cada
+    // heartbeat/refresh, muito mais frequente). Tick por hora resolve isso mantendo o cálculo
+    // exatamente igual ao backend (mesma HabitatTicker.ProcessTick/IncomeCalculator.Accrue).
+    var day0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    for (int hour = 0; hour < days * 24; hour++)
+    {
+        int day = hour / 24;
+        bool onlineThisHour = (hour % 24) < hoursOnlinePerDay;
+
+        var hourStart = day0.AddHours(hour);
+        var hourEnd = hourStart.AddHours(1);
+        DateTime? lastHeartbeat = onlineThisHour ? hourEnd : null; // fresco = online; sem heartbeat = offline
+
+        var state = new HabitatTickState(
+            LastTickAtUtc: hourStart, LastHeartbeatAtUtc: lastHeartbeat,
+            MaintenanceLevel: maintenance, GenerationProgressMinutes: progress,
+            GenerationIntervalMinutes: HabitatDefaults.GenerationIntervalMinutes,
+            OnlineGenerationRate: HabitatDefaults.OnlineGenerationRate,
+            OfflineGenerationRate: HabitatDefaults.OfflineGenerationRate,
+            QueueCap: HabitatDefaults.QueueCap, PendingQueueCount: 0, // atento: coleta tudo na mesma hora
+            HasAutoFilter: hasAutoFilter, ActiveFishCount: tank.Count);
+
+        var outcome = HabitatTicker.ProcessTick(state, hourEnd, rng, cfg);
+        progress = outcome.GenerationProgressMinutes;
+
+        var fishIncome = tank.Select(f => new FishIncome(f.Score, f.TailColor)).ToList();
+        decimal earned = IncomeCalculator.Accrue(fishIncome, outcome.MaintenanceAtStart, outcome.MaintenanceLevel,
+            outcome.OnlineMinutes, outcome.OfflineMinutes,
+            HabitatDefaults.OnlineGenerationRate, HabitatDefaults.OfflineGenerationRate, cfg);
+        wallet += earned;
+        totalEarned += earned;
+        maintenance = outcome.MaintenanceLevel;
+
+        for (int i = 0; i < outcome.SpawnCount; i++)
+        {
+            var collected = CreatureCollector.Collect(outcome.SpawnSickFlags[i], () => rng.NextInt64());
+            fishCollected++;
+            if (collected.RarityScore >= 14.0m) legendariesFound++;
+            var traits = TraitGenerator.Generate(collected.Seed, collected.TraitConfigVersion);
+            if (tank.Count < capacity)
+                tank.Add((collected.Seed, collected.RarityScore, traits.Tail.Color, 0));
+            else
+                backpackOverflow++;
+        }
+
+        // Resolve gestação pronta (antes de decidir novas compras/breeding do dia)
+        if (gestation is { } g && day >= g.ReadyDay)
+        {
+            bool aDied = rng.NextDouble() < BreedingCalculator.DeathChance(g.BreedCountA);
+            bool bDied = rng.NextDouble() < BreedingCalculator.DeathChance(g.BreedCountB);
+            breedingDeaths += (aDied ? 1 : 0) + (bDied ? 1 : 0);
+
+            void ReturnParent(long parentSeed, decimal score, int breedCountBefore)
+            {
+                var t = TraitGenerator.Generate(parentSeed);
+                if (tank.Count < capacity) tank.Add((parentSeed, score, t.Tail.Color, breedCountBefore + 1));
+                else backpackOverflow++;
+            }
+            if (!aDied) ReturnParent(g.SeedA, g.ScoreA, g.BreedCountA);
+            if (!bDied) ReturnParent(g.SeedB, g.ScoreB, g.BreedCountB);
+
+            long childSeed = rng.NextInt64();
+            var child = TraitGenerator.BreedTraits(childSeed, g.SeedA, g.SeedB, TraitConfigV1.Version,
+                BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
+            fishCollected++;
+            if ((decimal)child.RarityScore >= 14.0m) legendariesFound++;
+            if (tank.Count < capacity) tank.Add((childSeed, (decimal)child.RarityScore, child.Tail.Color, 0));
+            else backpackOverflow++;
+
+            gestation = null;
+        }
+
+        // Upkeep: filtro quando a água está baixa (auto-filtro só reduz a taxa de degradação
+        // pela metade, não substitui o filtro manual — sem isso a água ainda zera e trava a
+        // renda pra sempre, já que WaterFactor(0)=0. Bug real que essa simulação revelou.)
+        if (maintenance < cfg.LowMaintenanceThreshold && wallet >= FilterCost)
+        {
+            wallet -= FilterCost; spentFilter += FilterCost; filtersBought++;
+            maintenance = 100m;
+        }
+
+        // Decisões de menor frequência (upgrade/breeding/checkpoint): uma vez por dia, no
+        // fim do dia — evita comprar upgrade várias vezes ou reiniciar breeding a cada hora.
+        if ((hour % 24) == 23)
+        {
+            if (Environment.GetEnvironmentVariable("SIM_DEBUG") == "1" && label.StartsWith("casual"))
+                Console.Error.WriteLine($"dia {day + 1,3}: wallet={wallet,8:0.00} tank={tank.Count,2} cap={capacity,2} overflow={backpackOverflow,5} maint={maintenance,6:0.0} gestation={(gestation is null ? "-" : "ativa")}");
+            // Auto-filtro uma vez, quando sobra uma folga confortável (evita zerar o caixa por isso)
+            if (!hasAutoFilter && wallet >= AutoFilterCost * 1.5m)
+            {
+                wallet -= AutoFilterCost; spentUpgrade += AutoFilterCost; hasAutoFilter = true;
+            }
+
+            // Upgrade de tanque quando peixes estão transbordando pra mochila e dá pra pagar
+            if (backpackOverflow > 0)
+            {
+                decimal price = TankUpgradePrice(capacity);
+                if (wallet >= price)
+                {
+                    wallet -= price; spentUpgrade += price; upgradesBought++; capacity++;
+                }
+            }
+
+            // Breeding: cruza os 2 melhores do tanque quando não há gestação ativa e dá pra pagar
+            if (gestation is null && tank.Count >= 2)
+            {
+                var pair = tank.OrderByDescending(f => f.Score).Take(2).ToList();
+                decimal cost = BreedingCalculator.CostSoft(pair[0].Score, pair[1].Score);
+                if (wallet >= cost)
+                {
+                    wallet -= cost; spentBreeding += cost; breedingsStarted++;
+                    tank.Remove(pair[0]); tank.Remove(pair[1]);
+                    double hours = BreedingCalculator.GestationHours(pair[0].Score, pair[1].Score);
+                    int readyDay = day + Math.Max(1, (int)Math.Ceiling(hours / 24.0));
+                    gestation = (readyDay, pair[0].Seed, pair[1].Seed, pair[0].Score, pair[1].Score, pair[0].BreedCount, pair[1].BreedCount);
+                }
+            }
+
+            if ((day + 1) % 10 == 0) walletAtCheckpoint[day + 1] = wallet;
+        }
+    }
+
+    Console.WriteLine($"{label} — {days} dias, tanque começa em {HabitatDefaults.Capacity}, cap {capacity} peixe(s) ao final:");
+    Console.WriteLine($"  Carteira final: {wallet,10:0} soft   (ganho total {totalEarned,10:0})");
+    foreach (var (d, w) in walletAtCheckpoint.OrderBy(kv => kv.Key))
+        Console.WriteLine($"    saldo no dia {d,3}: {w,10:0}");
+    Console.WriteLine($"  Peixes coletados: {fishCollected} ({legendariesFound} lendário(s)) — no tanque: {tank.Count}, na mochila (transbordo): {backpackOverflow}");
+    Console.WriteLine($"  Filtros comprados: {filtersBought} ({spentFilter:0} soft){(hasAutoFilter ? " + auto-filtro" : "")}");
+    Console.WriteLine($"  Upgrades de tanque: {upgradesBought} ({(spentUpgrade - (hasAutoFilter ? AutoFilterCost : 0)):0} soft, capacidade {HabitatDefaults.Capacity}->{capacity})");
+    Console.WriteLine($"  Gestações iniciadas: {breedingsStarted} ({spentBreeding:0} soft) — mortes de pais: {breedingDeaths}");
+    Console.WriteLine();
+}
+
+/// <summary>
+/// Mesma checagem anti-lavagem de <see cref="ReportTierBiasScenarios"/>, mas pra cor de
+/// parte (31/07/2026: viés estendido de "só shimmer" pra também cor/padrão — CLAUDE.md 8.8).
+/// Branco puro (1%, a cor mais rara) vs. Laranja (22%, a mais comum) é o par mais extremo
+/// possível — se mesmo esse não virar quase-garantia, os demais pares (menos extremos)
+/// também não viram.
+/// </summary>
+static void ReportPartColorBiasScenarios()
+{
+    const int n = 30_000;
+    long whiteSeed = FindSeedWithTailColor(PartColor.PureWhite, 5_000);
+    long orangeSeed = FindSeedWithTailColor(PartColor.Orange, 20);
+
+    double PctWhite(long seedA, long seedB, int seed)
+    {
+        var rng = new Random(seed);
+        int count = 0;
+        for (int i = 0; i < n; i++)
+        {
+            long childSeed = rng.NextInt64();
+            var child = TraitGenerator.BreedTraits(childSeed, seedA, seedB, TraitConfigV1.Version,
+                BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
+            if (child.Tail.Color == PartColor.PureWhite) count++;
+        }
+        return count / (double)n * 100;
+    }
+
+    Console.WriteLine($"\nVIÉS DE RARIDADE NA COR DA CAUDA (mesmo RarityBiasStrength, agora também em cor/padrão):");
+    Console.WriteLine($"  2 pais Branco puro    -> filho Branco puro: {PctWhite(whiteSeed, whiteSeed, 5):0.0}%");
+    Console.WriteLine($"  Branco puro + Laranja -> filho Branco puro: {PctWhite(whiteSeed, orangeSeed, 6):0.0}%  <- deve ficar bem abaixo do primeiro (anti-lavagem)");
+    Console.WriteLine($"  2 pais Laranja        -> filho Branco puro: {PctWhite(orangeSeed, orangeSeed, 7):0.0}%  (baseline, deve ficar perto de 0% — mutação só)");
+}
+
+static long FindSeedWithTailColor(PartColor color, int searchLimit)
+{
+    for (long s = 1; s <= searchLimit; s++)
+        if (TraitGenerator.Generate(s).Tail.Color == color) return s;
+    throw new InvalidOperationException($"Nenhum seed com cor de cauda {color} nos primeiros {searchLimit}");
+}
+
+/// <summary>
+/// Mede o efeito prático do "reach-back" de avós (31/07/2026, CLAUDE.md 8.8) direto no
+/// mecanismo interno (`EffectiveParentTraits`), não na saída ponta-a-ponta — o valor "próprio"
+/// de um pai bred já reflete os mesmos avós que o reach alcançaria, então isolar o sinal
+/// observando só a cor final do filhote é ambíguo (mesma lição dos testes automatizados).
+/// </summary>
+static void ReportGrandparentReachEffect()
+{
+    var own = TraitGenerator.Generate(FindSeedWithTailColor(PartColor.Orange, 20));
+    var grandparent1 = TraitGenerator.Generate(FindSeedWithTailColor(PartColor.PureWhite, 5_000));
+    var grandparent2 = TraitGenerator.Generate(FindSeedWithTailColor(PartColor.Blue, 20));
+    const int n = 30_000;
+
+    int Reached(double reachChance, int seed)
+    {
+        var rng = new Random(seed);
+        int count = 0;
+        for (int i = 0; i < n; i++)
+        {
+            long childSeed = rng.NextInt64();
+            var result = TraitGenerator.EffectiveParentTraits(childSeed, "tail", own, grandparent1, grandparent2, reachChance);
+            if (!result.Equals(own)) count++;
+        }
+        return count;
+    }
+
+    Console.WriteLine($"\nCHANCE DE HERDAR TRAÇO DE UM AVÔ (GrandparentReachChance = {BreedingDefaults.GrandparentReachChance:0.00}):");
+    Console.WriteLine($"  Reach observado (produção): {Reached(BreedingDefaults.GrandparentReachChance, 1) / (double)n * 100:0.0}%  (esperado ~{BreedingDefaults.GrandparentReachChance * 100:0.0}%)");
+    Console.WriteLine($"  Reach observado (0.0, controle): {Reached(0.0, 2) / (double)n * 100:0.0}%  (deve ficar em 0%)");
 }
 
 static long FindSeedWithTier(ShimmerTier tier, int searchLimit)

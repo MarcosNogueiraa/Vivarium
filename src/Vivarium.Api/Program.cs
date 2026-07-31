@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -49,9 +50,25 @@ var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get
 builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
     policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod()));
 
+// Atrás de proxy/CDN (Cloudflare → Oracle) o IP real do cliente só chega via
+// X-Forwarded-For/-Proto; sem isso o rate limit por IP abaixo vira global (todo
+// mundo atrás do mesmo proxy cai no mesmo balde). Desligado por padrão (dev/testes
+// não têm proxy); ligar com ForwardedHeaders__Enabled=true no deploy. KnownNetworks/
+// KnownProxies limpos porque o proxy (Cloudflare) não tem IP fixo conhecido — seguro
+// desde que a origem só seja alcançável através dele (bloquear acesso direto no host).
+bool forwardedHeadersEnabled = builder.Configuration.GetValue("ForwardedHeaders:Enabled", false);
+if (forwardedHeadersEnabled)
+{
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        options.KnownIPNetworks.Clear();
+        options.KnownProxies.Clear();
+    });
+}
+
 // Rate limiting: global (folgado, pro polling do jogo) por usuário/IP + política
-// "auth" apertada por IP contra brute-force de login. NB: atrás de proxy
-// (Cloudflare/Oracle) o IP real exige UseForwardedHeaders — configurar no deploy.
+// "auth" apertada por IP contra brute-force de login.
 static string ClientKey(HttpContext ctx) =>
     ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
     ?? ctx.User.FindFirst("sub")?.Value
@@ -72,6 +89,7 @@ builder.Services.AddRateLimiter(options =>
 
 var app = builder.Build();
 
+if (forwardedHeadersEnabled) app.UseForwardedHeaders();
 app.UseRateLimiter();
 app.UseCors();
 app.UseAuthentication();

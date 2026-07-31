@@ -207,6 +207,164 @@ public class BreedTraitsTests
             $"lendário+comum ({legendaryPlusCommon:P1}) deveria ficar abaixo de 2-lendários ({bothLegendary:P1})");
     }
 
+    [Fact]
+    public void ViesDeRaridade_TambemFavoreceCorDePartesMaisRaras()
+    {
+        // 31/07/2026: viés estendido de "só shimmer" pra também cor/padrão de parte —
+        // corrige filhotes regredindo perto do piso da população mesmo vindo de pais
+        // decentes (usuário cruzou incomum+raro e saiu um filhote score 2.8/Comum).
+        // Branco puro (P=1%) vs Laranja (P=22%, mais comum) — sem mutação, a herança
+        // deve inclinar pro branco mais da metade das vezes, batendo com a fórmula fechada.
+        long whiteParent = FindSeedWithTailColor(PartColor.PureWhite);
+        long orangeParent = FindSeedWithTailColor(PartColor.Orange, 50);
+        const double rarityBias = 0.6;
+        const int n = 30_000;
+
+        int whiteCount = 0;
+        for (long childSeed = 1; childSeed <= n; childSeed++)
+        {
+            var color = TraitGenerator.BreedTraits(childSeed, whiteParent, orangeParent, TraitConfigV1.Version, 0.0, rarityBias).Tail.Color;
+            if (color == PartColor.PureWhite) whiteCount++;
+        }
+
+        double expected = WeightedTable.BiasedInheritProbability(0.01, 0.22, rarityBias);
+        Assert.True(expected > 0.5, "sanity da fórmula: deveria favorecer o mais raro");
+        Assert.InRange(whiteCount / (double)n, expected - 0.03, expected + 0.03);
+    }
+
+    [Fact]
+    public void ViesDeCor_NaoPermiteLavagemComParceiroComum()
+    {
+        // Mesma checagem anti-exploit de ViesDeRaridade_NaoPermiteLavagemDeLendarioComParceiroComum,
+        // agora pra cor de parte: branco puro (a cor mais rara, 1%) cruzado com laranja
+        // (a mais comum, 22%) não pode ser um atalho confiável de "lavagem".
+        long whiteParent = FindSeedWithTailColor(PartColor.PureWhite);
+        long orangeParent = FindSeedWithTailColor(PartColor.Orange, 50);
+        const int n = 20_000;
+
+        double PctWhite(long parentA, long parentB, long seedOffset)
+        {
+            int count = 0;
+            for (long childSeed = 1; childSeed <= n; childSeed++)
+            {
+                var color = TraitGenerator.BreedTraits(childSeed + seedOffset, parentA, parentB, TraitConfigV1.Version,
+                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength).Tail.Color;
+                if (color == PartColor.PureWhite) count++;
+            }
+            return count / (double)n;
+        }
+
+        double bothWhite = PctWhite(whiteParent, whiteParent, 0);
+        double whitePlusOrange = PctWhite(whiteParent, orangeParent, 10_000_000);
+
+        Assert.True(bothWhite > 0.5, $"2 pais brancos deveria manter a cor na maioria das vezes, saiu {bothWhite:P1}");
+        Assert.True(whitePlusOrange < 0.70, $"branco+laranja ({whitePlusOrange:P1}) deveria ficar abaixo de 70% — risco de 'lavagem'");
+        Assert.True(whitePlusOrange < bothWhite, $"branco+laranja ({whitePlusOrange:P1}) deveria ficar abaixo de 2-brancos ({bothWhite:P1})");
+    }
+
+    [Fact]
+    public void RarityScore_NuncaFicaAbaixoDoPisoDaPopulacao()
+    {
+        // Gap de cobertura apontado numa investigação de bug (31/07/2026): não havia
+        // nenhum teste de limite inferior pro score de filhote. O piso teórico da
+        // população (CLAUDE.md 5.1: ~2.6-2.73, validado por simulação de 100k seeds)
+        // vale igualmente pra filhotes, já que a fórmula usa as mesmas tabelas de peso
+        // — nenhum termo pode ficar negativo (-log10(P) com P<=1 é sempre >= 0).
+        const int n = 20_000;
+        double minScore = double.MaxValue;
+        for (long childSeed = 1; childSeed <= n; childSeed++)
+        {
+            long parentA = childSeed * 6997 + 1;
+            long parentB = childSeed * 6997 + 2;
+            var child = TraitGenerator.BreedTraits(childSeed, parentA, parentB, TraitConfigV1.Version,
+                BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
+            minScore = Math.Min(minScore, child.RarityScore);
+        }
+        Assert.True(minScore >= 2.0, $"score mínimo observado {minScore:0.000} abaixo do piso esperado (~2.6) — possível regressão");
+    }
+
+    [Fact]
+    public void SemAncestralidade_ComportamentoIdenticoAoOverloadAntigo()
+    {
+        // A sobrecarga de conveniência (3 seeds) e a nova (com ParentAncestry vazia) devem
+        // produzir exatamente o mesmo resultado — garante que nenhum código existente
+        // (Vivarium.Simulation, testes acima) precisou mudar pra continuar correto.
+        for (long childSeed = 1; childSeed <= 200; childSeed++)
+        {
+            var viaOverloadAntigo = TraitGenerator.BreedTraits(childSeed, ParentASeed, ParentBSeed, TraitConfigV1.Version, 0.08, 0.15);
+            var viaNovoExplicito = TraitGenerator.BreedTraits(childSeed,
+                new TraitGenerator.ParentAncestry(ParentASeed, null, null),
+                new TraitGenerator.ParentAncestry(ParentBSeed, null, null),
+                TraitConfigV1.Version, 0.08, 0.15, grandparentReachChance: 0.15);
+            Assert.Equal(viaOverloadAntigo, viaNovoExplicito);
+        }
+    }
+
+    // Os 3 testes abaixo testam EffectiveParentTraits/ResolveOwnTraits diretamente (internal,
+    // via InternalsVisibleTo) em vez de tentar isolar o sinal na saída ponta-a-ponta de
+    // BreedTraits — o "próprio" valor de um pai bred já reflete os mesmos avós que o
+    // reach-back alcançaria (são o mesmo par), então distinguir "veio do pai" de "veio do
+    // avô" observando só a cor final do filhote é ambíguo/confuso. Testar a peça certa.
+
+    [Fact]
+    public void EffectiveParentTraits_SemAvos_SempreRetornaOProprio()
+    {
+        var own = TraitGenerator.Generate(1);
+        for (long childSeed = 1; childSeed <= 500; childSeed++)
+            Assert.Equal(own, TraitGenerator.EffectiveParentTraits(childSeed, "salt", own, null, null, reachChance: 1.0));
+    }
+
+    [Fact]
+    public void EffectiveParentTraits_ComAvos_AproximaAChanceDeReach()
+    {
+        var own = TraitGenerator.Generate(1);
+        var grandparent1 = TraitGenerator.Generate(2);
+        var grandparent2 = TraitGenerator.Generate(3);
+        const double reachChance = 0.3;
+        const int n = 20_000;
+
+        int reached = 0;
+        for (long childSeed = 1; childSeed <= n; childSeed++)
+        {
+            var result = TraitGenerator.EffectiveParentTraits(childSeed, "salt", own, grandparent1, grandparent2, reachChance);
+            if (!result.Equals(own)) reached++;
+        }
+        Assert.InRange(reached / (double)n, reachChance - 0.02, reachChance + 0.02);
+    }
+
+    [Fact]
+    public void EffectiveParentTraits_ReachChance0_NuncaAlcancaOAvoMesmoComAvosConhecidos()
+    {
+        var own = TraitGenerator.Generate(1);
+        var grandparent1 = TraitGenerator.Generate(2);
+        var grandparent2 = TraitGenerator.Generate(3);
+        for (long childSeed = 1; childSeed <= 5_000; childSeed++)
+            Assert.Equal(own, TraitGenerator.EffectiveParentTraits(childSeed, "salt", own, grandparent1, grandparent2, reachChance: 0.0));
+    }
+
+    [Fact]
+    public void ResolveOwnTraits_PaiFresco_UsaGenerateDireto()
+    {
+        var ancestry = new TraitGenerator.ParentAncestry(42, null, null);
+        Assert.Equal(TraitGenerator.Generate(42), TraitGenerator.ResolveOwnTraits(ancestry, TraitConfigV1.Version, 0.08, 0.15));
+    }
+
+    [Fact]
+    public void ResolveOwnTraits_PaiFilhote_RecomputaViaAvosNaoGenerateDoProprioSeed()
+    {
+        // O bug corrigido nesta rodada: ANTES, um pai que era filhote virava
+        // Generate(seed) (traits fantasma). Agora, com os avós conhecidos, deve bater com
+        // o que o próprio cruzamento dos avós produziria — nunca com Generate(seed) direto.
+        var ancestry = new TraitGenerator.ParentAncestry(999, 1, 2);
+        var resolved = TraitGenerator.ResolveOwnTraits(ancestry, TraitConfigV1.Version, 0.08, 0.15);
+
+        Assert.Equal(TraitGenerator.BreedTraits(999, 1, 2, TraitConfigV1.Version, 0.08, 0.15), resolved);
+        Assert.NotEqual(TraitGenerator.Generate(999), resolved);
+    }
+
+    private static long FindSeedWithTailColor(PartColor color, int searchLimit = 5_000)
+        => ManySeeds(searchLimit).First(s => TraitGenerator.Generate(s).Tail.Color == color);
+
     private static long FindSeedWithTier(ShimmerTier tier, int searchLimit = 50_000)
         => ManySeeds(searchLimit).First(s => TraitGenerator.Generate(s).ShimmerTier == tier);
 

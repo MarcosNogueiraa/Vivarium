@@ -6,4 +6,7 @@ TestResults/
 .claude/settings.local.json
 node_modules/
 frontend/dist/
+frontend/cypress/screenshots/
+frontend/cypress/videos/
+frontend/cypress/downloads/
 

@@ -6,4 +6,12 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Testa EffectiveParentTraits/ResolveOwnTraits (internal) isoladamente, sem
+         precisar reverter engenharia do comportamento a partir da saída ponta-a-ponta. -->
+    <InternalsVisibleTo Include="Vivarium.Core.Tests" />
+    <!-- Ferramenta de diagnóstico first-party — mede o efeito prático do reach-back de avós. -->
+    <InternalsVisibleTo Include="Vivarium.Simulation" />
+  </ItemGroup>
+
 </Project>

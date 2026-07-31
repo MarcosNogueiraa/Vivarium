@@ -144,6 +144,27 @@ input:focus {
   backdrop-filter: blur(16px) saturate(150%);
   -webkit-backdrop-filter: blur(16px) saturate(150%);
 }
+.sync-banner {
+  position: sticky; top: 0; z-index: 19;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px clamp(16px, 4vw, 40px);
+  background: linear-gradient(180deg, rgba(255, 158, 124, 0.22), rgba(255, 158, 124, 0.1));
+  border-bottom: 1px solid rgba(255, 158, 124, 0.5);
+}
+.sync-banner-icon { font-size: 1.2rem; flex-shrink: 0; animation: sync-banner-blink 2.2s ease-in-out infinite; }
+.sync-banner-text { color: var(--ink); font-size: 0.92rem; flex: 1; min-width: 240px; }
+.sync-banner-text strong { color: var(--coral); }
+.sync-banner-text kbd {
+  display: inline-block; padding: 1px 7px; border-radius: 5px; margin: 0 1px;
+  background: rgba(255, 255, 255, 0.12); border: 1px solid rgba(255, 255, 255, 0.25);
+  font-family: var(--ui); font-size: 0.8rem; font-weight: 700;
+}
+.sync-banner-reload {
+  flex-shrink: 0; border-radius: 999px; padding: 8px 16px; font-weight: 700;
+  background: linear-gradient(180deg, #ffb08c, var(--coral)); color: #3a1408; border: none;
+}
+@keyframes sync-banner-blink { 50% { opacity: 0.4; } }
+
 .brand {
   display: flex; align-items: baseline; gap: 10px;
   font-family: var(--display); font-weight: 600; font-size: 1.5rem; letter-spacing: -0.02em;
@@ -171,6 +192,19 @@ input:focus {
 }
 .wallet-chip .coin { width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ffe6a6, var(--gold-soft)); box-shadow: 0 0 10px rgba(224, 144, 15, 0.5); }
 .wallet-chip small { font-weight: 600; color: var(--gold); opacity: 0.75; }
+
+.daily-reward-btn {
+  border-radius: 999px; padding: 8px 16px; font-weight: 700;
+  background: linear-gradient(180deg, #ffe6a6, var(--gold-soft));
+  color: #3a2a02; border: none;
+  box-shadow: 0 0 0 0 rgba(224, 144, 15, 0.55);
+  animation: daily-reward-pulse 2s ease-in-out infinite;
+}
+.daily-reward-btn:disabled { opacity: 0.6; animation: none; }
+@keyframes daily-reward-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(224, 144, 15, 0.45); }
+  50% { box-shadow: 0 0 0 6px rgba(224, 144, 15, 0); }
+}
 
 .content { flex: 1; width: 100%; max-width: 1160px; margin: 0 auto; padding: clamp(20px, 4vw, 40px); }
 
@@ -290,6 +324,47 @@ input:focus {
 .tank-empty strong { font-family: var(--display); font-size: 1.3rem; font-weight: 500; color: var(--ink); text-shadow: 0 1px 10px rgba(0, 0, 0, 0.6); }
 .tank-empty .muted { color: var(--muted); }
 
+/* ---------- Ferramentas do aquário: cliques, modo aquário, tela cheia, pop-up ---------- */
+.aquarium-wrap { position: relative; display: block; }
+.aquarium.no-click { cursor: default; }
+.aquarium-pip { width: 100%; height: 100%; display: block; }
+.pip-placeholder {
+  position: absolute; inset: 0; z-index: 2;
+  display: grid; place-content: center;
+  color: var(--muted); font-weight: 600; font-size: 0.95rem;
+  background: radial-gradient(ellipse at center, rgba(6, 26, 34, 0.4), rgba(4, 24, 31, 0.85));
+}
+
+.tank-tools {
+  position: absolute; right: 14px; bottom: 14px; z-index: 4;
+  display: flex; gap: 8px;
+  opacity: 0.6; transition: opacity 0.2s ease;
+}
+.tank-stage:hover .tank-tools, .tank-tools:focus-within { opacity: 1; }
+.tool-btn {
+  width: 34px; height: 34px; padding: 0; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.95rem; line-height: 1;
+  background: rgba(6, 26, 34, 0.78); border: 1px solid var(--line);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-sm);
+}
+.tool-btn.active { border-color: var(--glow); color: var(--glow); box-shadow: 0 0 0 1px var(--glow) inset, var(--shadow-sm); }
+
+.tank-stage.aquarium-mode { background: #04181f; }
+.tank-stage.aquarium-mode .aquarium-wrap { display: flex; }
+
+.tank-stage:fullscreen,
+.tank-stage.is-fullscreen {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; height: 100%;
+  background: #000; border-radius: 0; border: none; box-shadow: none;
+}
+.tank-stage:fullscreen .aquarium-wrap,
+.tank-stage.is-fullscreen .aquarium-wrap { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.tank-stage:fullscreen .aquarium,
+.tank-stage.is-fullscreen .aquarium { width: 100%; height: 100%; object-fit: contain; }
+
 /* ---------- Selected fish panel ---------- */
 .selected-bar {
   display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
@@ -309,6 +384,24 @@ input:focus {
 .queue-item .q-label small { color: var(--faint); font-size: 0.72rem; }
 .queue-item.sick { border-color: rgba(255, 107, 94, 0.45); }
 .queue-item.sick .q-label span { color: var(--coral); }
+
+/* Acelerar com moeda premium (8.11) — único jeito de pular a espera */
+.rush-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 8px 12px; border-radius: 999px; font-weight: 700; font-size: 0.85rem;
+  background: rgba(168, 108, 228, 0.14); border: 1px solid rgba(168, 108, 228, 0.4);
+  color: var(--r-epico);
+}
+.rush-btn:hover { background: rgba(168, 108, 228, 0.22); }
+
+.premium-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 15px; border-radius: 999px;
+  background: rgba(168, 108, 228, 0.12);
+  border: 1px solid rgba(168, 108, 228, 0.32);
+  color: var(--r-epico);
+  font-variant-numeric: tabular-nums; font-weight: 700;
+}
 
 /* ---------- Cards (mercado / loja) ---------- */
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 18px; }
@@ -491,6 +584,7 @@ input:focus {
   animation: modal-in 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.15);
 }
 .modal.narrow { width: min(420px, 96vw); }
+.modal.wide { width: min(720px, 96vw); }
 @keyframes modal-in { from { opacity: 0; transform: translateY(14px) scale(0.98); } }
 .modal-close {
   position: absolute; top: 12px; right: 12px; z-index: 2;
@@ -531,6 +625,30 @@ input:focus {
 .bd-total b { color: var(--ink); font-size: 1.05rem; }
 
 .detail-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; }
+
+/* Prévia de cruzamento (Ninho): cards dos dois pais lado a lado */
+.breed-parents { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; margin-top: 10px; }
+.breed-plus { color: var(--faint); font-size: 1.2rem; }
+.parent-preview-card {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 14px; border-radius: var(--radius); flex: 1 1 220px; max-width: 260px;
+  background: rgba(255, 255, 255, 0.03); box-shadow: inset 0 0 0 1px var(--line);
+}
+.parent-preview-card .fish-canvas { margin: 2px 0; }
+.peek-row { font-size: 0.78rem; color: var(--muted); text-align: center; line-height: 1.4; }
+
+/* Janela flutuante ao pairar sobre um peixe (1s) no Ninho */
+.peek-anchor {
+  position: fixed; z-index: 70; transform: translate(-50%, calc(-100% - 10px));
+  pointer-events: none; animation: fade-in 0.15s ease;
+}
+.peek-card {
+  width: 210px; padding: 12px 14px; border-radius: 14px;
+  background: var(--panel-strong); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4), inset 0 0 0 1px var(--line-strong);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.peek-title { font-family: var(--display); font-weight: 600; font-size: 0.92rem; margin-bottom: 2px; }
+.peek-card .peek-row { text-align: left; }
 
 /* ---------- Barra fixa (ex: confirmar cruzamento no Ninho) ---------- */
 .sticky-bar {
@@ -590,6 +708,25 @@ input:focus {
 @keyframes rise { from { opacity: 0; transform: translateY(16px) scale(0.94); } }
 .celebrate-body .badge.big { align-self: center; }
 .celebrate-body .btn-primary { margin-top: 4px; padding: 11px 26px; }
+
+/* Despedida: um ou dois pais não sobreviveram à gestação (8.8) — tom contido,
+   contrastando com o brilho da celebração acima (o filhote nasceu; o luto é à parte). */
+.farewell-section { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; }
+.farewell-divider { width: 60%; height: 1px; background: var(--line); margin: 4px 0 2px; }
+.farewell-title { font-family: var(--display); font-size: 1rem; color: var(--muted); margin: 0; }
+.farewell-row { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; margin-top: 4px; }
+.farewell-fish { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.farewell-portrait {
+  border-radius: 14px; overflow: hidden; filter: grayscale(0.85) brightness(0.8);
+  background: linear-gradient(180deg, #0d3a48, #072430);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  animation: farewell-fade 2.2s ease-in-out 0.3s both;
+}
+@keyframes farewell-fade {
+  from { opacity: 0; transform: translateY(-6px); }
+  30% { opacity: 1; transform: translateY(0); }
+  to { opacity: 0.75; transform: translateY(4px); }
+}
 
 /* ---------- Responsivo (mobile) ---------- */
 @media (max-width: 640px) {

@@ -41,7 +41,7 @@ export function FishDetail({ creature, onClose, children }) {
           : `${PT.tier[traits.shimmerTier]} · ${PT.shimmer[traits.shimmerColor]} ${traits.shimmerOpacity.toFixed(0)}%`} />
         <TraitRow label="Cauda" value={partSummary(traits.tail)} />
         <TraitRow label="Nadadeira dorsal" value={partSummary(traits.dorsal)} />
-        <TraitRow label="Barbatana peitoral" value={partSummary(traits.pectoral)} />
+        <TraitRow label="Nadadeira peitoral" value={partSummary(traits.pectoral)} />
         <TraitRow label="Movimento" value={`cauda ${speedWord(traits.movement.tailSpeed)}, `
           + `nadadeira ${speedWord(traits.movement.finSpeed)} · nado ${swimSpeedOf(traits).toFixed(0)} px/s`} />
       </div>

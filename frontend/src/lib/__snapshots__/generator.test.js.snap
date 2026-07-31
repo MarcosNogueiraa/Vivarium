@@ -1,0 +1,71 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`generateTraits > seeds fixos batem com o snapshot salvo (regressão do motor determinístico) 1`] = `
+{
+  "dorsal": {
+    "color": "Yellow",
+    "pattern": "None",
+    "patternColor": null,
+    "patternOpacity": null,
+    "patternSize": null,
+  },
+  "movement": {
+    "finAmplitude": 0.4408015638786097,
+    "finSpeed": 39.06400891504558,
+    "tailAmplitude": 0.498169884929931,
+    "tailSpeed": 64.64117179733036,
+  },
+  "pectoral": {
+    "color": "Yellow",
+    "pattern": "None",
+    "patternColor": null,
+    "patternOpacity": null,
+    "patternSize": null,
+  },
+  "shimmerColor": null,
+  "shimmerOpacity": 0,
+  "shimmerTier": "None",
+  "tail": {
+    "color": "Red",
+    "pattern": "None",
+    "patternColor": null,
+    "patternOpacity": null,
+    "patternSize": null,
+  },
+}
+`;
+
+exports[`generateTraits > seeds fixos batem com o snapshot salvo (regressão do motor determinístico) 2`] = `
+{
+  "dorsal": {
+    "color": "Blue",
+    "pattern": "None",
+    "patternColor": null,
+    "patternOpacity": null,
+    "patternSize": null,
+  },
+  "movement": {
+    "finAmplitude": 0.25948997578408534,
+    "finSpeed": 61.07364028884977,
+    "tailAmplitude": 0.21241635981896095,
+    "tailSpeed": 34.27785552620358,
+  },
+  "pectoral": {
+    "color": "Blue",
+    "pattern": "None",
+    "patternColor": null,
+    "patternOpacity": null,
+    "patternSize": null,
+  },
+  "shimmerColor": "Gold",
+  "shimmerOpacity": 22.19149869091228,
+  "shimmerTier": "Subtle",
+  "tail": {
+    "color": "Blue",
+    "pattern": "None",
+    "patternColor": null,
+    "patternOpacity": null,
+    "patternSize": null,
+  },
+}
+`;

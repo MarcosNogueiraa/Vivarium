@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet restore Vivarium.slnx
+      - run: dotnet build Vivarium.slnx --no-restore --configuration Release
+      - run: dotnet test Vivarium.slnx --no-build --configuration Release
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      # Ação oficial: cuida das dependências de sistema do Linux (Xvfb etc.) e cache
+      # do binário do Cypress. A API é toda mockada via cy.intercept nas specs — não
+      # precisa de backend/Postgres rodando.
+      - name: Cypress E2E
+        uses: cypress-io/github-action@v6
+        with:
+          working-directory: frontend
+          install: false
+          start: npm run preview
+          wait-on: "http://localhost:4173"

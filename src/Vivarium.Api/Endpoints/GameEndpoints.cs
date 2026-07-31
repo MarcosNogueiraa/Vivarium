@@ -27,6 +27,20 @@ public static class GameEndpoints
             long queueItemId, ClaimsPrincipal principal, GameService game) =>
             (await game.CollectQueueItemAsync(TokenService.GetUserId(principal), queueItemId, DateTime.UtcNow)).ToHttp());
 
+        // ---------- Recompensa diária (8.10) ----------
+
+        group.MapGet("/daily-reward", async (ClaimsPrincipal principal, GameService game) =>
+            (await game.GetDailyRewardStatusAsync(TokenService.GetUserId(principal), DateTime.UtcNow)).ToHttp());
+
+        group.MapPost("/daily-reward/claim", async (ClaimsPrincipal principal, GameService game) =>
+            (await game.ClaimDailyRewardAsync(TokenService.GetUserId(principal), DateTime.UtcNow)).ToHttp());
+
+        // ---------- Acelerar com moeda premium (8.11) ----------
+
+        group.MapPost("/queue/{queueItemId:long}/rush", async (
+            long queueItemId, ClaimsPrincipal principal, GameService game) =>
+            (await game.RushQueueItemAsync(TokenService.GetUserId(principal), queueItemId, DateTime.UtcNow)).ToHttp());
+
         // ---------- Mochila (storage) ----------
 
         group.MapGet("/backpack", async (ClaimsPrincipal principal, GameService game) =>

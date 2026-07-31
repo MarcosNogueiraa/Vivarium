@@ -48,6 +48,14 @@ public static class EconomyDefaults
 {
     public const decimal StartingSoftBalance = 100m;
     public const decimal StartingPremiumBalance = 0m;
+
+    /// <summary>
+    /// Recompensa diária: gancho de retenção simples, sem streak — resgatável 1x por dia
+    /// (calendário UTC), sem quebra/penalidade por ausência (mesma filosofia de "ausência
+    /// nunca pune duro" do online/offline — CLAUDE.md 8.3/8.6). Valor fixo modesto: dá pra
+    /// comprar 1 filtro (20 soft) e sobra um pouco, sem distorcer a economia (30/07/2026).
+    /// </summary>
+    public const decimal DailyRewardSoft = 25m;
 }
 
 /// <summary>Valores iniciais de um habitat novo (tanque inicial do MVP).</summary>
@@ -57,8 +65,13 @@ public static class HabitatDefaults
     /// <summary>Storage de criaturas fora do tanque (não farmam). Base pro breeding.</summary>
     public const int BackpackCapacity = 50;
     public const int QueueCap = 5;
-    /// <summary>Geração mais lenta (ritmo lento + lendário ~1/mês). Era 15.</summary>
-    public const int GenerationIntervalMinutes = 25;
+    /// <summary>
+    /// Geração deliberadamente lenta — o ritmo "de graça" existe pra não dar pra rushar o
+    /// jogo (30/07/2026: 25→60, quase dobra o tempo por peixe). A única forma de acelerar
+    /// é pagar em moeda premium pra pular a espera (ver `RushCalculator`/8.11) — o tempo
+    /// lento é a fricção intencional; dinheiro é o único jeito de comprimi-lo. Era 15→25→60.
+    /// </summary>
+    public const int GenerationIntervalMinutes = 60;
     public const decimal OnlineGenerationRate = 1.0m;
     public const decimal OfflineGenerationRate = 0.45m;
     public const decimal MaintenanceLevel = 100m;

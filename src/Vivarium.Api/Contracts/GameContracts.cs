@@ -1,6 +1,6 @@
 namespace Vivarium.Api.Contracts;
 
-public record QueueItemDto(long Id, DateTime ReadyAt, bool IsReady, bool IsSick);
+public record QueueItemDto(long Id, DateTime ReadyAt, bool IsReady, bool IsSick, decimal RushCostPremium);
 
 public record TransferRequest(string ToUsername);
 
@@ -17,3 +17,5 @@ public record TankResponse(
     int GenerationIntervalMinutes);
 
 public record BackpackResponse(int Capacity, IReadOnlyList<CreatureDto> Creatures);
+
+public record DailyRewardStatusDto(bool CanClaim, decimal Amount, DateTime? NextAvailableAtUtc);

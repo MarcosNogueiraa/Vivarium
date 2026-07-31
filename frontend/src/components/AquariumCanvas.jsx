@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { roll01, traitsOf } from "../lib/generator.js";
 import {
   bandOf, drawFish, drawTankBackground, drawTankForeground, swimSpeedOf, VIEW_H, VIEW_W,
@@ -61,20 +61,27 @@ function drawAura(ctx, sprite, cx, cy, flip, alpha) {
   ctx.restore();
 }
 
+export const PIP_SUPPORTED = typeof window !== "undefined" && "documentPictureInPicture" in window;
+
 /** O aquário animado: peixes nadando, aura pra raros+, seleção por clique. */
-export function AquariumCanvas({
+export const AquariumCanvas = forwardRef(function AquariumCanvas({
   creatures, selectedId, onSelect, interactive = true, ambient = false, quality = 100, theme = "default",
-}) {
+  onPipChange,
+}, ref) {
   const W = 960;
   const H = 480;
   const SCALE = 0.34;
+  const wrapRef = useRef(null);
   const canvasRef = useRef(null);
+  const pipWindowRef = useRef(null);
   const statesRef = useRef(new Map());
   const creaturesRef = useRef([]);
   const selectedRef = useRef(null);
   const qualityRef = useRef(100);
   const themeRef = useRef("default");
   const [hover, setHover] = useState(null);
+  const [pipActive, setPipActive] = useState(false);
+  const resScaleRef = useRef(1);
 
   creaturesRef.current = useMemo(
     () => creatures.map((c) => {
@@ -86,6 +93,29 @@ export function AquariumCanvas({
   selectedRef.current = selectedId;
   qualityRef.current = quality;
   themeRef.current = theme;
+
+  // Resolução do canvas (backing store) acompanha o tamanho exibido × DPR, senão
+  // ele fica com resolução fixa 960×480 esticada — nítido no card, borrado em tela cheia.
+  // Coordenadas de jogo continuam em W×H lógicos (960×480); só o raster final ganha nitidez.
+  useEffect(() => {
+    const el = canvasRef.current;
+    function updateResolution() {
+      const rect = el.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const dpr = window.devicePixelRatio || 1;
+      const scale = Math.min(2.5, Math.max(1, (rect.width * dpr) / W));
+      if (Math.abs(scale - resScaleRef.current) > 0.05) {
+        resScaleRef.current = scale;
+        el.width = Math.round(W * scale);
+        el.height = Math.round(H * scale);
+      }
+    }
+    updateResolution();
+    const ro = new ResizeObserver(updateResolution);
+    ro.observe(el);
+    window.addEventListener("resize", updateResolution);
+    return () => { ro.disconnect(); window.removeEventListener("resize", updateResolution); };
+  }, []);
 
   useEffect(() => {
     const ctx = canvasRef.current.getContext("2d");
@@ -101,7 +131,7 @@ export function AquariumCanvas({
       const speedFactor = 0.5 + 0.5 * (q / 100); // água suja → peixes mais lentos
 
       const th = themeRef.current;
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.setTransform(resScaleRef.current, 0, 0, resScaleRef.current, 0, 0);
       drawTankBackground(ctx, W, H, time, q, th);
 
       for (const c of creaturesRef.current) {
@@ -151,6 +181,62 @@ export function AquariumCanvas({
     return () => cancelAnimationFrame(raf);
   }, []);
 
+  function closePip() {
+    try {
+      if (wrapRef.current && canvasRef.current && canvasRef.current.parentNode !== wrapRef.current) {
+        canvasRef.current.classList.remove("aquarium-pip");
+        wrapRef.current.appendChild(canvasRef.current);
+      }
+    } catch { /* pip window/canvas already gone */ }
+    pipWindowRef.current = null;
+    setPipActive(false);
+    onPipChange?.(false);
+  }
+
+  async function openPip() {
+    if (!PIP_SUPPORTED || pipActive) return;
+    let pipWindow;
+    try {
+      pipWindow = await window.documentPictureInPicture.requestWindow({ width: 480, height: 260 });
+    } catch { return; } // usuário cancelou ou navegador recusou
+    pipWindowRef.current = pipWindow;
+    for (const sheet of document.styleSheets) {
+      try {
+        const css = [...sheet.cssRules].map((r) => r.cssText).join("\n");
+        const style = document.createElement("style");
+        style.textContent = css;
+        pipWindow.document.head.appendChild(style);
+      } catch {
+        if (sheet.href) {
+          const link = document.createElement("link");
+          link.rel = "stylesheet";
+          link.href = sheet.href;
+          pipWindow.document.head.appendChild(link);
+        }
+      }
+    }
+    pipWindow.document.title = "Vivarium — Aquário";
+    pipWindow.document.body.style.margin = "0";
+    pipWindow.document.body.style.background = "#04181f";
+    canvasRef.current.classList.add("aquarium-pip");
+    pipWindow.document.body.appendChild(canvasRef.current);
+    pipWindow.addEventListener("pagehide", closePip, { once: true });
+    setPipActive(true);
+    onPipChange?.(true);
+  }
+
+  useImperativeHandle(ref, () => ({
+    togglePip() {
+      if (pipActive) pipWindowRef.current?.close();
+      else openPip();
+    },
+    pipSupported: PIP_SUPPORTED,
+  }));
+
+  useEffect(() => () => {
+    if (pipWindowRef.current && !pipWindowRef.current.closed) pipWindowRef.current.close();
+  }, []);
+
   function hitTest(e) {
     const rect = canvasRef.current.getBoundingClientRect();
     const px = (e.clientX - rect.left) * (W / rect.width);
@@ -179,10 +265,10 @@ export function AquariumCanvas({
   }
 
   return (
-    <>
+    <div ref={wrapRef} className="aquarium-wrap">
       <canvas
         ref={canvasRef} width={W} height={H}
-        className={`aquarium${ambient ? " ambient" : ""}`}
+        className={`aquarium${ambient ? " ambient" : ""}${!interactive ? " no-click" : ""}`}
         onClick={interactive ? handleClick : undefined}
         onMouseMove={interactive ? handleMove : undefined}
         onMouseLeave={() => hover && setHover(null)}
@@ -191,6 +277,11 @@ export function AquariumCanvas({
       {hover && (
         <div className="fish-tip" style={{ left: hover.x, top: hover.y, "--tier": hover.color }}>{hover.name}</div>
       )}
-    </>
+      {pipActive && (
+        <div className="pip-placeholder">
+          <span>🐠 Aquário aberto em pop-up</span>
+        </div>
+      )}
+    </div>
   );
-}
+});

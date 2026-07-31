@@ -101,10 +101,22 @@ namespace Vivarium.Api.Data.Migrations
                     b.Property<long>("OwnerId")
                         .HasColumnType("bigint");
 
+                    b.Property<long?>("ParentAGrandparentASeed")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("ParentAGrandparentBSeed")
+                        .HasColumnType("bigint");
+
                     b.Property<long?>("ParentAId")
                         .HasColumnType("bigint");
 
                     b.Property<long?>("ParentASeed")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("ParentBGrandparentASeed")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("ParentBGrandparentBSeed")
                         .HasColumnType("bigint");
 
                     b.Property<long?>("ParentBId")
@@ -584,6 +596,9 @@ namespace Vivarium.Api.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime?>("LastDailyRewardAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
