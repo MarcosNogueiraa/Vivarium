@@ -339,6 +339,17 @@ Decisão de produto explícita: o jogo precisa ser **impossível de rushar de gr
 - **Gap real, não escondido:** não existe processador de pagamento integrado (Stripe ou similar) — então hoje **não há forma real de um jogador comprar premium**. O mecanismo de jogo está pronto e testado; falta só a ponte com dinheiro real, que é uma integração maior (conta de comerciante, webhook de confirmação, etc.) fora do escopo desta mudança. Pra testar localmente, `/api/dev/coins?currency=PREMIUM` (só em Development) credita premium — nunca existe em produção (mesma regra de todos os endpoints `/api/dev/*`).
 - **Testes:** `RushCalculatorTests.cs` (Core) + `RushTests.cs` (Api, 5 casos: custo aparece e escala, sem saldo falha, com saldo libera coleta, item já pronto não deixa acelerar de novo, gestação segue o mesmo fluxo) + `frontend/cypress/e2e/rush.cy.js` (2 casos E2E). Simulação de trajetória (`Vivarium.Simulation simulate`) re-rodada após o rebalanceamento: economia continua saudável (carteira cresce nos 3 perfis em 120 dias), só que agora com menos da metade dos peixes coletados no mesmo período — o ritmo "de graça" ficou visivelmente mais lento, como pretendido.
 
+### 8.12 Venda ao NPC / vendor (31/07/2026)
+
+Sink pra duplicatas/comuns acumulados: surgiu de uma discussão sobre reduzir a oferta de peixe comum no mercado sem desacelerar o loop central de coleta (que já tinha sido desacelerado o suficiente na §8.11). Em vez de apertar `GenerationIntervalMinutes` de novo — instrumento cego que atrasaria retenção sem resolver especificamente o excesso de comuns — o sink certo é dar vazão às duplicatas: venda instantânea ao NPC por um preço deliberadamente baixo.
+
+- **Preço:** `VendorCalculator.Price(rarityScore)` (`src/Vivarium.Core/Gameplay/VendorCalculator.cs`) reaproveita a mesma curva de `IncomeCalculator.CoinsPerHour` — não inventa fórmula nova. `preço = max(VendorMinPrice, coinsPorHora(score) × VendorHoursEquivalent)`, com `VendorHoursEquivalent = 2.0` e `VendorMinPrice = 1` (`TickConfig`). Um comum (score ~5) vende por ~9 soft (menos que 1 filtro básico, 20 soft); a curva escala com a raridade só pra não ser absurda em peixes bons, mas o preço nunca chega perto do valor real do mercado entre jogadores — quem tem um peixe que vale a pena deveria listar, não vender pro NPC.
+- **Não apaga a linha:** mesma razão do `IsDead` de breeding (§8.8) — `CreatureInstance.ParentAId/BId` tem FK `Restrict`, e `TransactionLog`/`BreedingSlot.ChildCreatureId` também referenciam a linha. Vender ao NPC marca `SoldAt = now` e `HabitatId = null`; a criatura some das queries de tanque/mochila (`GameService.BackpackQuery` e a query de tanque por `HabitatId`) mas a linha continua existindo pra preservar linhagem e auditoria.
+- **Endpoint:** `POST /api/game/creatures/{id}/sell-vendor` — bloqueia se listada no mercado, morta ou já vendida; credita o soft na hora, audita `TransactionLog.VendorSale` (novo valor no enum `TransactionType`).
+- **Frontend:** botão "Vender ao NPC · {preço}" na Mochila e nos detalhes do peixe no Tanque, com um `ConfirmModal` novo (`components/ConfirmModal.jsx`, reaproveita a casca do `Modal.jsx`) — mensagem explícita de que o preço é baixo e a ação não pode ser desfeita, `.btn-danger` (coral) pra diferenciar visualmente do "Vender" (listar no mercado, que é reversível via cancelar). `generator.js` ganhou `vendorPriceOf(rarityScore)` espelhando a fórmula (mesmo princípio de todo cálculo client-side: só display, o servidor é a fonte).
+- **Testes:** `VendorCalculatorTests.cs` (Core) + `VendorSaleTests.cs` (Api, 6 casos: credita e some do tanque/mochila, preço escala com raridade, bloqueia se listada/já vendida/de outro usuário) + teste unitário espelho em `generator.test.js`.
+- **Ideias relacionadas discutidas e não implementadas:** fusão "10 peixes iguais → 1 melhor" foi cogitada como sink adicional, mas adiada — risco real de canibalizar o sink de breeding (custo dinâmico, gestação, risco de morte) se virar um caminho determinístico e sem risco pra subir de raridade. Se for retomada, deveria ser um reroll com odds melhoradas (reaproveitando `BiasedInheritProbability`), não um upgrade garantido, e definida por cor de cauda (não raridade) pra também servir de ferramenta de farm temático (sinergia de cor, §8.6).
+
 ---
 
 ## 9. Schema de dados completo (MVP, desacoplado para escalar)
@@ -447,6 +458,7 @@ CreatureInstance
 - BreedCount (int, default 0) -- nº de gestações já completadas como pai/mãe
 - IsDead (bool, default false) -- não sobreviveu a uma gestação (risco cresce com BreedCount)
 - DiedAt (datetime, nullable)
+- SoldAt (datetime, nullable) -- vendido ao NPC (vendor, 8.12); não apaga a linha (mesma razão do IsDead)
 - CreatedAt
 
 ItemDefinition
@@ -476,7 +488,7 @@ MarketListing
 
 TransactionLog
 - Id (PK)
-- Type (MarketSale | DirectTransfer | CurrencyPurchase | ItemPurchase | Sink | Breeding | BreedingLoss)
+- Type (MarketSale | DirectTransfer | CurrencyPurchase | ItemPurchase | Sink | Breeding | BreedingLoss | DailyReward | TimeSkip | VendorSale)
 - FromUserId (FK -> User, nullable)
 - ToUserId (FK -> User, nullable)
 - CreatureInstanceId (FK -> CreatureInstance, nullable)
@@ -567,6 +579,7 @@ Falta pra ir ao ar (depende de contas do usuário):
 | POST | `/api/game/collect/{queueItemId}` | ✓ | coleta manual (valida pronto/capacidade) |
 | POST | `/api/game/queue/{queueItemId}/rush` | ✓ | pula a espera da fila pagando premium (8.11) |
 | POST | `/api/game/creatures/{id}/transfer` | ✓ | transferência direta por username (audita `DirectTransfer`; bloqueada se listada) |
+| POST | `/api/game/creatures/{id}/sell-vendor` | ✓ | venda instantânea ao NPC por preço baixo (8.12); audita `VendorSale` |
 | GET | `/api/game/daily-reward` | ✓ | status do resgate diário (8.10): `canClaim`, `amount`, `nextAvailableAtUtc` |
 | POST | `/api/game/daily-reward/claim` | ✓ | resgata a recompensa diária (1x/dia UTC; audita `DailyReward`) |
 | GET | `/api/market/listings?skip&take` | ✓ | listagens ativas |

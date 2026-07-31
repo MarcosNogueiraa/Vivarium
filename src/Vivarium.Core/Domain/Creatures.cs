@@ -41,6 +41,12 @@ public class CreatureInstance
     public int BreedCount { get; set; }
     public bool IsDead { get; set; }
     public DateTime? DiedAt { get; set; }
+    /// <summary>
+    /// Vendido ao NPC (vendor, §8.12) — preço baixo, mas não apaga a linha (mesma razão do
+    /// IsDead: preservar a FK Restrict de linhagem ParentAId/BId e o histórico do TransactionLog).
+    /// Null enquanto o peixe está no jogo (tanque, mochila ou listado).
+    /// </summary>
+    public DateTime? SoldAt { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 

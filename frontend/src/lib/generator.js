@@ -103,6 +103,8 @@ export const CONFIG = {
   // Renda por peixe — espelha IncomeCalculator/TickConfig (manter em sincronia)
   income: { base: 1.7, growth: 0.49, ref: 4.0 },
   synergy: { perMatch: 0.15, maxBonus: 0.80 },
+  // Venda ao NPC (vendor, §8.12) — espelha VendorCalculator/TickConfig (manter em sincronia)
+  vendor: { hoursEquivalent: 2.0, minPrice: 1 },
   // Breeding — espelha BreedingDefaults (Gameplay/BreedingConfig.cs, manter em sincronia)
   breeding: { mutationChance: 0.08, rarityBias: 0.15, grandparentReachChance: 0.15 },
   closestPartColor: {
@@ -425,6 +427,13 @@ export function coinsPerHourOf(rarityScore, synergyMult = 1) {
 export function synergyMultiplier(sameColorCount) {
   const s = CONFIG.synergy;
   return 1 + Math.min(s.maxBonus, s.perMatch * Math.max(0, sameColorCount - 1));
+}
+
+/** Preço de venda ao NPC — deliberadamente baixo, espelha VendorCalculator (só display). */
+export function vendorPriceOf(rarityScore) {
+  const v = CONFIG.vendor;
+  const price = Math.round(coinsPerHourOf(rarityScore) * v.hoursEquivalent);
+  return Math.max(v.minPrice, price);
 }
 
 function erf(x) {

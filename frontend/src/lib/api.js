@@ -55,6 +55,7 @@ export const api = {
   backpack: () => request("GET", "/api/game/backpack"),
   storeCreature: (id) => request("POST", `/api/game/creatures/${id}/store`),
   deployCreature: (id) => request("POST", `/api/game/creatures/${id}/deploy`),
+  sellToVendor: (id) => request("POST", `/api/game/creatures/${id}/sell-vendor`),
   devSpawn: () => request("POST", "/api/dev/spawn"),
   devClear: () => request("POST", "/api/dev/clear"),
   devCoins: (amount = 1000, currency = "SOFT") => request("POST", `/api/dev/coins?amount=${amount}&currency=${currency}`),

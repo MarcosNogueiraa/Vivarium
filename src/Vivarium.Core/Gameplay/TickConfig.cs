@@ -40,6 +40,12 @@ public sealed record TickConfig
     public double SynergyPerMatch { get; init; } = 0.15;
     public double SynergyMaxBonus { get; init; } = 0.80;
 
+    // --- Venda ao NPC (vendor, §8.12): preço deliberadamente baixo — poucas horas do
+    // que o peixe já renderia sozinho — pra dar vazão a duplicatas/comuns acumulados
+    // sem competir com o mercado entre jogadores (esse continua sendo o preço "de verdade").
+    public double VendorHoursEquivalent { get; init; } = 2.0;
+    public decimal VendorMinPrice { get; init; } = 1m;
+
     public static readonly TickConfig Default = new();
 }
 

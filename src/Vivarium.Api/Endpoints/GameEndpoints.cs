@@ -55,5 +55,11 @@ public static class GameEndpoints
         group.MapPost("/creatures/{creatureId:long}/deploy", async (
             long creatureId, ClaimsPrincipal principal, GameService game) =>
             (await game.DeployAsync(TokenService.GetUserId(principal), creatureId)).ToHttp());
+
+        // ---------- Venda ao NPC (vendor, §8.12) ----------
+
+        group.MapPost("/creatures/{creatureId:long}/sell-vendor", async (
+            long creatureId, ClaimsPrincipal principal, GameService game) =>
+            (await game.SellToVendorAsync(TokenService.GetUserId(principal), creatureId, DateTime.UtcNow)).ToHttp());
     }
 }

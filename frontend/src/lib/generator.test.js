@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   biasedInheritProbability, breedTraits, CONFIG, coinsPerHourOf, effectiveParentTraits, generateTraits,
-  probabilityOf, rarityBreakdown, resolveOwnTraits, roll01, synergyMultiplier, traitsOf,
+  probabilityOf, rarityBreakdown, resolveOwnTraits, roll01, synergyMultiplier, traitsOf, vendorPriceOf,
 } from "./generator.js";
 
 function findSeedWithTailColor(color, searchLimit = 5000) {
@@ -120,6 +120,18 @@ describe("coinsPerHourOf", () => {
     const base = coinsPerHourOf(5, 1);
     const comSinergia = coinsPerHourOf(5, 1.5);
     expect(comSinergia).toBeCloseTo(base * 1.5, 10);
+  });
+});
+
+describe("vendorPriceOf", () => {
+  it("cresce com a raridade e nunca fica abaixo do mínimo", () => {
+    expect(vendorPriceOf(0)).toBe(CONFIG.vendor.minPrice);
+    expect(vendorPriceOf(5)).toBeLessThan(vendorPriceOf(9));
+    expect(vendorPriceOf(9)).toBeLessThan(vendorPriceOf(15));
+  });
+
+  it("fica bem abaixo do que um filtro básico custa (20 soft) pra um peixe comum", () => {
+    expect(vendorPriceOf(5)).toBeLessThan(20);
   });
 });
 

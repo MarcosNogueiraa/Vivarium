@@ -208,6 +208,7 @@ public class GameService(VivariumDbContext db)
             c.OwnerId == userId
             && c.HabitatId == null
             && !c.IsDead
+            && c.SoldAt == null
             && !db.MarketListings.Any(m => m.CreatureInstanceId == c.Id && m.Status == ListingStatus.Active));
 
     public Task<int> CountBackpackAsync(long userId) => BackpackQuery(userId).CountAsync();
@@ -528,5 +529,55 @@ public class GameService(VivariumDbContext db)
         try { await db.SaveChangesAsync(); }
         catch (DbUpdateConcurrencyException) { return ServiceResult.Conflict("Tente de novo."); }
         return ServiceResult.Success();
+    }
+
+    // ---------- Venda ao NPC (vendor, §8.12) ----------
+    // Sink pra duplicatas/comuns acumulados: preço baixo (VendorCalculator), mas instantâneo
+    // e sem depender de outro jogador comprar. Não apaga a linha (mesmo motivo do IsDead —
+    // preserva FK Restrict de linhagem e o histórico do TransactionLog): marca SoldAt e some
+    // das queries de tanque/mochila.
+
+    public async Task<ServiceResult> SellToVendorAsync(long userId, long creatureId, DateTime now)
+    {
+        var creature = await db.CreatureInstances
+            .FirstOrDefaultAsync(c => c.Id == creatureId && c.OwnerId == userId);
+        if (creature is null)
+            return ServiceResult.NotFound("Criatura não encontrada");
+        if (creature.IsDead)
+            return ServiceResult.Bad("Essa criatura não sobreviveu à gestação");
+        if (creature.SoldAt is not null)
+            return ServiceResult.Bad("Essa criatura já foi vendida");
+        bool listed = await db.MarketListings.AnyAsync(m =>
+            m.CreatureInstanceId == creature.Id && m.Status == ListingStatus.Active);
+        if (listed)
+            return ServiceResult.Bad("Criatura está no mercado — cancele a listagem antes");
+
+        decimal price = VendorCalculator.Price(creature.RarityScore, TickConfig.Default);
+
+        int softId = await db.CurrencyTypes.Where(c => c.Code == "SOFT").Select(c => c.Id).FirstAsync();
+        var wallet = await db.WalletBalances.FirstAsync(w => w.UserId == userId && w.CurrencyTypeId == softId);
+        wallet.Amount += price;
+        creature.SoldAt = now;
+        creature.HabitatId = null;
+
+        db.TransactionLogs.Add(new TransactionLog
+        {
+            Type = TransactionType.VendorSale,
+            ToUserId = userId,
+            CreatureInstanceId = creature.Id,
+            CurrencyTypeId = softId,
+            Amount = price,
+            CreatedAt = now,
+        });
+
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return ServiceResult.Conflict("Operação concorrente — tente de novo.");
+        }
+        return ServiceResult.Success(new { price, wallet = wallet.Amount });
     }
 }

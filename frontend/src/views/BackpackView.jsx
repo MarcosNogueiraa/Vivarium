@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../lib/api.js";
-import { coinsPerHourOf } from "../lib/generator.js";
+import { coinsPerHourOf, vendorPriceOf } from "../lib/generator.js";
 import { bandOf } from "../lib/fishRenderer.js";
 import { RarityBadge } from "../components/RarityBadge.jsx";
 import { FishCanvas } from "../components/FishCanvas.jsx";
 import { PromptModal } from "../components/PromptModal.jsx";
+import { ConfirmModal } from "../components/ConfirmModal.jsx";
 import { FishDetail } from "./FishDetail.jsx";
 
 export function BackpackView({ refreshTank, notify }) {
   const [data, setData] = useState(null);
   const [detail, setDetail] = useState(null);
-  const [prompt, setPrompt] = useState(null); // { kind: "sell"|"transfer", creature }
+  const [prompt, setPrompt] = useState(null); // { kind: "sell"|"transfer"|"vendor", creature }
 
   const refresh = useCallback(async () => { setData(await api.backpack()); }, []);
   useEffect(() => { refresh().catch((e) => notify(e.message)); }, [refresh, notify]);
@@ -25,6 +26,7 @@ export function BackpackView({ refreshTank, notify }) {
   }
   function sell(c) { setDetail(null); setPrompt({ kind: "sell", creature: c }); }
   function transfer(c) { setDetail(null); setPrompt({ kind: "transfer", creature: c }); }
+  function sellVendor(c) { setDetail(null); setPrompt({ kind: "vendor", creature: c }); }
 
   async function confirmSell(price) {
     await api.createListing(prompt.creature.id, Number(price));
@@ -36,6 +38,12 @@ export function BackpackView({ refreshTank, notify }) {
     await api.transferCreature(prompt.creature.id, username.trim());
     setPrompt(null);
     notify(`Transferido para ${username.trim()}.`);
+    await refresh();
+  }
+  async function confirmSellVendor() {
+    const { price } = await api.sellToVendor(prompt.creature.id);
+    setPrompt(null);
+    notify(`Vendido ao NPC por ${price} moedas.`);
     await refresh();
   }
 
@@ -65,6 +73,9 @@ export function BackpackView({ refreshTank, notify }) {
                 <button className="btn-primary" onClick={() => deploy(c)}>Pro tanque</button>
                 <button onClick={() => sell(c)}>Vender</button>
                 <button onClick={() => transfer(c)}>Transferir</button>
+                <button onClick={() => sellVendor(c)} title={`Venda instantânea ao NPC por ${vendorPriceOf(Number(c.rarityScore))} soft`}>
+                  NPC · {vendorPriceOf(Number(c.rarityScore))}
+                </button>
               </div>
             </div>
           ))}
@@ -75,6 +86,7 @@ export function BackpackView({ refreshTank, notify }) {
           <button className="btn-primary" onClick={() => deploy(detail)}>Pro tanque</button>
           <button onClick={() => sell(detail)}>Vender</button>
           <button onClick={() => transfer(detail)}>Transferir</button>
+          <button onClick={() => sellVendor(detail)}>Vender ao NPC · {vendorPriceOf(Number(detail.rarityScore))}</button>
         </FishDetail>
       )}
       {prompt?.kind === "sell" && (
@@ -89,6 +101,14 @@ export function BackpackView({ refreshTank, notify }) {
           title="Transferir peixe" label="Username do jogador que vai receber"
           placeholder="username" confirmLabel="Transferir"
           onConfirm={confirmTransfer} onClose={() => setPrompt(null)}
+        />
+      )}
+      {prompt?.kind === "vendor" && (
+        <ConfirmModal
+          title="Vender ao NPC"
+          message={`Venda instantânea por ${vendorPriceOf(Number(prompt.creature.rarityScore))} moedas soft — bem abaixo do mercado, mas na hora. Essa ação não pode ser desfeita.`}
+          confirmLabel="Vender agora" danger
+          onConfirm={confirmSellVendor} onClose={() => setPrompt(null)}
         />
       )}
     </>

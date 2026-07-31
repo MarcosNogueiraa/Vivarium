@@ -98,6 +98,14 @@ button:focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }
   background: linear-gradient(180deg, #8ff5e6, #63ebd7);
   box-shadow: 0 8px 28px -8px rgba(84, 230, 209, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
+.btn-danger {
+  color: #fff;
+  background: linear-gradient(180deg, #ff9d85, var(--coral));
+  border-color: transparent;
+}
+.btn-danger:hover:not(:disabled) {
+  background: linear-gradient(180deg, #ffab95, #ff7a5c);
+}
 
 .dev-btn {
   font-size: 0.72rem; padding: 5px 12px;

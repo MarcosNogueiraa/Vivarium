@@ -6,14 +6,16 @@ import { AquariumCanvas, PIP_SUPPORTED } from "../components/AquariumCanvas.jsx"
 import { FishCanvas } from "../components/FishCanvas.jsx";
 import { Coin } from "../components/Coin.jsx";
 import { PromptModal } from "../components/PromptModal.jsx";
+import { ConfirmModal } from "../components/ConfirmModal.jsx";
 import { CollectCelebration } from "../components/CollectCelebration.jsx";
+import { vendorPriceOf } from "../lib/generator.js";
 import { FishDetail } from "./FishDetail.jsx";
 import { RarityGuide } from "./RarityGuide.jsx";
 
 export function TankView({ tank, refresh, notify }) {
   const [selectedId, setSelectedId] = useState(null);
   const [showGuide, setShowGuide] = useState(false);
-  const [prompt, setPrompt] = useState(null);       // { kind: "sell"|"transfer", creature }
+  const [prompt, setPrompt] = useState(null);       // { kind: "sell"|"transfer"|"vendor", creature }
   const [celebrate, setCelebrate] = useState(null); // criatura raro+ recém-coletada
   const [onboardDone, setOnboardDone] = useState(() => localStorage.getItem("onboardDone") === "true");
   const dismissOnboard = () => { localStorage.setItem("onboardDone", "true"); setOnboardDone(true); };
@@ -79,6 +81,7 @@ export function TankView({ tank, refresh, notify }) {
   }
   function sell(creature) { setSelectedId(null); setPrompt({ kind: "sell", creature }); }
   function transfer(creature) { setSelectedId(null); setPrompt({ kind: "transfer", creature }); }
+  function sellVendor(creature) { setSelectedId(null); setPrompt({ kind: "vendor", creature }); }
 
   async function confirmSell(price) {
     await api.createListing(prompt.creature.id, Number(price));
@@ -90,6 +93,12 @@ export function TankView({ tank, refresh, notify }) {
     await api.transferCreature(prompt.creature.id, username.trim());
     setPrompt(null);
     notify(`Transferido para ${username.trim()}.`);
+    await refresh();
+  }
+  async function confirmSellVendor() {
+    const { price } = await api.sellToVendor(prompt.creature.id);
+    setPrompt(null);
+    notify(`Vendido ao NPC por ${price} moedas.`);
     await refresh();
   }
   async function store(creature) {
@@ -197,6 +206,7 @@ export function TankView({ tank, refresh, notify }) {
           <button onClick={() => store(selected)} title="Guardar na mochila (não farma)">Guardar</button>
           <button onClick={() => sell(selected)}>Vender</button>
           <button onClick={() => transfer(selected)}>Transferir</button>
+          <button onClick={() => sellVendor(selected)}>Vender ao NPC · {vendorPriceOf(Number(selected.rarityScore))}</button>
         </FishDetail>
       )}
       {showGuide && <RarityGuide onClose={() => setShowGuide(false)} />}
@@ -212,6 +222,14 @@ export function TankView({ tank, refresh, notify }) {
           title="Transferir peixe" label="Username do jogador que vai receber"
           placeholder="username" confirmLabel="Transferir"
           onConfirm={confirmTransfer} onClose={() => setPrompt(null)}
+        />
+      )}
+      {prompt?.kind === "vendor" && (
+        <ConfirmModal
+          title="Vender ao NPC"
+          message={`Venda instantânea por ${vendorPriceOf(Number(prompt.creature.rarityScore))} moedas soft — bem abaixo do mercado, mas na hora. Essa ação não pode ser desfeita.`}
+          confirmLabel="Vender agora" danger
+          onConfirm={confirmSellVendor} onClose={() => setPrompt(null)}
         />
       )}
       {celebrate && <CollectCelebration creature={celebrate} onClose={() => setCelebrate(null)} />}
