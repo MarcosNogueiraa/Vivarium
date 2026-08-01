@@ -88,7 +88,7 @@ export function GameView({ onLogout }) {
         {tab === "tank" && <TankView tank={tank} refresh={refreshTank} notify={notify} />}
         {tab === "backpack" && <BackpackView refreshTank={refreshTank} notify={notify} />}
         {tab === "market" && <MarketView userId={userId} refreshTank={refreshTank} notify={notify} />}
-        {tab === "store" && <StoreView refreshTank={refreshTank} notify={notify} />}
+        {tab === "store" && <StoreView tank={tank} refreshTank={refreshTank} notify={notify} />}
         {tab === "breeding" && <BreedingView tank={tank} refreshTank={refreshTank} notify={notify} />}
       </main>
 

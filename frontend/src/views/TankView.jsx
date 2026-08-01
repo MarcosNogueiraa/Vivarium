@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.js";
 import { bandOf, PART_HEX, PT } from "../lib/fishRenderer.js";
-import { nextFishEta, tankFishSorted, tankPotential, tankSynergy } from "../lib/tankMath.js";
+import { FILTER_WARN_THRESHOLD, nextFishEta, tankFishSorted, tankPotential, tankSynergy } from "../lib/tankMath.js";
 import { AquariumCanvas, PIP_SUPPORTED } from "../components/AquariumCanvas.jsx";
 import { FishCanvas } from "../components/FishCanvas.jsx";
 import { Coin } from "../components/Coin.jsx";
@@ -15,7 +15,7 @@ import { RarityGuide } from "./RarityGuide.jsx";
 export function TankView({ tank, refresh, notify }) {
   const [selectedId, setSelectedId] = useState(null);
   const [showGuide, setShowGuide] = useState(false);
-  const [prompt, setPrompt] = useState(null);       // { kind: "sell"|"transfer"|"vendor", creature }
+  const [prompt, setPrompt] = useState(null);       // { kind: "sell"|"transfer"|"vendor"|"filter-warn", creature? }
   const [celebrate, setCelebrate] = useState(null); // criatura raro+ recém-coletada
   const [onboardDone, setOnboardDone] = useState(() => localStorage.getItem("onboardDone") === "true");
   const dismissOnboard = () => { localStorage.setItem("onboardDone", "true"); setOnboardDone(true); };
@@ -47,6 +47,7 @@ export function TankView({ tank, refresh, notify }) {
   const current = Number(tank.coinsPerHour ?? 0);
   const synergy = tankSynergy(tank.creatures);
   const potential = tankPotential(tank.creatures);
+  const waterLossPerHour = Math.max(0, potential - current);
   const nextFish = nextFishEta(tank);
   const listFish = tankFishSorted(tank.creatures);
 
@@ -75,8 +76,18 @@ export function TankView({ tank, refresh, notify }) {
       await refresh();
     } catch (err) { notify(err.message); }
   }
+  async function doBuyFilter() {
+    await api.buyItem("filter_basic");
+    setPrompt(null);
+    notify("Água restaurada!");
+    await refresh();
+  }
   async function buyFilter() {
-    try { await api.buyItem("filter_basic"); notify("Água restaurada!"); await refresh(); }
+    if (Number(tank.maintenanceLevel) >= FILTER_WARN_THRESHOLD) {
+      setPrompt({ kind: "filter-warn" });
+      return;
+    }
+    try { await doBuyFilter(); }
     catch (err) { notify(err.message); }
   }
   function sell(creature) { setSelectedId(null); setPrompt({ kind: "sell", creature }); }
@@ -148,6 +159,14 @@ export function TankView({ tank, refresh, notify }) {
               </span>
               <span className="val">{Number(tank.maintenanceLevel).toFixed(0)}</span>
             </span>
+            {waterLossPerHour > 0.05 && (
+              <span
+                className="water-loss"
+                title="Quanto sua renda está perdendo agora por causa da água suja — compare com o custo do filtro pra saber se compensa limpar."
+              >
+                −{waterLossPerHour.toFixed(1)}<small>/h</small>
+              </span>
+            )}
             <button onClick={buyFilter} title="Restaura a qualidade da água pra 100">Filtro · 20</button>
           </div>
         )}
@@ -230,6 +249,14 @@ export function TankView({ tank, refresh, notify }) {
           message={`Venda instantânea por ${vendorPriceOf(Number(prompt.creature.rarityScore))} moedas soft — bem abaixo do mercado, mas na hora. Essa ação não pode ser desfeita.`}
           confirmLabel="Vender agora" danger
           onConfirm={confirmSellVendor} onClose={() => setPrompt(null)}
+        />
+      )}
+      {prompt?.kind === "filter-warn" && (
+        <ConfirmModal
+          title="Água já está limpa"
+          message={`Sua água está a ${Number(tank.maintenanceLevel).toFixed(0)}% — um filtro agora não faria diferença na renda. Comprar mesmo assim?`}
+          confirmLabel="Comprar mesmo assim"
+          onConfirm={doBuyFilter} onClose={() => setPrompt(null)}
         />
       )}
       {celebrate && <CollectCelebration creature={celebrate} onClose={() => setCelebrate(null)} />}

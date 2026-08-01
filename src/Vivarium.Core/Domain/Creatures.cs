@@ -39,6 +39,12 @@ public class CreatureInstance
     public long? ParentBGrandparentBSeed { get; set; }
     /// <summary>Nº de gestações que este peixe já completou como pai/mãe (risco de morte cresce com o uso).</summary>
     public int BreedCount { get; set; }
+    /// <summary>
+    /// Quando este peixe terminou sua última gestação (null se nunca cruzou). Descansar
+    /// (ficar fora do ninho por um tempo antes de cruzar de novo) decai o risco acumulado
+    /// de BreedCount — ver `BreedingCalculator.EffectiveBreedCount`.
+    /// </summary>
+    public DateTime? LastBredAt { get; set; }
     public bool IsDead { get; set; }
     public DateTime? DiedAt { get; set; }
     /// <summary>

@@ -39,6 +39,18 @@ public class IncomeCalculatorTests
     }
 
     [Fact]
+    public void FatorAgua_SemPerdaNoPatamar_QuedaSuaveAbaixo()
+    {
+        // 80-100%: sem perda de renda — água "quase perfeita" não é punida.
+        Assert.Equal(1.0, IncomeCalculator.WaterFactor(80m, Cfg), 6);
+        Assert.Equal(1.0, IncomeCalculator.WaterFactor(90m, Cfg), 6);
+        Assert.Equal(1.0, IncomeCalculator.WaterFactor(100m, Cfg), 6);
+        // Logo abaixo do patamar já cai (sem penhasco: contínuo em 80%, não um salto).
+        Assert.True(IncomeCalculator.WaterFactor(79m, Cfg) < 1.0);
+        Assert.True(IncomeCalculator.WaterFactor(70m, Cfg) < IncomeCalculator.WaterFactor(79m, Cfg));
+    }
+
+    [Fact]
     public void Sinergia_MesmaCorRendeMaisQueCoresDistintas()
     {
         decimal distintas = IncomeCalculator.TankRatePerHour(Distinct(6m, 6m, 6m, 6m, 6m), 100m, Cfg);

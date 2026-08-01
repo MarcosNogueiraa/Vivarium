@@ -57,20 +57,26 @@ public class BreedingService(VivariumDbContext db, GameService game)
         if (parentA is null || parentB is null)
             return ServiceResult.NotFound("Peixe não encontrado");
 
+        var now = DateTime.UtcNow;
         double hours = BreedingCalculator.GestationHours(parentA.RarityScore, parentB.RarityScore);
         decimal cost = BreedingCalculator.CostSoft(parentA.RarityScore, parentB.RarityScore);
         var tierDist = TraitGenerator.ChildTierDistribution(
             parentA.Seed, parentB.Seed, TraitConfigV1.Version, BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
 
+        double chanceA = BreedingCalculator.DeathChance(BreedingCalculator.EffectiveBreedCount(parentA.BreedCount, parentA.LastBredAt, now));
+        double chanceB = BreedingCalculator.DeathChance(BreedingCalculator.EffectiveBreedCount(parentB.BreedCount, parentB.LastBredAt, now));
+
         var quote = new BreedingQuoteDto(
-            cost, hours, DateTime.UtcNow.AddHours(hours),
+            cost, hours, now.AddHours(hours),
             tierDist.ToDictionary(kv => kv.Key.ToString(), kv => kv.Value),
-            parentA.BreedCount, BreedingCalculator.DeathChance(parentA.BreedCount),
-            parentB.BreedCount, BreedingCalculator.DeathChance(parentB.BreedCount));
+            parentA.BreedCount, chanceA,
+            parentB.BreedCount, chanceB,
+            BreedingDefaults.StabilizerCostSoft, BreedingDefaults.StabilizerReductionFactor,
+            BreedingCalculator.InsuranceCostPremium(chanceA, chanceB));
         return ServiceResult.Success(quote);
     }
 
-    public async Task<ServiceResult> StartAsync(long userId, long parentAId, long parentBId, DateTime now)
+    public async Task<ServiceResult> StartAsync(long userId, long parentAId, long parentBId, DateTime now, bool useStabilizer = false, bool useInsurance = false)
     {
         if (parentAId == parentBId)
             return ServiceResult.Bad("Escolha dois peixes diferentes");
@@ -95,17 +101,51 @@ public class BreedingService(VivariumDbContext db, GameService game)
         if (userAlreadyBreeding)
             return ServiceResult.Bad("Você já tem um casal em gestação");
 
-        decimal cost = BreedingCalculator.CostSoft(parentA.RarityScore, parentB.RarityScore);
+        // Risco travado agora (descanso já aplicado) — o Start é o momento em que o jogador
+        // decide se paga pra mitigar. Seguro tem prioridade se os dois forem marcados.
+        double chanceA = BreedingCalculator.DeathChance(BreedingCalculator.EffectiveBreedCount(parentA.BreedCount, parentA.LastBredAt, now));
+        double chanceB = BreedingCalculator.DeathChance(BreedingCalculator.EffectiveBreedCount(parentB.BreedCount, parentB.LastBredAt, now));
+        bool insuranceApplied = useInsurance;
+        bool stabilizerApplied = useStabilizer && !useInsurance;
+
+        decimal insuranceCost = 0m;
+        if (insuranceApplied)
+        {
+            insuranceCost = BreedingCalculator.InsuranceCostPremium(chanceA, chanceB);
+            chanceA = 0;
+            chanceB = 0;
+        }
+        else if (stabilizerApplied)
+        {
+            chanceA *= BreedingDefaults.StabilizerReductionFactor;
+            chanceB *= BreedingDefaults.StabilizerReductionFactor;
+        }
+
+        decimal baseCost = BreedingCalculator.CostSoft(parentA.RarityScore, parentB.RarityScore);
+        decimal softCost = baseCost + (stabilizerApplied ? BreedingDefaults.StabilizerCostSoft : 0m);
+
         int softId = await db.CurrencyTypes.Where(c => c.Code == "SOFT").Select(c => c.Id).FirstAsync();
         var wallet = await db.WalletBalances.FirstAsync(w => w.UserId == userId && w.CurrencyTypeId == softId);
-        if (wallet.Amount < cost)
+        if (wallet.Amount < softCost)
             return ServiceResult.Bad("Saldo insuficiente");
+
+        WalletBalance? premiumWallet = null;
+        int premiumId = 0;
+        if (insuranceApplied)
+        {
+            premiumId = await db.CurrencyTypes.Where(c => c.Code == "PREMIUM").Select(c => c.Id).FirstAsync();
+            premiumWallet = await db.WalletBalances.FirstAsync(w => w.UserId == userId && w.CurrencyTypeId == premiumId);
+            if (premiumWallet.Amount < insuranceCost)
+                return ServiceResult.Bad("Saldo de moeda premium insuficiente pro seguro");
+        }
 
         var breedingHabitat = await FindOrCreateBreedingHabitatAsync(userId);
 
         await using var transaction = await db.Database.BeginTransactionAsync();
 
-        wallet.Amount -= cost;
+        wallet.Amount -= softCost;
+        if (insuranceApplied && premiumWallet is not null)
+            premiumWallet.Amount -= insuranceCost;
         parentA.HabitatId = breedingHabitat.Id;
         parentB.HabitatId = breedingHabitat.Id;
 
@@ -118,7 +158,10 @@ public class BreedingService(VivariumDbContext db, GameService game)
             ParentBId = parentB.Id,
             StartedAt = now,
             ReadyAt = now.AddHours(hours),
-            CostPaid = cost,
+            CostPaid = softCost,
+            ParentADeathChance = (decimal)chanceA,
+            ParentBDeathChance = (decimal)chanceB,
+            InsuranceUsed = insuranceApplied,
             Status = BreedingStatus.InProgress,
         };
         db.BreedingSlots.Add(slot);
@@ -128,9 +171,20 @@ public class BreedingService(VivariumDbContext db, GameService game)
             Type = TransactionType.Breeding,
             FromUserId = userId,
             CurrencyTypeId = softId,
-            Amount = cost,
+            Amount = softCost,
             CreatedAt = now,
         });
+        if (insuranceApplied)
+        {
+            db.TransactionLogs.Add(new TransactionLog
+            {
+                Type = TransactionType.BreedingInsurance,
+                FromUserId = userId,
+                CurrencyTypeId = premiumId,
+                Amount = insuranceCost,
+                CreatedAt = now,
+            });
+        }
 
         try
         {
@@ -142,7 +196,7 @@ public class BreedingService(VivariumDbContext db, GameService game)
             return ServiceResult.Conflict("Um dos peixes mudou de estado — atualize e tente de novo.");
         }
 
-        return ServiceResult.Success(new { slotId = slot.Id, readyAt = slot.ReadyAt, costPaid = cost });
+        return ServiceResult.Success(new { slotId = slot.Id, readyAt = slot.ReadyAt, costPaid = softCost, insuranceCostPaid = insuranceCost });
     }
 
     public async Task<ServiceResult> GetStatusAsync(long userId)
@@ -159,7 +213,8 @@ public class BreedingService(VivariumDbContext db, GameService game)
         decimal rushCost = ready ? 0m : RushCalculator.GestationRushCost((decimal)(slot.ReadyAt - now).TotalHours);
         var dto = new BreedingSlotDto(
             slot.Id, CreatureDto.From(slot.ParentA!), CreatureDto.From(slot.ParentB!),
-            slot.StartedAt, slot.ReadyAt, ready, slot.CostPaid, rushCost);
+            slot.StartedAt, slot.ReadyAt, ready, slot.CostPaid, rushCost,
+            slot.ParentADeathChance, slot.ParentBDeathChance, slot.InsuranceUsed);
         return ServiceResult.Success(new BreedingStatusResponse(true, dto));
     }
 
@@ -263,16 +318,18 @@ public class BreedingService(VivariumDbContext db, GameService game)
         db.CreatureInstances.Add(child);
         if (childToTank) active++; else backpackCount++;
 
-        // Risco de morte cresce com o nº de gestações já completadas por cada pai.
-        // Roll não-determinístico (não faz parte do motor de traits reproduzível).
-        bool parentADied = Random.Shared.NextDouble() < BreedingCalculator.DeathChance(parentA.BreedCount);
-        bool parentBDied = Random.Shared.NextDouble() < BreedingCalculator.DeathChance(parentB.BreedCount);
+        // Risco travado no Start (já considerando descanso e estabilizador/seguro, se usados) —
+        // não recalcula aqui, pra não deixar a gestação em si (o pai "ocupado") contar como
+        // descanso. Roll não-determinístico (não faz parte do motor de traits reproduzível).
+        bool parentADied = Random.Shared.NextDouble() < (double)slot.ParentADeathChance;
+        bool parentBDied = Random.Shared.NextDouble() < (double)slot.ParentBDeathChance;
 
         // Devolve os pais ao tanque/mochila (se sobreviveram); se nenhum lugar
         // couber, ficam no habitat de reprodução até o jogador abrir espaço.
         foreach (var (parent, died) in new[] { (parentA, parentADied), (parentB, parentBDied) })
         {
             parent.BreedCount++;
+            parent.LastBredAt = now;
             if (died)
             {
                 parent.IsDead = true;

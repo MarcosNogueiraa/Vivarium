@@ -17,11 +17,16 @@ public static class IncomeCalculator
         => config.IncomeBasePerHour
            * Math.Exp(config.IncomeGrowth * ((double)rarityScore - config.IncomeRefScore));
 
-    /// <summary>Fator da água na renda (0–1): água suja rende menos, água 0 rende ~0.</summary>
+    /// <summary>
+    /// Fator da água na renda (0–1): sem perda de IncomeWaterPlateau a 100% (água "quase
+    /// perfeita" não é punida); abaixo do patamar, cai numa curva suave até ~0 em água podre.
+    /// </summary>
     public static double WaterFactor(decimal maintenanceLevel, TickConfig config)
     {
         double q = Math.Clamp((double)maintenanceLevel / 100.0, 0, 1);
-        return Math.Pow(q, config.IncomeWaterExp);
+        if (q >= config.IncomeWaterPlateau) return 1.0;
+        double scaled = q / config.IncomeWaterPlateau;
+        return Math.Pow(scaled, config.IncomeWaterExp);
     }
 
     /// <summary>Multiplicador de sinergia pra N peixes da mesma cor: 1 + s·(N-1), com teto.</summary>

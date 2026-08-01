@@ -381,6 +381,23 @@ static void ReportDeathRiskCurve()
         survival *= (1 - death);
         Console.WriteLine($"  uso #{n + 1,-2} (n={n,-2}): risco {death * 100,5:0.0}%   sobrevivência acumulada até aqui: {survival * 100,5:0.0}%");
     }
+
+    Console.WriteLine($"\nDESCANSO (RestHalfLifeDays = {BreedingDefaults.RestHalfLifeDays}) — mesmo BreedCount=6, risco cai com o tempo parado:");
+    var now = DateTime.UtcNow;
+    foreach (int days in new[] { 0, 5, 10, 20, 40 })
+    {
+        double eff = BreedingCalculator.EffectiveBreedCount(6, now.AddDays(-days), now);
+        double death = BreedingCalculator.DeathChance(eff);
+        Console.WriteLine($"  {days,2}d de descanso: BreedCount efetivo {eff,4:0.00}   risco {death * 100,5:0.0}%");
+    }
+
+    Console.WriteLine($"\nSEGURO DE CRUZAMENTO (InsuranceBasePremium={BreedingDefaults.InsuranceBasePremium}, PerRiskPercent={BreedingDefaults.InsurancePerRiskPercent}):");
+    foreach (int n in new[] { 0, 2, 5, 8 })
+    {
+        double death = BreedingCalculator.DeathChance(n);
+        decimal cost = BreedingCalculator.InsuranceCostPremium(death, death);
+        Console.WriteLine($"  par com n={n} cada (risco {death * 100:0.0}% cada): seguro custa {cost:0.0} premium");
+    }
 }
 
 /// <summary>

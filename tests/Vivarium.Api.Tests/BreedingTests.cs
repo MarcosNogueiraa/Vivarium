@@ -14,15 +14,18 @@ public class BreedingTests : IClassFixture<VivariumApiFactory>
     private record CreatureDto(
         long Id, int SpeciesId, string Seed, int TraitConfigVersion, decimal RarityScore, DateTime CreatedAt,
         bool IsBred, string? ParentASeed, string? ParentBSeed, int BreedCount);
-    private record BreedingSlotDto(long Id, CreatureDto ParentA, CreatureDto ParentB, DateTime StartedAt, DateTime ReadyAt, bool IsReady, decimal CostPaid);
+    private record BreedingSlotDto(
+        long Id, CreatureDto ParentA, CreatureDto ParentB, DateTime StartedAt, DateTime ReadyAt, bool IsReady, decimal CostPaid,
+        decimal ParentADeathChance, decimal ParentBDeathChance, bool InsuranceUsed);
     private record BreedingStatusDto(bool Active, BreedingSlotDto? Slot);
-    private record StartResultDto(long SlotId, DateTime ReadyAt, decimal CostPaid);
+    private record StartResultDto(long SlotId, DateTime ReadyAt, decimal CostPaid, decimal InsuranceCostPaid);
     private record CollectBreedingResponse(CreatureDto Child, bool ParentADied, bool ParentBDied);
     private record BreedingQuoteDto(
         decimal CostSoft, double GestationHours, DateTime EstimatedReadyAt,
         Dictionary<string, double> ChildTierProbabilities,
         int ParentABreedCount, double ParentADeathChance,
-        int ParentBBreedCount, double ParentBDeathChance);
+        int ParentBBreedCount, double ParentBDeathChance,
+        decimal StabilizerCostSoft, double StabilizerReductionFactor, decimal InsuranceCostPremium);
     private record ErrorDto(string Error);
 
     private async Task<long> HabitatIdOf(long userId)
@@ -58,6 +61,37 @@ public class BreedingTests : IClassFixture<VivariumApiFactory>
             int softId = await db.CurrencyTypes.Where(c => c.Code == "SOFT").Select(c => c.Id).FirstAsync();
             var wallet = await db.WalletBalances.FirstAsync(w => w.UserId == userId && w.CurrencyTypeId == softId);
             wallet.Amount += amount;
+        });
+    }
+
+    private async Task GivePremium(long userId, decimal amount)
+    {
+        await _factory.WithDbAsync(async db =>
+        {
+            int premiumId = await db.CurrencyTypes.Where(c => c.Code == "PREMIUM").Select(c => c.Id).FirstAsync();
+            var wallet = await db.WalletBalances.FirstAsync(w => w.UserId == userId && w.CurrencyTypeId == premiumId);
+            wallet.Amount += amount;
+        });
+    }
+
+    private async Task<decimal> PremiumBalance(long userId)
+    {
+        decimal amount = 0m;
+        await _factory.WithDbAsync(async db =>
+        {
+            int premiumId = await db.CurrencyTypes.Where(c => c.Code == "PREMIUM").Select(c => c.Id).FirstAsync();
+            amount = (await db.WalletBalances.FirstAsync(w => w.UserId == userId && w.CurrencyTypeId == premiumId)).Amount;
+        });
+        return amount;
+    }
+
+    private async Task SetBreedCountAndRest(long creatureId, int breedCount, DateTime? lastBredAt)
+    {
+        await _factory.WithDbAsync(async db =>
+        {
+            var c = await db.CreatureInstances.FirstAsync(x => x.Id == creatureId);
+            c.BreedCount = breedCount;
+            c.LastBredAt = lastBredAt;
         });
     }
 
@@ -273,5 +307,97 @@ public class BreedingTests : IClassFixture<VivariumApiFactory>
 
         var second = await client.PostAsync("/api/breeding/collect", null);
         Assert.Equal(HttpStatusCode.NotFound, second.StatusCode); // não há mais gestação em andamento
+    }
+
+    [Fact]
+    public async Task Seguro_GarantePremiumTravaRiscoZeroECobraPremium()
+    {
+        var (client, userId) = await _factory.RegisterAsync("breed10");
+        await GiveSoft(userId, 1000m);
+        await GivePremium(userId, 1000m);
+        long a = await CreateOwnedCreature(userId, 5m, 3001);
+        long b = await CreateOwnedCreature(userId, 6m, 3002);
+        // Veteranos: risco alto o bastante pra garantir que o seguro faz diferença de verdade.
+        await SetBreedCountAndRest(a, 5, null);
+        await SetBreedCountAndRest(b, 5, null);
+
+        decimal premiumBefore = await PremiumBalance(userId);
+
+        var startResp = await client.PostAsJsonAsync("/api/breeding/start",
+            new { parentAId = a, parentBId = b, useInsurance = true });
+        startResp.EnsureSuccessStatusCode();
+        var startResult = await startResp.Content.ReadFromJsonAsync<StartResultDto>();
+        Assert.True(startResult!.InsuranceCostPaid > 0);
+
+        decimal premiumAfter = await PremiumBalance(userId);
+        Assert.Equal(premiumBefore - startResult.InsuranceCostPaid, premiumAfter);
+
+        var status = await client.GetFromJsonAsync<BreedingStatusDto>("/api/breeding");
+        Assert.True(status!.Slot!.InsuranceUsed);
+        Assert.Equal(0m, status.Slot.ParentADeathChance);
+        Assert.Equal(0m, status.Slot.ParentBDeathChance);
+
+        await MakeSlotReadyNow(userId);
+        var collectResp = await client.PostAsync("/api/breeding/collect", null);
+        collectResp.EnsureSuccessStatusCode();
+        var result = await collectResp.Content.ReadFromJsonAsync<CollectBreedingResponse>();
+        Assert.False(result!.ParentADied);
+        Assert.False(result.ParentBDied);
+    }
+
+    [Fact]
+    public async Task Seguro_SemSaldoPremium_Retorna400()
+    {
+        var (client, userId) = await _factory.RegisterAsync("breed11");
+        await GiveSoft(userId, 1000m); // sem GivePremium — saldo premium fica 0
+        long a = await CreateOwnedCreature(userId, 5m, 3003);
+        long b = await CreateOwnedCreature(userId, 6m, 3004);
+
+        var resp = await client.PostAsJsonAsync("/api/breeding/start",
+            new { parentAId = a, parentBId = b, useInsurance = true });
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Estabilizador_ReduzRiscoPelaMetadeECobraSoftExtra()
+    {
+        var (client, userId) = await _factory.RegisterAsync("breed12");
+        await GiveSoft(userId, 1000m);
+        long a = await CreateOwnedCreature(userId, 5m, 3005);
+        long b = await CreateOwnedCreature(userId, 6m, 3006);
+        await SetBreedCountAndRest(a, 5, null);
+        await SetBreedCountAndRest(b, 5, null);
+
+        var quote = await client.GetFromJsonAsync<BreedingQuoteDto>($"/api/breeding/quote?parentAId={a}&parentBId={b}");
+        double baselineA = quote!.ParentADeathChance;
+        double baselineB = quote.ParentBDeathChance;
+
+        var startResp = await client.PostAsJsonAsync("/api/breeding/start",
+            new { parentAId = a, parentBId = b, useStabilizer = true });
+        startResp.EnsureSuccessStatusCode();
+        var startResult = await startResp.Content.ReadFromJsonAsync<StartResultDto>();
+        Assert.Equal(0m, startResult!.InsuranceCostPaid);
+
+        var status = await client.GetFromJsonAsync<BreedingStatusDto>("/api/breeding");
+        Assert.False(status!.Slot!.InsuranceUsed);
+        Assert.Equal(baselineA * 0.5, (double)status.Slot.ParentADeathChance, 3);
+        Assert.Equal(baselineB * 0.5, (double)status.Slot.ParentBDeathChance, 3);
+        // Custo base + estabilizador (150) — maior que só o custo base da gestação.
+        Assert.True(status.Slot.CostPaid > quote.CostSoft);
+    }
+
+    [Fact]
+    public async Task Descanso_ReduzORiscoMostradoNaPrevia()
+    {
+        var (client, userId) = await _factory.RegisterAsync("breed13");
+        long a = await CreateOwnedCreature(userId, 5m, 3007);
+        long b = await CreateOwnedCreature(userId, 6m, 3008);
+        // Mesmo BreedCount alto pros dois peixes, mas só um descansou.
+        await SetBreedCountAndRest(a, 6, DateTime.UtcNow); // acabou de cruzar — sem descanso
+        await SetBreedCountAndRest(b, 6, DateTime.UtcNow.AddDays(-30)); // descansou bastante
+
+        var quote = await client.GetFromJsonAsync<BreedingQuoteDto>($"/api/breeding/quote?parentAId={a}&parentBId={b}");
+        Assert.NotNull(quote);
+        Assert.True(quote!.ParentBDeathChance < quote.ParentADeathChance);
     }
 }

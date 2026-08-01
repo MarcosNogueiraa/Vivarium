@@ -56,6 +56,31 @@ public static class BreedingDefaults
     public const double BaseDeathChance = 0.05;
     public const double MaxDeathChance = 0.85;
     public const double DeathRiskGrowth = 0.25;
+
+    /// <summary>
+    /// Descanso (31/07/2026): o risco acumulado (BreedCount) decai com o tempo que o peixe
+    /// passa FORA do ninho antes do próximo cruzamento — meia-vida em dias. Ex.: um peixe com
+    /// BreedCount=4 que descansou 5 dias entra no próximo cruzamento "contando" como ~2 gestações
+    /// pro cálculo de risco; 10 dias de descanso, ~1. Nunca deleta o histórico (BreedCount
+    /// continua subindo pra sempre — é só o RISCO que se recupera com paciência), e nunca é
+    /// obrigatório: quem quer certeza paga o seguro; quem tem pressa paga o estabilizador; quem
+    /// tem tempo, descansa de graça. Ver `EffectiveBreedCount`.
+    /// </summary>
+    public const double RestHalfLifeDays = 5.0;
+
+    // --- Estabilizador genético (soft, redução parcial) e Seguro de cruzamento (premium,
+    // garantia total) — opt-in no Start, cobrados ali mesmo (sem item/inventário: mais simples
+    // e o preço já reflete o risco do momento). Mutuamente exclusivos; seguro tem prioridade se
+    // os dois forem marcados. Ambos existem pra dar ao jogador uma alavanca ativa contra o risco,
+    // além do descanso passivo — sem eliminar de vez a tensão do risco pra quem não paga nada.
+    public const decimal StabilizerCostSoft = 150m;
+    public const double StabilizerReductionFactor = 0.5;
+
+    public const decimal InsuranceBasePremium = 20m;
+    /// <summary>Premium por ponto percentual de risco combinado (dos dois pais) sendo removido.</summary>
+    public const decimal InsurancePerRiskPercent = 3.0m;
+    public const decimal InsuranceMinPremium = 20m;
+    public const decimal InsuranceMaxPremium = 400m;
 }
 
 public static class BreedingCalculator
@@ -81,13 +106,44 @@ public static class BreedingCalculator
     /// <summary>
     /// Chance de um pai não sobreviver à gestação, dado quantas ele já completou
     /// antes desta (n=0 na primeira vez). Cresce em direção a MaxDeathChance sem
-    /// nunca alcançar 100% — sempre sobra uma margem de sorte.
+    /// nunca alcançar 100% — sempre sobra uma margem de sorte. Aceita um valor
+    /// fracionário (n) pra funcionar com o descanso (`EffectiveBreedCount`), que
+    /// decai o BreedCount inteiro pra um "efetivo" contínuo.
     /// </summary>
-    public static double DeathChance(int completedBreedCount)
+    public static double DeathChance(double effectiveBreedCount)
     {
-        double n = completedBreedCount;
+        double n = Math.Max(0, effectiveBreedCount);
         return BreedingDefaults.BaseDeathChance
             + (BreedingDefaults.MaxDeathChance - BreedingDefaults.BaseDeathChance)
             * (1 - Math.Exp(-BreedingDefaults.DeathRiskGrowth * n));
+    }
+
+    /// <summary>
+    /// BreedCount "efetivo" pro cálculo de risco, descontando o descanso desde a última
+    /// gestação completada por esse peixe (`LastBredAt`) até `asOf` (o momento do novo Start —
+    /// não recomputado durante a gestação em si, que não conta como descanso). Decaimento
+    /// exponencial de meia-vida `RestHalfLifeDays`: sem histórico ou peixe nunca cruzado,
+    /// devolve o BreedCount cru (nada a decair).
+    /// </summary>
+    public static double EffectiveBreedCount(int breedCount, DateTime? lastBredAt, DateTime asOf)
+    {
+        if (breedCount <= 0 || lastBredAt is null)
+            return breedCount;
+
+        double restDays = Math.Max(0, (asOf - lastBredAt.Value).TotalDays);
+        double decay = Math.Pow(0.5, restDays / BreedingDefaults.RestHalfLifeDays);
+        return breedCount * decay;
+    }
+
+    /// <summary>
+    /// Custo em premium do seguro de cruzamento: garante 0% de morte pros dois pais nesta
+    /// gestação. Escala com o risco combinado sendo removido (mais caro quanto mais arriscado
+    /// o casal estava antes do seguro) — mesma lógica de "pague mais pra remover mais" do rush.
+    /// </summary>
+    public static decimal InsuranceCostPremium(double parentADeathChance, double parentBDeathChance)
+    {
+        double combinedPercent = (parentADeathChance + parentBDeathChance) * 100.0;
+        decimal cost = BreedingDefaults.InsuranceBasePremium + BreedingDefaults.InsurancePerRiskPercent * (decimal)combinedPercent;
+        return Math.Clamp(cost, BreedingDefaults.InsuranceMinPremium, BreedingDefaults.InsuranceMaxPremium);
     }
 }

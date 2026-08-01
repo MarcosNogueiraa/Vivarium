@@ -324,6 +324,16 @@ input:focus {
 .water-fill.low { background: linear-gradient(90deg, #ffb08c, var(--coral)); box-shadow: 0 0 8px rgba(255, 158, 124, 0.55); }
 .water-gauge .val { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 24px; text-align: right; }
 
+/* Quanto a renda está perdendo agora por água suja — pra comparar com o custo do filtro */
+.water-loss {
+  display: inline-flex; align-items: baseline; gap: 2px;
+  padding: 6px 10px; border-radius: 999px;
+  background: rgba(255, 111, 97, 0.14); border: 1px solid rgba(255, 111, 97, 0.35);
+  color: var(--coral); font-weight: 700; font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.water-loss small { font-weight: 600; opacity: 0.8; }
+
 .tank-empty {
   position: absolute; inset: 0; z-index: 2;
   display: grid; place-content: center; place-items: center; gap: 4px; text-align: center;
@@ -634,6 +644,17 @@ input:focus {
 
 .detail-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; }
 
+/* Proteção do casal (estabilizador/seguro) na prévia de cruzamento */
+.safety-options { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.safety-option {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03); box-shadow: inset 0 0 0 1px var(--line);
+  font-size: 0.85rem; cursor: pointer;
+}
+.safety-option input { accent-color: var(--glow); flex-shrink: 0; }
+.safety-option:has(input:checked) { box-shadow: inset 0 0 0 1px var(--glow); background: rgba(84, 230, 209, 0.08); }
+
 /* Prévia de cruzamento (Ninho): cards dos dois pais lado a lado */
 .breed-parents { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; margin-top: 10px; }
 .breed-plus { color: var(--faint); font-size: 1.2rem; }
@@ -716,6 +737,17 @@ input:focus {
 @keyframes rise { from { opacity: 0; transform: translateY(16px) scale(0.94); } }
 .celebrate-body .badge.big { align-self: center; }
 .celebrate-body .btn-primary { margin-top: 4px; padding: 11px 26px; }
+
+/* Retratos pequenos dos pais na celebração de nascimento — hover mostra o PeekPanel */
+.parents-row { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 2px; }
+.parents-chips { display: flex; gap: 10px; }
+.parent-chip {
+  border-radius: 12px; overflow: hidden; cursor: pointer;
+  box-shadow: inset 0 0 0 1px var(--line);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.parent-chip:hover { box-shadow: inset 0 0 0 2px var(--tier), 0 0 16px -6px var(--tier); transform: translateY(-2px); }
+.parent-chip-dead { filter: grayscale(0.85) brightness(0.8); }
 
 /* Despedida: um ou dois pais não sobreviveram à gestação (8.8) — tom contido,
    contrastando com o brilho da celebração acima (o filhote nasceu; o luto é à parte). */

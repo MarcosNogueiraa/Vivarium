@@ -18,7 +18,7 @@ public static class BreedingEndpoints
             (await breeding.GetQuoteAsync(TokenService.GetUserId(principal), parentAId, parentBId)).ToHttp());
 
         group.MapPost("/start", async (StartBreedingRequest req, ClaimsPrincipal principal, BreedingService breeding) =>
-            (await breeding.StartAsync(TokenService.GetUserId(principal), req.ParentAId, req.ParentBId, DateTime.UtcNow)).ToHttp());
+            (await breeding.StartAsync(TokenService.GetUserId(principal), req.ParentAId, req.ParentBId, DateTime.UtcNow, req.UseStabilizer, req.UseInsurance)).ToHttp());
 
         group.MapPost("/collect", async (ClaimsPrincipal principal, BreedingService breeding) =>
             (await breeding.CollectAsync(TokenService.GetUserId(principal), DateTime.UtcNow)).ToHttp());

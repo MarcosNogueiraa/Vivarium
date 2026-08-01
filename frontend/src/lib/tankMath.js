@@ -2,6 +2,9 @@
 import { coinsPerHourOf, synergyMultiplier, traitsOf } from "./generator.js";
 import { PT } from "./fishRenderer.js";
 
+/** Acima disso, comprar filtro não muda nada (a renda já está no teto) — avisar antes de gastar. */
+export const FILTER_WARN_THRESHOLD = 95;
+
 /** Contagem de peixes por cor de cauda no tanque. */
 export function tailColorCounts(creatures) {
   const counts = {};

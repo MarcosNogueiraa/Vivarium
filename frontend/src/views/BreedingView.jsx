@@ -7,8 +7,9 @@ import { FishCanvas } from "../components/FishCanvas.jsx";
 import { Modal } from "../components/Modal.jsx";
 import { Coin } from "../components/Coin.jsx";
 import { CollectCelebration } from "../components/CollectCelebration.jsx";
+import { PeekAnchor } from "../components/PeekPanel.jsx";
 import { bandOf, PT } from "../lib/fishRenderer.js";
-import { breedingPreview, traitsOf } from "../lib/generator.js";
+import { breedingPreview } from "../lib/generator.js";
 import { PART_PT, partSummary } from "../lib/format.js";
 
 function ParentPreviewCard({ label, creature, traits }) {
@@ -49,23 +50,6 @@ function DistBars({ dist, labelOf }) {
   );
 }
 
-function PeekPanel({ creature }) {
-  const traits = traitsOf(creature);
-  const score = Number(creature.rarityScore);
-  const band = bandOf(score);
-  return (
-    <div className="peek-card">
-      <div className="peek-title" style={{ color: band.color }}>{band.name} · {score.toFixed(2)}</div>
-      <div className="peek-row">
-        {traits.shimmerTier === "None" ? "Corpo sem brilho" : `${PT.tier[traits.shimmerTier]} · ${PT.shimmer[traits.shimmerColor]}`}
-      </div>
-      <div className="peek-row">Cauda: {partSummary(traits.tail)}</div>
-      <div className="peek-row">Dorsal: {partSummary(traits.dorsal)}</div>
-      <div className="peek-row">Nadadeira peitoral: {partSummary(traits.pectoral)}</div>
-    </div>
-  );
-}
-
 function timeLeft(readyAt) {
   const ms = new Date(readyAt).getTime() - Date.now();
   if (ms <= 0) return "pronto!";
@@ -86,6 +70,7 @@ export function BreedingView({ tank, refreshTank, notify }) {
   const [pickA, setPickA] = useState(null);
   const [pickB, setPickB] = useState(null);
   const [quote, setQuote] = useState(null); // null = fechado, "loading" = carregando, objeto = pronto
+  const [safety, setSafety] = useState("none"); // "none" | "stabilizer" | "insurance" — proteção do casal
   const [celebrate, setCelebrate] = useState(null); // { child, parentLosses }
   const [peek, setPeek] = useState(null); // { x, y, creature } — janela flutuante ao pairar 1s
   const peekTimer = useRef(null);
@@ -105,11 +90,15 @@ export function BreedingView({ tank, refreshTank, notify }) {
 
   async function start() {
     try {
-      await api.startBreeding(pickA.id, pickB.id);
+      await api.startBreeding(pickA.id, pickB.id, {
+        useStabilizer: safety === "stabilizer",
+        useInsurance: safety === "insurance",
+      });
       notify("Casal levado pro ninho!");
       setPickA(null);
       setPickB(null);
       setQuote(null);
+      setSafety("none");
       await Promise.all([refresh(), refreshTank(), loadBackpack()]);
     } catch (e) { notify(e.message); }
   }
@@ -125,7 +114,7 @@ export function BreedingView({ tank, refreshTank, notify }) {
         result.parentADied ? parentA : null,
         result.parentBDied ? parentB : null,
       ].filter(Boolean);
-      setCelebrate({ child: result.child, deadParents });
+      setCelebrate({ child: result.child, parentA, parentB, deadParents });
       await Promise.all([refresh(), refreshTank(), loadBackpack()]);
     } catch (e) { notify(e.message); }
   }
@@ -154,6 +143,7 @@ export function BreedingView({ tank, refreshTank, notify }) {
   }
 
   async function openQuote() {
+    setSafety("none");
     setQuote("loading");
     try {
       setQuote(await api.breedingQuote(pickA.id, pickB.id));
@@ -199,6 +189,14 @@ export function BreedingView({ tank, refreshTank, notify }) {
         <RarityBadge score={Number(status.slot.parentB.rarityScore)} />
       </div>
       <p className="hint" style={{ textAlign: "center" }}>Custo pago: <Coin /> {Number(status.slot.costPaid).toFixed(0)} soft</p>
+      {status.slot.insuranceUsed ? (
+        <p className="hint" style={{ textAlign: "center" }}>🛡️ Seguro ativo — nenhum dos pais pode morrer nesta gestação.</p>
+      ) : (
+        <p className="hint" style={{ textAlign: "center" }}>
+          Risco travado: Peixe A {(Number(status.slot.parentADeathChance) * 100).toFixed(0)}%
+          &nbsp;·&nbsp; Peixe B {(Number(status.slot.parentBDeathChance) * 100).toFixed(0)}%
+        </p>
+      )}
       <div className="card-row" style={{ justifyContent: "center", gap: 8, marginTop: 12 }}>
         <button className="btn-primary" disabled={!status.slot.isReady} onClick={collect}>
           {status.slot.isReady ? "Coletar filhote" : "Aguardando…"}
@@ -282,7 +280,10 @@ export function BreedingView({ tank, refreshTank, notify }) {
             <>
               <div className="card-row" style={{ marginTop: 16 }}>
                 <span>Custo</span>
-                <span className="mono"><Coin /> {quote.costSoft.toFixed(0)} soft</span>
+                <span className="mono">
+                  <Coin /> {(quote.costSoft + (safety === "stabilizer" ? quote.stabilizerCostSoft : 0)).toFixed(0)} soft
+                  {safety === "insurance" && <> + 💎 {quote.insuranceCostPremium.toFixed(0)} premium</>}
+                </span>
               </div>
               <div className="card-row">
                 <span>Gestação</span>
@@ -316,14 +317,41 @@ export function BreedingView({ tank, refreshTank, notify }) {
 
               <div className="detail-section">
                 <div className="eyebrow">Risco de morte dos pais</div>
-                <p className="bd-help">Cada cruzamento completado aumenta o risco do próximo — nunca garantido, mas cresce com o uso.</p>
-                <div className="card-row">
-                  <span>Peixe A ({quote.parentABreedCount}× cruzado)</span>
-                  <span className="mono">{(quote.parentADeathChance * 100).toFixed(0)}%</span>
-                </div>
-                <div className="card-row">
-                  <span>Peixe B ({quote.parentBBreedCount}× cruzado)</span>
-                  <span className="mono">{(quote.parentBDeathChance * 100).toFixed(0)}%</span>
+                <p className="bd-help">
+                  Cada cruzamento completado aumenta o risco do próximo — nunca garantido, mas cresce com o uso.
+                  Descansar o peixe (não cruzar por uns dias) já reduz esse risco sozinho, de graça.
+                </p>
+                {(() => {
+                  const factor = safety === "insurance" ? 0 : safety === "stabilizer" ? quote.stabilizerReductionFactor : 1;
+                  const effA = quote.parentADeathChance * factor;
+                  const effB = quote.parentBDeathChance * factor;
+                  return (
+                    <>
+                      <div className="card-row">
+                        <span>Peixe A ({quote.parentABreedCount}× cruzado)</span>
+                        <span className="mono">{(effA * 100).toFixed(0)}%</span>
+                      </div>
+                      <div className="card-row">
+                        <span>Peixe B ({quote.parentBBreedCount}× cruzado)</span>
+                        <span className="mono">{(effB * 100).toFixed(0)}%</span>
+                      </div>
+                    </>
+                  );
+                })()}
+
+                <div className="safety-options">
+                  <label className="safety-option">
+                    <input type="radio" name="safety" checked={safety === "none"} onChange={() => setSafety("none")} />
+                    <span>Sem proteção</span>
+                  </label>
+                  <label className="safety-option">
+                    <input type="radio" name="safety" checked={safety === "stabilizer"} onChange={() => setSafety("stabilizer")} />
+                    <span>🧪 Estabilizador genético — reduz o risco pela metade (<Coin /> {quote.stabilizerCostSoft.toFixed(0)} soft)</span>
+                  </label>
+                  <label className="safety-option">
+                    <input type="radio" name="safety" checked={safety === "insurance"} onChange={() => setSafety("insurance")} />
+                    <span>🛡️ Seguro de cruzamento — garante que nenhum pai morre (💎 {quote.insuranceCostPremium.toFixed(0)} premium)</span>
+                  </label>
                 </div>
               </div>
 
@@ -340,16 +368,14 @@ export function BreedingView({ tank, refreshTank, notify }) {
         <CollectCelebration
           creature={celebrate.child}
           variant="breeding"
+          parentA={celebrate.parentA}
+          parentB={celebrate.parentB}
           deadParents={celebrate.deadParents}
           onClose={() => setCelebrate(null)}
         />
       )}
 
-      {peek && (
-        <div className="peek-anchor" style={{ left: peek.x, top: peek.y }}>
-          <PeekPanel creature={peek.creature} />
-        </div>
-      )}
+      {peek && <PeekAnchor x={peek.x} y={peek.y} creature={peek.creature} />}
     </>
   );
 }

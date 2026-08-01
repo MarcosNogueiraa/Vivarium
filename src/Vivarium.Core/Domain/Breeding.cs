@@ -20,6 +20,15 @@ public class BreedingSlot
     public DateTime StartedAt { get; set; }
     public DateTime ReadyAt { get; set; }
     public decimal CostPaid { get; set; }
+    /// <summary>
+    /// Risco de morte de cada pai TRAVADO no momento do Start (já considerando descanso e,
+    /// se escolhidos, o estabilizador/seguro) — usado tal qual na coleta, sem recalcular
+    /// (evita deriva: descansar DURANTE a gestação não deveria contar, o pai está "ocupado").
+    /// </summary>
+    public decimal ParentADeathChance { get; set; }
+    public decimal ParentBDeathChance { get; set; }
+    /// <summary>Seguro de cruzamento comprado no Start (premium) — garantiu 0% de morte pros dois pais.</summary>
+    public bool InsuranceUsed { get; set; }
     public BreedingStatus Status { get; set; }
     public long? ChildCreatureId { get; set; }
     public CreatureInstance? ChildCreature { get; set; }

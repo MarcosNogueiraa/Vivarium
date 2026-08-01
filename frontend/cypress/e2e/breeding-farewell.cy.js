@@ -23,6 +23,7 @@ const activeSlot = {
     id: 1, parentA, parentB,
     startedAt: "2026-01-01T00:00:00Z", readyAt: "2020-01-01T00:00:00Z", // no passado = pronto
     isReady: true, costPaid: 200, rushCostPremium: 0,
+    parentADeathChance: 0.23, parentBDeathChance: 0.23, insuranceUsed: false,
   },
 };
 

@@ -176,6 +176,8 @@ public class VivariumDbContext(DbContextOptions<VivariumDbContext> options) : Db
         {
             e.Property(s => s.Status).HasConversion<string>().HasMaxLength(16);
             e.Property(s => s.CostPaid).HasPrecision(18, 2);
+            e.Property(s => s.ParentADeathChance).HasPrecision(6, 4);
+            e.Property(s => s.ParentBDeathChance).HasPrecision(6, 4);
             e.HasIndex(s => new { s.UserId, s.Status });
             e.HasIndex(s => s.HabitatId);
             e.HasOne(s => s.ParentA).WithMany().HasForeignKey(s => s.ParentAId).OnDelete(DeleteBehavior.Restrict);

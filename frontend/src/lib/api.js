@@ -64,8 +64,8 @@ export const api = {
   breedingStatus: () => request("GET", "/api/breeding"),
   breedingQuote: (parentAId, parentBId) =>
     request("GET", `/api/breeding/quote?parentAId=${parentAId}&parentBId=${parentBId}`),
-  startBreeding: (parentAId, parentBId) =>
-    request("POST", "/api/breeding/start", { parentAId, parentBId }),
+  startBreeding: (parentAId, parentBId, { useStabilizer = false, useInsurance = false } = {}) =>
+    request("POST", "/api/breeding/start", { parentAId, parentBId, useStabilizer, useInsurance }),
   collectBreeding: () => request("POST", "/api/breeding/collect"),
   devFinishBreeding: () => request("POST", "/api/dev/breeding/finish"),
   dailyRewardStatus: () => request("GET", "/api/game/daily-reward"),

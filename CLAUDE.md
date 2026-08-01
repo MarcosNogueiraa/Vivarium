@@ -262,10 +262,12 @@ Lógica pura em `HabitatTicker.ProcessTick` (recebe estado + "agora", devolve o 
 
 Renda passiva: cada peixe no tanque farma soft continuamente, escalado pela raridade. Lógica pura em `Vivarium.Core/Gameplay/IncomeCalculator.cs`; parâmetros em `TickConfig`; acumulada no tick preguiçoso (`GameService.ApplyTickAsync`) e **creditada automática** na carteira (idle puro, sem clique).
 
-- **Fórmula:** `coinsPorHora(score) = IncomeBasePerHour · exp(IncomeGrowth · (score − IncomeRefScore))` — **base 1.7** (reduzida de 2.0 em 29/07 pra compensar o +19% de renda mediana que a raridade v2 trouxe — score mediano subiu 5.0→5.36; baixar a base escala tudo uniforme, mantendo o prêmio *relativo* do lendário), growth 0.49, ref 4. Comum (score ~5) ~3/h, raro ~9/h, épico ~30/h, lendário (14+) centenas/h (score 15 ≈ 370/h). Topo íngreme = lendário cobiçado.
+- **Fórmula:** `coinsPorHora(score) = IncomeBasePerHour · exp(IncomeGrowth · (score − IncomeRefScore))` — **base 1.5** (era 1.7, reduzida de novo em 31/07 pra compensar o buff que o patamar de água deu à renda — ver abaixo), growth 0.49, ref 4. Comum (score ~5) ~2.6/h, raro ~8/h, épico ~26/h, lendário (14+) centenas/h. Topo íngreme = lendário cobiçado.
 - **Sinergia por cor de cauda (29/07):** N peixes com a mesma cor de cauda no tanque → cada um multiplica a renda por `1 + SynergyPerMatch·(N−1)` com teto `SynergyMaxBonus` (0.15 / +80%). Ex.: 5 de cauda azul → +60% cada. Cria demanda por peixes específicos no mercado ("montar tanque temático") = uso inteligente das moedas. `GameService` deriva a cor via `TraitGenerator`; `IncomeCalculator.FishIncome`/`SynergyMultiplier`. O cliente exibe a sinergia no tanque (`generator.js: synergyMultiplier`).
 - **Geração (29/07):** `GenerationIntervalMinutes = 25` (era 15) → mais lento + lendário ~1/mês pro jogador ativo (~2 sem. pro dedicado; sim: `Vivarium.Simulation economy`).
-- **Fator água:** `(maint/100)^0.7` — água cheia 100%, 40 → 53%, 15 → 26%, 0 → 0%.
+- **Fator água com patamar (31/07/2026):** `WaterFactor(maint) = 1` pra `maint ≥ IncomeWaterPlateau` (80%) — água "quase perfeita" não é mais punida, só abaixo do patamar é que dói. Abaixo de 80%: `(maint/80)^0.7` (mesmo expoente de antes, só reescalado — contínuo em 80%, sem "penhasco"). Ex.: 90% → 100% de renda (antes: 93%), 50% → 72% (antes: 62%), 15% → 30% (antes: 26%), 0% → 0%. Pedido do usuário: não faz sentido punir manutenção "quase perfeita" — só abaixo de 80 a água deveria começar a doer. Como isso é um buff em quase toda a faixa 0-100%, `IncomeBasePerHour` caiu de 1.7→1.5 (~-12%) pra manter o ritmo geral parecido com antes (mesmo princípio do ajuste 2.0→1.7 em 29/07 — ver `TickConfig` pros detalhes do cálculo). Validado com `Vivarium.Simulation simulate`: carteira ainda oscila mas cresce nos 3 perfis depois do ajuste.
+- **Aviso ao comprar filtro com água já alta (31/07/2026):** `FILTER_WARN_THRESHOLD = 95` (`frontend/lib/tankMath.js`) — comprar filtro com água ≥95% não muda a renda (já está no patamar de 80+). `TankView`/`StoreView` interceptam a compra do item `filter_basic` nesse caso e mostram um `ConfirmModal` perguntando se o jogador quer mesmo gastar — evita desperdício sem bloquear a ação (o jogador pode confirmar mesmo assim, ex.: quer deixar guardado o filtro automático de qualquer forma).
+- **Visibilidade da perda por água suja (31/07/2026):** `TankView` mostra um indicador `-X/h` (`.water-loss`, coral) colado no medidor de água sempre que o potencial a água cheia (`tankPotential`, já existia) supera a renda atual em mais de 0.05/h — antes só aparecia num tooltip discreto ("de X" pequeno no chip de renda, que continua existindo). O novo indicador fica ao lado do botão "Filtro · 20", pra comparar visualmente o custo do filtro com a perda acumulada sem precisar calcular nada.
 - **Degradação escala com peixes (29/07):** `base·(1 + DegradationPerFishFactor·nºpeixes)` (k=0.10) — tanque cheio suja mais rápido (`HabitatTickState.ActiveFishCount`). *Nota de sustentabilidade:* isto é sabor/consequência de descuido, **não** o balanceador principal — a renda cresce com raridade (exponencial) e a manutenção com contagem (linear), então num tanque rico o upkeep é irrelevante. A sustentabilidade de longo prazo depende dos **ralos de progressão** (aquários em tiers — Fase B; breeding — 8.8), não da manutenção.
 - **Online/offline:** reusa `OnlineGenerationRate`/`OfflineGenerationRate` (1.0/0.45). Offline farma a 45% **com teto de 8h** (`IncomeOfflineCapMinutes=480`). Lembrar (8.3): trocar de aba continua online; só navegador fechado = offline.
 - **Fator água na renda usa a MÉDIA início/fim da janela (29/07):** `IncomeCalculator.Accrue` recebe a água antes e depois do tick e usa `0.5·(WaterFactor(início)+WaterFactor(fim))`. Conserta a incoerência de creditar renda offline a "água cheia" enquanto a água decaía (numa ausência longa a água chega a 0). Online, com ticks frequentes, início≈fim → igual ao instantâneo.
@@ -312,6 +314,16 @@ Resolve o **gap #1** da economia ([[revisao-economia]]): não havia sink recorre
 - **Endpoints:** `GET /api/breeding`, `GET /api/breeding/quote`, `POST /api/breeding/start`, `POST /api/breeding/collect`.
 - **Frontend:** aba "Ninho" (`BreedingView.jsx`) — picker de 2 peixes; ao selecionar os 2, uma **barra fixa no rodapé** (`.sticky-bar`) chama um **modal de prévia** (custo/gestação/chances/risco, via `/quote`) antes de confirmar; `AquariumCanvas` com `theme="breeding"` (tingimento rosado + corações) durante a gestação ativa; `CollectCelebration` ganhou `variant="breeding"` (mostrada **sempre** ao coletar um filhote, não só se raro — é um evento demorado que merece o momento). Fix de CSS: `.card-row` de ações (mochila) ganhou `flex-wrap` + botões mais compactos — estourava a borda do card com 3 botões.
 - **Despedida do pai perdido (31/07/2026):** quando um pai não sobrevive à gestação, `CollectCelebration` mostra uma seção de despedida — não só um aviso genérico de "X pai(s) não sobreviveram". `BreedingView.collect()` tira um snapshot de `status.slot.parentA`/`parentB` (o `CreatureDto` completo) **antes** de chamar `/api/breeding/collect` — depois de coletar a gestação vira inativa e esses dados somem da resposta de status. Cada pai perdido (`deadParents`, até 2) ganha um retrato próprio (`FishCanvas` em cinza — `filter: grayscale(0.85) brightness(0.8)`, `.farewell-portrait`) com uma animação suave de entrar e assentar (`farewell-fade`), separado por uma linha divisória do resto da celebração (tom contido — o filhote nasceu, o luto é à parte, não compete pelo mesmo destaque). Testado em `frontend/cypress/e2e/breeding-farewell.cy.js`.
+
+**Mitigar o risco de morte (31/07/2026)** — a pedido do usuário: três alavancas complementares, nenhuma obrigatória, priorizando uma economia sustentável (o gasto real é opcional, não uma taxa disfarçada):
+
+- **Descanso (passivo, de graça):** `CreatureInstance.LastBredAt` (nullable, setado a cada gestação completada como pai/mãe) registra quando o peixe terminou seu último cruzamento. `BreedingCalculator.EffectiveBreedCount(breedCount, lastBredAt, asOf)` decai o `BreedCount` acumulado por uma meia-vida exponencial (`RestHalfLifeDays = 5`): um peixe com `BreedCount=6` que descansou 10 dias (2 meias-vidas) entra no próximo cruzamento "contando" como `BreedCount` efetivo ≈1.5, não 6 — risco cai de ~67% pra ~30% só de esperar. Calculado como-de-agora (`DateTime.UtcNow`) na prévia (`/breeding/quote`) e travado no `now` do `/breeding/start` (a gestação em si NÃO conta como descanso — o pai está "ocupado"). `BreedCount` bruto nunca decai (histórico permanente); só o RISCO calculado se recupera com paciência. Calibração em `Vivarium.Simulation breed` (seção "DESCANSO").
+- **Estabilizador genético (soft, redução parcial):** opt-in `useStabilizer` no `POST /api/breeding/start` — cobra `BreedingDefaults.StabilizerCostSoft` (150, fixo, somado ao custo normal da gestação) e reduz o risco travado dos dois pais pela metade (`StabilizerReductionFactor = 0.5`). Sem item/inventário: é cobrado e aplicado direto no Start (mais simples que UserInventory pra algo usado uma vez por gestação).
+- **Seguro de cruzamento (premium, garantia total):** opt-in `useInsurance` no mesmo endpoint — garante 0% de morte pros dois pais nesta gestação. Custo escala com o risco combinado sendo removido: `BreedingCalculator.InsuranceCostPremium(chanceA, chanceB) = clamp(InsuranceBasePremium + InsurancePerRiskPercent·(chanceA+chanceB)·100, 20, 400)` — barato pra um par fresco (~50 premium), até o teto de 400 pra veteranos de alto risco. Mesma filosofia do rush (§8.11): premium compra conveniência opcional, nunca é exigido. Se os dois forem marcados, o seguro tem prioridade (o estabilizador não é cobrado nem faz diferença).
+- **Travado no Start, não recalculado no Collect:** `BreedingSlot` ganhou `ParentADeathChance`/`ParentBDeathChance` (já com descanso + estabilizador/seguro aplicados) e `InsuranceUsed` — `CollectAsync` rola o risco usando esses valores gravados, não recalcula do zero (evita que o tempo gasto NA gestação conte como descanso, e mantém consistente o que foi mostrado/pago no Start). Expostos em `BreedingSlotDto` pra a UI mostrar "risco travado: X%" ou um selo "🛡️ Seguro ativo" durante a gestação.
+- **`TransactionType.BreedingInsurance`** (novo valor no enum) audita o gasto em premium do seguro, separado do `Breeding` (soft) normal.
+- **Frontend (`BreedingView.jsx`):** no modal de prévia, a seção de risco ganhou três opções em rádio (`.safety-options`) — sem proteção / estabilizador / seguro — com o custo e o risco resultante recalculados ao vivo (client-side, espelhando a mesma aritmética simples: `chance × StabilizerReductionFactor` ou `0` pro seguro). Durante a gestação ativa, mostra o risco travado ou o selo de seguro.
+- **Testes:** `BreedingCalculatorTests.cs` (Core — `EffectiveBreedCount`, `InsuranceCostPremium`) + 4 casos novos em `BreedingTests.cs` (Api — seguro cobra e zera risco, saldo premium insuficiente falha, estabilizador cobra extra e reduz pela metade, descanso reduz o risco mostrado na prévia).
 
 ### 8.9 Fora do escopo do MVP
 
@@ -456,6 +468,7 @@ CreatureInstance
 - ParentBGrandparentASeed (bigint, nullable)
 - ParentBGrandparentBSeed (bigint, nullable)
 - BreedCount (int, default 0) -- nº de gestações já completadas como pai/mãe
+- LastBredAt (datetime, nullable) -- quando terminou a última gestação; descanso decai o risco (8.8, BreedingCalculator.EffectiveBreedCount)
 - IsDead (bool, default false) -- não sobreviveu a uma gestação (risco cresce com BreedCount)
 - DiedAt (datetime, nullable)
 - SoldAt (datetime, nullable) -- vendido ao NPC (vendor, 8.12); não apaga a linha (mesma razão do IsDead)
@@ -488,7 +501,7 @@ MarketListing
 
 TransactionLog
 - Id (PK)
-- Type (MarketSale | DirectTransfer | CurrencyPurchase | ItemPurchase | Sink | Breeding | BreedingLoss | DailyReward | TimeSkip | VendorSale)
+- Type (MarketSale | DirectTransfer | CurrencyPurchase | ItemPurchase | Sink | Breeding | BreedingLoss | DailyReward | TimeSkip | VendorSale | BreedingInsurance)
 - FromUserId (FK -> User, nullable)
 - ToUserId (FK -> User, nullable)
 - CreatureInstanceId (FK -> CreatureInstance, nullable)
@@ -504,7 +517,10 @@ BreedingSlot -- par em gestação (8.8); habitat de reprodução dedicado (Habit
 - ParentBId (FK -> CreatureInstance)
 - StartedAt
 - ReadyAt -- StartedAt + BreedingCalculator.GestationHours(scoreA, scoreB)
-- CostPaid (decimal) -- BreedingCalculator.CostSoft(scoreA, scoreB) no momento do Start
+- CostPaid (decimal) -- BreedingCalculator.CostSoft(scoreA, scoreB) + estabilizador (se usado) no momento do Start
+- ParentADeathChance (decimal) -- risco travado no Start (descanso + estabilizador/seguro já aplicados); usado tal qual no Collect
+- ParentBDeathChance (decimal)
+- InsuranceUsed (bool, default false) -- seguro de cruzamento comprado (premium); garantiu 0% de morte pros dois pais
 - Status (InProgress | Collected)
 - ChildCreatureId (FK -> CreatureInstance, nullable) -- preenchido na coleta
 ```
@@ -590,7 +606,7 @@ Falta pra ir ao ar (depende de contas do usuário):
 | POST | `/api/items/{key}/buy` | ✓ | compra e aplica efeito; registra `ItemPurchase` (sink) |
 | GET | `/api/breeding` | ✓ | gestação em andamento do usuário, se houver (8.8) |
 | GET | `/api/breeding/quote` | ✓ | prévia sem custo: custo/gestação/chances do filho/risco de morte dos pais |
-| POST | `/api/breeding/start` | ✓ | leva 2 peixes próprios pro habitat de reprodução; debita `CostSoft` dinâmico; registra `Breeding` (sink) |
+| POST | `/api/breeding/start` | ✓ | leva 2 peixes próprios pro habitat de reprodução; debita `CostSoft` dinâmico; registra `Breeding` (sink); aceita `useStabilizer`/`useInsurance` opcionais pra mitigar o risco de morte (8.8) |
 | POST | `/api/breeding/collect` | ✓ | coleta o filhote quando pronto (herança trait-a-trait); devolve os pais sobreviventes ao tanque/mochila; rola risco de morte |
 | POST | `/api/breeding/rush` | ✓ | pula o tempo restante de gestação pagando premium (8.11) |
 
