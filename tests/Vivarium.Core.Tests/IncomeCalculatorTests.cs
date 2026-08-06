@@ -24,8 +24,8 @@ public class IncomeCalculatorTests
         double lendario = IncomeCalculator.CoinsPerHour(14m, Cfg); // início do Lendário (v2)
 
         Assert.True(comum < raro && raro < lendario);
-        Assert.InRange(comum, 1.4, 2.0);           // base 1.7/h
-        Assert.True(lendario > 150);               // lendário rende muito mais
+        Assert.InRange(comum, 1.4, 2.0);           // base 1.5/h
+        Assert.True(lendario > 90);                // lendário rende muito mais (growth 0.42, 06/08/2026)
         Assert.True(lendario / comum > 25);        // gap enorme comum→lendário
     }
 

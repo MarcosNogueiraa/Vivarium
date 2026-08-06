@@ -699,6 +699,25 @@ input:focus {
 .guide-band .gb-range { color: var(--muted); font-size: 0.82rem; }
 .guide-foot { margin-top: 14px; font-size: 0.82rem; }
 
+.link-btn {
+  display: inline; padding: 0; background: none; border: none; box-shadow: none;
+  color: var(--glow-2); font-weight: 700; text-decoration: underline; cursor: pointer;
+}
+.howto-list { display: flex; flex-direction: column; gap: 6px; }
+.howto-section { border-bottom: 1px solid var(--line); }
+.howto-section:last-child { border-bottom: none; }
+.howto-head {
+  width: 100%; display: flex; align-items: center; gap: 10px;
+  background: none; border: none; box-shadow: none; padding: 12px 2px;
+  font-weight: 700; font-size: 0.95rem; text-align: left; color: var(--ink);
+}
+.howto-head .chevron { display: inline-block; transition: transform 0.16s ease; color: var(--muted); }
+.howto-head .chevron.open { transform: rotate(90deg); }
+.howto-body { padding: 0 2px 14px 24px; line-height: 1.6; font-size: 0.88rem; }
+.howto-body p { margin: 0 0 8px; }
+.howto-body p:last-child { margin-bottom: 0; }
+.howto-body b { color: var(--ink); }
+
 /* ---------- Onboarding (jogador novo) ---------- */
 .onboard {
   display: flex; align-items: center; gap: 16px;

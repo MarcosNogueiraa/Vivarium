@@ -33,10 +33,14 @@ public class RushCalculatorTests
     }
 
     [Fact]
-    public void GestationHours_BaseMaisLentaAposORebalanceamentoAntiRush()
+    public void GestationHours_ComunsRapidos_LendariosContinuamLentos()
     {
-        // 2 comuns (score ~5 cada, combinado ~10 = ref): agora leva o dia inteiro, não só horas.
-        double hours = BreedingCalculator.GestationHours(5m, 5m);
-        Assert.True(hours >= 20); // era ~8h antes do rebalanceamento de 30/07
+        // 2 comuns (score ~5 cada, combinado ~10 = ref): quase imediato (06/08/2026, Base=6h).
+        double comuns = BreedingCalculator.GestationHours(5m, 5m);
+        Assert.InRange(comuns, 5.5, 6.5);
+
+        // 2 lendários (score ~14 cada): o corte foi assimétrico — o topo continua lento (~7 dias).
+        double lendarios = BreedingCalculator.GestationHours(14m, 14m);
+        Assert.InRange(lendarios, 150, 190);
     }
 }

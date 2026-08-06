@@ -10,6 +10,8 @@ import { BackpackView } from "./BackpackView.jsx";
 import { MarketView } from "./MarketView.jsx";
 import { StoreView } from "./StoreView.jsx";
 import { BreedingView } from "./BreedingView.jsx";
+import { HowItWorksGuide } from "./HowItWorksGuide.jsx";
+import { RarityGuide } from "./RarityGuide.jsx";
 
 export function GameView({ onLogout }) {
   const { tank, userId, refreshTank, syncError } = useGame();
@@ -17,6 +19,8 @@ export function GameView({ onLogout }) {
   const { status: dailyReward, refresh: refreshDailyReward } = useDailyReward();
   const [tab, setTab] = useState("tank");
   const [claimingReward, setClaimingReward] = useState(false);
+  const [showHowItWorks, setShowHowItWorks] = useState(false);
+  const [showRarityGuide, setShowRarityGuide] = useState(false);
 
   async function devCoins() {
     try { await api.devCoins(1000); notify("+1000 fichas"); await refreshTank(); }
@@ -54,6 +58,7 @@ export function GameView({ onLogout }) {
           <button className={tab === "store" ? "active" : ""} onClick={() => setTab("store")}>Loja</button>
           <button className={tab === "breeding" ? "active" : ""} onClick={() => setTab("breeding")}>Ninho</button>
         </nav>
+        <button className="guide-btn" onClick={() => setShowHowItWorks(true)} title="Como o jogo funciona">?</button>
         <span className="spacer" />
         {dailyReward?.canClaim && (
           <button className="daily-reward-btn" onClick={claimDailyReward} disabled={claimingReward}
@@ -93,6 +98,14 @@ export function GameView({ onLogout }) {
       </main>
 
       <Toast message={toast} />
+
+      {showHowItWorks && (
+        <HowItWorksGuide
+          onClose={() => setShowHowItWorks(false)}
+          onOpenRarityGuide={() => { setShowHowItWorks(false); setShowRarityGuide(true); }}
+        />
+      )}
+      {showRarityGuide && <RarityGuide onClose={() => setShowRarityGuide(false)} />}
     </div>
   );
 }

@@ -101,7 +101,7 @@ export const CONFIG = {
     finAmpMin: 0.15, finAmpMax: 0.75,
   },
   // Renda por peixe — espelha IncomeCalculator/TickConfig (manter em sincronia)
-  income: { base: 1.7, growth: 0.49, ref: 4.0 },
+  income: { base: 1.5, growth: 0.42, ref: 4.0 },
   synergy: { perMatch: 0.15, maxBonus: 0.80 },
   // Venda ao NPC (vendor, §8.12) — espelha VendorCalculator/TickConfig (manter em sincronia)
   vendor: { hoursEquivalent: 2.0, minPrice: 1 },

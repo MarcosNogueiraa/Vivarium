@@ -9,16 +9,20 @@ namespace Vivarium.Core.Gameplay;
 public static class BreedingDefaults
 {
     /// <summary>
-    /// Base 3x maior (8→24, 30/07/2026): mesmo casal mais comum agora leva o dia inteiro,
-    /// não só algumas horas — fricção deliberada anti-rush (ver `RushCalculator`/8.11). O
-    /// crescimento (`GestationGrowth`) não mudou, só o piso: a curva de rarity ainda escala
-    /// igual, só que 3x mais lenta em todo o espectro.
+    /// Base e growth reduzidos/reequilibrados (24→6, 0.12→0.185, 06/08/2026): usuário achou
+    /// 2 dias pra cruzar um casal de incomuns tempo demais, e observou que custo em soft e
+    /// risco de morte já são fricção suficiente pra pares baratos (nenhum dos dois ameaça a
+    /// economia) — o tempo só precisa continuar sendo o freio real pros pares RICOS, já que
+    /// custo é intencionalmente barato pra eles e o risco é mitigável (descanso, estabilizador,
+    /// seguro). Por isso o corte é assimétrico: Base baixo deixa o comum quase imediato (6h),
+    /// mas o Growth mais alto compensa e mantém o topo perto do valor anterior (lendário
+    /// ~208h→~167h, ainda ~7 dias; épico típico ~80h, ~3-4 dias). Ver CLAUDE.md 8.8.
     /// </summary>
-    public const double BaseGestationHours = 24.0;
-    public const double GestationGrowth = 0.12;
+    public const double BaseGestationHours = 6.0;
+    public const double GestationGrowth = 0.185;
     public const double GestationRefScore = 10.0;
-    /// <summary>Piso também subiu (4→12h, 30/07/2026): nunca cruza em menos de meio dia.</summary>
-    public const double MinGestationHours = 12.0;
+    /// <summary>Piso baixou junto (12→6h, 06/08/2026): acompanha o novo Base, senão anularia o corte do comum.</summary>
+    public const double MinGestationHours = 6.0;
     public const double MaxGestationHours = 240.0;
     public const double MutationChance = 0.08;
 

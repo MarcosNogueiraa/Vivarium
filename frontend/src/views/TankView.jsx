@@ -146,7 +146,7 @@ export function TankView({ tank, refresh, notify }) {
             <span className="spacer" style={{ flex: 1 }} />
             <span className="income-chip" title={
               potential > current + 0.05
-                ? `Produção atual (com a água). Potencial a água cheia: ${potential.toFixed(1)}/h`
+                ? `Produção real agora: ${current.toFixed(1)}/h (já descontando a água suja). Com a água a 100% seria ${potential.toFixed(1)}/h — a diferença (${waterLossPerHour.toFixed(1)}/h) é o quanto a água suja está custando.`
                 : "Moedas por hora que seu tanque farma"
             }>
               <Coin />+{current.toFixed(1)}<small>/h</small>
@@ -162,7 +162,7 @@ export function TankView({ tank, refresh, notify }) {
             {waterLossPerHour > 0.05 && (
               <span
                 className="water-loss"
-                title="Quanto sua renda está perdendo agora por causa da água suja — compare com o custo do filtro pra saber se compensa limpar."
+                title={`Você produz ${current.toFixed(1)}/h agora, mas produziria ${potential.toFixed(1)}/h com a água a 100% — essa diferença (não um valor "extra" cobrado) é o quanto a água suja está te custando por hora. Compare com o custo do filtro pra saber se compensa limpar.`}
               >
                 −{waterLossPerHour.toFixed(1)}<small>/h</small>
               </span>

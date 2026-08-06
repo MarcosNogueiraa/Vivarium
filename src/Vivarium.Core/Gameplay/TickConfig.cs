@@ -35,7 +35,16 @@ public sealed record TickConfig
     /// antes, só que sem punir manutenção "quase perfeita".
     /// </summary>
     public double IncomeBasePerHour { get; init; } = 1.5;
-    public double IncomeGrowth { get; init; } = 0.49;
+    /// <summary>
+    /// 0.42 (era 0.49, 06/08/2026): a faixa Épico (score 9.8-14.0) é bem mais larga que
+    /// Incomum/Raro, então o mesmo crescimento exponencial acumulava demais dentro do
+    /// próprio tier — um épico no topo da faixa rendia ~201/h contra ~26/h no piso (7.8x),
+    /// deixando runs de sorte (poucos peixes, 1-2 épicos "altos") desproporcionalmente
+    /// fortes. Reduzir o growth corta o teto do épico pela metade (~100/h) sem achatar
+    /// o comum/incomum (pertinho do IncomeRefScore, quase não muda) nem eliminar o
+    /// "jackpot" do lendário (ainda ~7.8x um épico no topo). Ver CLAUDE.md 8.6.
+    /// </summary>
+    public double IncomeGrowth { get; init; } = 0.42;
     public double IncomeRefScore { get; init; } = 4.0;
     /// <summary>
     /// Água 80-100%: sem perda de renda (o jogador não é punido por "quase perfeito" —
