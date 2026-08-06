@@ -11,7 +11,7 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd --uid 1654 --create-home --shell /usr/sbin/nologin appuser
+    && useradd --create-home --shell /usr/sbin/nologin appuser
 COPY --from=build /app .
 RUN chown -R appuser:appuser /app
 USER appuser
