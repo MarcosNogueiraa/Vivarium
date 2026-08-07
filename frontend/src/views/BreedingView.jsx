@@ -76,6 +76,9 @@ export function BreedingView({ tank, refreshTank, notify }) {
   const peekTimer = useRef(null);
   const [, forceTick] = useState(0);
 
+  const softBalance = Number(tank.wallet?.SOFT ?? 0);
+  const premiumBalance = Number(tank.wallet?.PREMIUM ?? 0);
+
   const loadBackpack = useCallback(async () => { setBackpack(await api.backpack()); }, []);
   useEffect(() => { loadBackpack().catch((e) => notify(e.message)); }, [loadBackpack, notify]);
 
@@ -340,18 +343,27 @@ export function BreedingView({ tank, refreshTank, notify }) {
                 })()}
 
                 <div className="safety-options">
-                  <label className="safety-option">
-                    <input type="radio" name="safety" checked={safety === "none"} onChange={() => setSafety("none")} />
-                    <span>Sem proteção</span>
-                  </label>
-                  <label className="safety-option">
-                    <input type="radio" name="safety" checked={safety === "stabilizer"} onChange={() => setSafety("stabilizer")} />
-                    <span>🧪 Estabilizador genético — reduz o risco pela metade (<Coin /> {quote.stabilizerCostSoft.toFixed(0)} soft)</span>
-                  </label>
-                  <label className="safety-option">
-                    <input type="radio" name="safety" checked={safety === "insurance"} onChange={() => setSafety("insurance")} />
-                    <span>🛡️ Seguro de cruzamento — garante que nenhum pai morre (💎 {quote.insuranceCostPremium.toFixed(0)} premium)</span>
-                  </label>
+                  {(() => {
+                    const canAffordNone = softBalance >= quote.costSoft;
+                    const canAffordStabilizer = softBalance >= quote.costSoft + quote.stabilizerCostSoft;
+                    const canAffordInsurance = softBalance >= quote.costSoft && premiumBalance >= quote.insuranceCostPremium;
+                    return (
+                      <>
+                        <label className="safety-option" title={canAffordNone ? undefined : "Saldo de soft insuficiente"}>
+                          <input type="radio" name="safety" checked={safety === "none"} disabled={!canAffordNone} onChange={() => setSafety("none")} />
+                          <span>Sem proteção</span>
+                        </label>
+                        <label className="safety-option" title={canAffordStabilizer ? undefined : "Saldo de soft insuficiente"}>
+                          <input type="radio" name="safety" checked={safety === "stabilizer"} disabled={!canAffordStabilizer} onChange={() => setSafety("stabilizer")} />
+                          <span>🧪 Estabilizador genético — reduz o risco pela metade (<Coin /> {quote.stabilizerCostSoft.toFixed(0)} soft)</span>
+                        </label>
+                        <label className="safety-option" title={canAffordInsurance ? undefined : "Saldo de premium insuficiente"}>
+                          <input type="radio" name="safety" checked={safety === "insurance"} disabled={!canAffordInsurance} onChange={() => setSafety("insurance")} />
+                          <span>🛡️ Seguro de cruzamento — garante que nenhum pai morre (💎 {quote.insuranceCostPremium.toFixed(0)} premium)</span>
+                        </label>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 

@@ -476,7 +476,7 @@ input:focus {
 /* ---------- Toast ---------- */
 .toast {
   position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%);
-  z-index: 50;
+  z-index: 80;
   padding: 13px 22px; border-radius: 14px; font-weight: 600;
   background: var(--panel-strong);
   border: 1px solid var(--line-strong);
@@ -652,8 +652,13 @@ input:focus {
   background: rgba(255, 255, 255, 0.03); box-shadow: inset 0 0 0 1px var(--line);
   font-size: 0.85rem; cursor: pointer;
 }
-.safety-option input { accent-color: var(--glow); flex-shrink: 0; }
+.safety-option input[type="radio"] {
+  width: 16px; height: 16px; padding: 0; flex: 0 0 auto;
+  accent-color: var(--glow); background: none; border: none; border-radius: 0;
+}
 .safety-option:has(input:checked) { box-shadow: inset 0 0 0 1px var(--glow); background: rgba(84, 230, 209, 0.08); }
+.safety-option:has(input:disabled) { opacity: 0.45; cursor: default; }
+.safety-option:has(input:disabled) input { cursor: default; }
 
 /* Prévia de cruzamento (Ninho): cards dos dois pais lado a lado */
 .breed-parents { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; margin-top: 10px; }
