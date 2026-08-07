@@ -23,7 +23,7 @@ async function request(method, path, body) {
     return null;
   }
   if (!response.ok) {
-    let message = `Erro ${response.status}`;
+    let message = "Não foi possível completar a ação. Tente novamente.";
     try {
       const data = await response.json();
       if (data?.error) message = data.error;

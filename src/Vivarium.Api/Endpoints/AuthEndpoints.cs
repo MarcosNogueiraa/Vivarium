@@ -106,7 +106,7 @@ public static class AuthEndpoints
                 u.Username == req.UsernameOrEmail || u.Email == req.UsernameOrEmail);
 
             if (user is null || !PasswordHasher.Verify(req.Password, user.PasswordHash))
-                return Results.Unauthorized();
+                return ApiError.Unauthorized("Usuário ou senha incorretos");
 
             return Results.Ok(new AuthResponse(user.Id, user.Username, tokens.CreateToken(user)));
         });
