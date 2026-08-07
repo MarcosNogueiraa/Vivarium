@@ -15,7 +15,10 @@ public record TankResponse(
     decimal CoinsPerHour,
     decimal GenerationProgressMinutes,
     int GenerationIntervalMinutes,
-    bool IsAdmin = false);
+    bool IsAdmin = false,
+    string CapacityBandName = "",
+    int MaxCapacity = 0,
+    decimal CapacityBandDegradationFactor = 1m);
 
 public record BackpackResponse(int Capacity, IReadOnlyList<CreatureDto> Creatures);
 

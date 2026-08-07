@@ -440,13 +440,15 @@ export function vendorPriceOf(rarityScore) {
 
 /**
  * Quanto UM peixe no tanque acelera a degradação da água, em pontos de qualidade/hora.
- * A fórmula do servidor é base·(1 + fator·pesoTotal) — cada peixe soma `score/rarityRefScore`
- * ao peso total (08/08/2026: era 1 fixo por peixe, agora quem rende mais suja mais).
+ * A fórmula do servidor é base·(1 + fator·pesoTotal)·fatorDaFaixa — cada peixe soma
+ * `score/rarityRefScore` ao peso total (08/08/2026: era 1 fixo por peixe, agora quem
+ * rende mais suja mais). `bandFactor` vem do backend (`tank.capacityBandDegradationFactor`,
+ * CapacityBands) — não duplicamos as faixas aqui, só recebemos o fator já resolvido.
  */
-export function waterDegradationPerFishPerHour(rarityScore) {
+export function waterDegradationPerFishPerHour(rarityScore, bandFactor = 1) {
   const d = CONFIG.degradation;
   const weight = rarityScore / d.rarityRefScore;
-  return d.perMinute * d.perFishFactor * weight * 60;
+  return d.perMinute * d.perFishFactor * weight * bandFactor * 60;
 }
 
 function erf(x) {

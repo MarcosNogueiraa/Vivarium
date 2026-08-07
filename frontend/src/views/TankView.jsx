@@ -139,8 +139,8 @@ export function TankView({ tank, refresh, notify }) {
             <span className={`status-pill ${tank.online ? "on" : "off"}`}>
               <span className="led" />{tank.online ? "Online" : "Offline"}
             </span>
-            <span className="capacity-chip" title="Peixes ativos no tanque / capacidade">
-              🐟 {tank.creatures.length}/{tank.capacity}
+            <span className="capacity-chip" title={`Peixes ativos no tanque / capacidade — faixa: ${tank.capacityBandName || "Aquário"}`}>
+              🐟 {tank.creatures.length}/{tank.capacity} <small>{tank.capacityBandName}</small>
             </span>
             <button className="guide-btn" onClick={() => setShowGuide(true)} title="Como funciona a raridade">?</button>
             <span className="spacer" style={{ flex: 1 }} />
@@ -221,7 +221,8 @@ export function TankView({ tank, refresh, notify }) {
         <p className="hint">Clique num peixe para ver os detalhes, guardar, vender ou transferir.</p>
       )}
       {selected && (
-        <FishDetail creature={selected} onClose={() => setSelectedId(null)} inTank>
+        <FishDetail creature={selected} onClose={() => setSelectedId(null)} inTank
+          bandFactor={Number(tank.capacityBandDegradationFactor ?? 1)}>
           <button onClick={() => store(selected)} title="Guardar na mochila (não farma)">Guardar</button>
           <button onClick={() => sell(selected)}>Vender</button>
           <button onClick={() => transfer(selected)}>Transferir</button>

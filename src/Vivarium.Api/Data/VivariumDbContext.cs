@@ -135,16 +135,32 @@ public class VivariumDbContext(DbContextOptions<VivariumDbContext> options) : Db
                 },
                 new ItemDefinition
                 {
+                    // filterCapacity (08/08/2026, era {"autoFilter":true}): cobre até o
+                    // teto da faixa "Aquário" (CapacityBands) — cima disso, taper suave.
                     Id = 2, Key = "auto_filter", Name = "Filtro Automático",
                     Category = ItemCategory.AutoFilter,
-                    EffectJson = """{"autoFilter":true}""", PriceSoft = 500m,
+                    EffectJson = """{"filterCapacity":5}""", PriceSoft = 500m,
                 },
                 new ItemDefinition
                 {
-                    // Preço dinâmico: PriceSoft é o base; cobra base × 1.5^(capacidade - inicial)
+                    // Preço dinâmico: PriceSoft é o base da faixa (CapacityBands.PriceBase)
                     Id = 3, Key = "tank_upgrade", Name = "Expansão do Tanque",
                     Category = ItemCategory.HabitatUpgrade,
                     EffectJson = """{"capacityDelta":1}""", PriceSoft = 50m,
+                },
+                new ItemDefinition
+                {
+                    // Cobre até o teto da faixa "Aquário Grande" (08/08/2026).
+                    Id = 4, Key = "auto_filter_2", Name = "Filtro Automático II",
+                    Category = ItemCategory.AutoFilter,
+                    EffectJson = """{"filterCapacity":10}""", PriceSoft = 1200m,
+                },
+                new ItemDefinition
+                {
+                    // Cobre até (e um pouco além de) o teto da faixa "Aquário Master".
+                    Id = 5, Key = "auto_filter_3", Name = "Filtro Automático III",
+                    Category = ItemCategory.AutoFilter,
+                    EffectJson = """{"filterCapacity":18}""", PriceSoft = 2500m,
                 });
         });
 

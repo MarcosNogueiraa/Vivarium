@@ -6,8 +6,10 @@ import { FILTER_WARN_THRESHOLD } from "../lib/tankMath.js";
 
 const DESCRIPTIONS = {
   filter_basic: "Restaura a qualidade da água para 100 na hora.",
-  auto_filter: "Permanente: a água degrada na metade da velocidade.",
-  tank_upgrade: "+1 de capacidade no tanque (preço sobe a cada compra).",
+  auto_filter: "Permanente: cobre até 5 de peso de peixes com metade da degradação (acima disso, o benefício cai aos poucos).",
+  auto_filter_2: "Permanente: cobre até 10 de peso de peixes — upgrade do Filtro Automático (não acumula com ele).",
+  auto_filter_3: "Permanente: cobre até 18 de peso de peixes — o nível mais forte, pro tanque Master cheio.",
+  tank_upgrade: "+1 de capacidade no tanque (preço sobe a cada compra, muda de faixa em 5 e 10).",
 };
 
 export function StoreView({ tank, refreshTank, notify }) {

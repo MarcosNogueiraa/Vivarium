@@ -7,7 +7,7 @@ import { coinsPerHourOf, rarityBreakdownOf, traitsOf, waterDegradationPerFishPer
 import { bandOf, PT, swimSpeedOf } from "../lib/fishRenderer.js";
 import { ageOf, factorLabel, partSummary, speedWord } from "../lib/format.js";
 
-export function FishDetail({ creature, onClose, children, inTank = false }) {
+export function FishDetail({ creature, onClose, children, inTank = false, bandFactor = 1 }) {
   const seed = creature.seed;
   const traits = useMemo(() => traitsOf(creature), [creature]);
   const breakdown = useMemo(() => rarityBreakdownOf(creature), [creature]);
@@ -32,7 +32,7 @@ export function FishDetail({ creature, onClose, children, inTank = false }) {
           )}
           {inTank && (
             <div className="faint water-impact">
-              💧 −{waterDegradationPerFishPerHour(score).toFixed(1)} água/h <small>(peixes mais raros sujam mais rápido)</small>
+              💧 −{waterDegradationPerFishPerHour(score, bandFactor).toFixed(1)} água/h <small>(peixes mais raros sujam mais rápido)</small>
             </div>
           )}
           <div className="faint mono">seed {seed} · {ageOf(creature.createdAt)}</div>

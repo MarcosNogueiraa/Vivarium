@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Vivarium.Api.Contracts;
 using Vivarium.Api.Data;
@@ -20,12 +21,12 @@ public class ItemService(VivariumDbContext db, GameService game)
         if (habitat is null)
             return ServiceResult.NotFound("Habitat não encontrado");
 
-        var owned = await OwnedAutoFilterAsync(userId);
+        var ownedIds = await OwnedItemDefinitionIdsAsync(userId);
         var items = (await db.ItemDefinitions.ToListAsync())
             .Select(i => new ItemDto(
                 i.Key, i.Name, i.Category.ToString(),
                 CurrentPrice(i, habitat),
-                i.Category == ItemCategory.AutoFilter && owned))
+                ownedIds.Contains(i.Id)))
             .ToList();
         return ServiceResult.Success(items);
     }
@@ -41,8 +42,10 @@ public class ItemService(VivariumDbContext db, GameService game)
         if (habitat is null)
             return ServiceResult.NotFound("Habitat não encontrado");
 
-        if (item.Category == ItemCategory.AutoFilter && await OwnedAutoFilterAsync(userId))
-            return ServiceResult.Bad("Você já tem o filtro automático");
+        if (item.Category == ItemCategory.AutoFilter && (await OwnedItemDefinitionIdsAsync(userId)).Contains(item.Id))
+            return ServiceResult.Bad("Você já tem esse filtro");
+        if (item.Category == ItemCategory.HabitatUpgrade && habitat.Capacity >= CapacityBands.MaxCapacity)
+            return ServiceResult.Bad("Tanque já está na capacidade máxima");
 
         // Tick antes: a degradação pendente é aplicada antes de restaurar/pagar
         await game.ApplyTickAsync(habitat, now);
@@ -96,16 +99,36 @@ public class ItemService(VivariumDbContext db, GameService game)
         });
     }
 
-    /// <summary>Upgrade de tanque tem custo crescente (~1.5x por nível — CLAUDE.md 8.4).</summary>
+    /// <summary>
+    /// Upgrade de tanque tem custo crescente dentro da faixa de capacidade atual
+    /// (`CapacityBands.BandFor`, 08/08/2026) — cada faixa (Aquário/Grande/Master) tem
+    /// sua própria curva de preço, não uma extensão da anterior.
+    /// </summary>
     private static decimal CurrentPrice(ItemDefinition item, Habitat habitat)
-        => item.Category == ItemCategory.HabitatUpgrade
-            ? Math.Ceiling(item.PriceSoft
-                * (decimal)Math.Pow(1.5, habitat.Capacity - HabitatDefaults.Capacity))
-            : item.PriceSoft;
+    {
+        if (item.Category != ItemCategory.HabitatUpgrade)
+            return item.PriceSoft;
+        var band = CapacityBands.BandFor(habitat.Capacity);
+        return Math.Ceiling(band.PriceBase * (decimal)Math.Pow(band.PriceGrowth, habitat.Capacity - band.MinCapacity));
+    }
 
-    private Task<bool> OwnedAutoFilterAsync(long userId)
-        => db.UserInventories.AnyAsync(i =>
-            i.UserId == userId
-            && i.Quantity > 0
-            && i.ItemDefinition!.Category == ItemCategory.AutoFilter);
+    private async Task<HashSet<int>> OwnedItemDefinitionIdsAsync(long userId)
+        => (await db.UserInventories
+            .Where(i => i.UserId == userId && i.Quantity > 0)
+            .Select(i => i.ItemDefinitionId)
+            .ToListAsync())
+            .ToHashSet();
+}
+
+/// <summary>
+/// Efeito de um <see cref="ItemDefinition"/>, lido de `EffectJson` (08/08/2026 — antes disso
+/// o campo era decorativo, nunca desserializado). Só os campos relevantes por categoria vêm
+/// preenchidos: `CapacityDelta` (HabitatUpgrade) ou `FilterCapacity` (AutoFilter).
+/// </summary>
+public sealed record ItemEffect(int? CapacityDelta, decimal? FilterCapacity)
+{
+    public static ItemEffect Parse(string effectJson)
+        => JsonSerializer.Deserialize<ItemEffect>(effectJson, JsonOptions) ?? new ItemEffect(null, null);
+
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 }
