@@ -283,6 +283,34 @@ input:focus {
 .section-head .count { color: var(--faint); font-weight: 500; font-family: var(--ui); font-size: 1rem; }
 .section-head .spacer { flex: 1; }
 
+.backpack-toolbar {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin-bottom: 16px; padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.03); box-shadow: inset 0 0 0 1px var(--line);
+}
+.sort-select {
+  width: auto; padding: 8px 12px; font-size: 0.85rem;
+  background: rgba(255, 255, 255, 0.06); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+}
+.filter-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.filter-chip {
+  padding: 6px 13px; font-size: 0.8rem; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04); color: var(--muted);
+  box-shadow: none;
+}
+.filter-chip.active {
+  color: var(--tier, var(--glow)); font-weight: 700;
+  box-shadow: inset 0 0 0 1px var(--tier, var(--glow));
+  background: color-mix(in srgb, var(--tier, var(--glow)) 14%, transparent);
+}
+.filter-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 0.85rem; color: var(--muted); cursor: pointer;
+}
+.filter-toggle input { width: 16px; height: 16px; padding: 0; flex: 0 0 auto; accent-color: var(--glow); }
+
 /* ---------- Tank stage ---------- */
 .tank-layout { display: flex; flex-direction: column; gap: 22px; }
 

@@ -1,17 +1,29 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api.js";
 import { coinsPerHourOf, vendorPriceOf } from "../lib/generator.js";
-import { bandOf } from "../lib/fishRenderer.js";
+import { bandOf, BANDS } from "../lib/fishRenderer.js";
 import { RarityBadge } from "../components/RarityBadge.jsx";
 import { FishCanvas } from "../components/FishCanvas.jsx";
 import { PromptModal } from "../components/PromptModal.jsx";
 import { ConfirmModal } from "../components/ConfirmModal.jsx";
 import { FishDetail } from "./FishDetail.jsx";
 
+const SORTS = {
+  "rarity-desc": { label: "Raridade (maior primeiro)", cmp: (a, b) => Number(b.rarityScore) - Number(a.rarityScore) },
+  "rarity-asc": { label: "Raridade (menor primeiro)", cmp: (a, b) => Number(a.rarityScore) - Number(b.rarityScore) },
+  "production-desc": { label: "Produção (maior primeiro)", cmp: (a, b) => coinsPerHourOf(Number(b.rarityScore)) - coinsPerHourOf(Number(a.rarityScore)) },
+  "production-asc": { label: "Produção (menor primeiro)", cmp: (a, b) => coinsPerHourOf(Number(a.rarityScore)) - coinsPerHourOf(Number(b.rarityScore)) },
+  "newest": { label: "Mais recentes primeiro", cmp: (a, b) => new Date(b.createdAt) - new Date(a.createdAt) },
+  "oldest": { label: "Mais antigos primeiro", cmp: (a, b) => new Date(a.createdAt) - new Date(b.createdAt) },
+};
+
 export function BackpackView({ refreshTank, notify }) {
   const [data, setData] = useState(null);
   const [detail, setDetail] = useState(null);
   const [prompt, setPrompt] = useState(null); // { kind: "sell"|"transfer"|"vendor", creature }
+  const [sortBy, setSortBy] = useState("rarity-desc");
+  const [bandFilter, setBandFilter] = useState("all");
+  const [onlyBred, setOnlyBred] = useState(false);
 
   const refresh = useCallback(async () => { setData(await api.backpack()); }, []);
   useEffect(() => { refresh().catch((e) => notify(e.message)); }, [refresh, notify]);
@@ -47,6 +59,14 @@ export function BackpackView({ refreshTank, notify }) {
     await refresh();
   }
 
+  const visible = useMemo(() => {
+    if (!data) return [];
+    return data.creatures
+      .filter((c) => bandFilter === "all" || bandOf(Number(c.rarityScore)).name === bandFilter)
+      .filter((c) => !onlyBred || c.isBred)
+      .sort(SORTS[sortBy].cmp);
+  }, [data, sortBy, bandFilter, onlyBred]);
+
   if (data === null) return <p className="hint">Carregando mochila…</p>;
 
   return (
@@ -58,28 +78,60 @@ export function BackpackView({ refreshTank, notify }) {
       {data.creatures.length === 0 ? (
         <p className="hint">Mochila vazia. Guarde peixes do tanque aqui — eles ficam seguros (mas não farmam).</p>
       ) : (
-        <div className="grid">
-          {data.creatures.map((c) => (
-            <div key={c.id} className="card" style={{ "--tier": bandOf(Number(c.rarityScore)).color }}>
-              <button className="fish-stage as-button" onClick={() => setDetail(c)} title="Ver detalhes">
-                <FishCanvas seed={c.seed} isBred={c.isBred} parentASeed={c.parentASeed} parentBSeed={c.parentBSeed} />
+        <>
+          <div className="backpack-toolbar">
+            <select className="sort-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+              {Object.entries(SORTS).map(([key, { label }]) => (
+                <option key={key} value={key}>{label}</option>
+              ))}
+            </select>
+            <div className="filter-chips">
+              <button className={`filter-chip${bandFilter === "all" ? " active" : ""}`} onClick={() => setBandFilter("all")}>
+                Todos
               </button>
-              <div className="card-row">
-                <RarityBadge score={Number(c.rarityScore)} />
-                <span className="produces mono">~{coinsPerHourOf(Number(c.rarityScore)).toFixed(1)}/h</span>
-              </div>
-              {c.isBred && <span className="bred-tag">🐣 Filhote</span>}
-              <div className="card-row">
-                <button className="btn-primary" onClick={() => deploy(c)}>Pro tanque</button>
-                <button onClick={() => sell(c)}>Vender</button>
-                <button onClick={() => transfer(c)}>Transferir</button>
-                <button onClick={() => sellVendor(c)} title={`Venda instantânea ao NPC por ${vendorPriceOf(Number(c.rarityScore))} soft`}>
-                  NPC · {vendorPriceOf(Number(c.rarityScore))}
+              {BANDS.map((b) => (
+                <button
+                  key={b.name}
+                  className={`filter-chip${bandFilter === b.name ? " active" : ""}`}
+                  style={{ "--tier": b.color }}
+                  onClick={() => setBandFilter(b.name)}
+                >
+                  {b.name}
                 </button>
-              </div>
+              ))}
             </div>
-          ))}
-        </div>
+            <label className="filter-toggle">
+              <input type="checkbox" checked={onlyBred} onChange={(e) => setOnlyBred(e.target.checked)} />
+              Só filhotes 🐣
+            </label>
+          </div>
+          {visible.length === 0 ? (
+            <p className="hint">Nenhum peixe corresponde a esse filtro.</p>
+          ) : (
+            <div className="grid">
+              {visible.map((c) => (
+                <div key={c.id} className="card" style={{ "--tier": bandOf(Number(c.rarityScore)).color }}>
+                  <button className="fish-stage as-button" onClick={() => setDetail(c)} title="Ver detalhes">
+                    <FishCanvas seed={c.seed} isBred={c.isBred} parentASeed={c.parentASeed} parentBSeed={c.parentBSeed} />
+                  </button>
+                  <div className="card-row">
+                    <RarityBadge score={Number(c.rarityScore)} />
+                    <span className="produces mono">~{coinsPerHourOf(Number(c.rarityScore)).toFixed(1)}/h</span>
+                  </div>
+                  {c.isBred && <span className="bred-tag">🐣 Filhote</span>}
+                  <div className="card-row">
+                    <button className="btn-primary" onClick={() => deploy(c)}>Pro tanque</button>
+                    <button onClick={() => sell(c)}>Vender</button>
+                    <button onClick={() => transfer(c)}>Transferir</button>
+                    <button onClick={() => sellVendor(c)} title={`Venda instantânea ao NPC por ${vendorPriceOf(Number(c.rarityScore))} soft`}>
+                      NPC · {vendorPriceOf(Number(c.rarityScore))}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
       {detail && (
         <FishDetail creature={detail} onClose={() => setDetail(null)}>
