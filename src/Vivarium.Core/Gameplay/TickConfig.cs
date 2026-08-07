@@ -11,8 +11,14 @@ public sealed record TickConfig
 
     /// <summary>Degradação base (~-1 de qualidade a cada 20 min com 0 peixes).</summary>
     public decimal DegradationPerMinute { get; init; } = 1m / 20m;
-    /// <summary>Degradação escala com o nº de peixes: base·(1 + k·nºpeixes). k moderado.</summary>
-    public decimal DegradationPerFishFactor { get; init; } = 0.10m;
+    /// <summary>
+    /// 0.30 (era 0.10, 07/08/2026): curva mais agressiva pra o auto-filtro (500 soft) se
+    /// pagar num prazo razoável — payback caiu de ~9-12 dias pra ~3,5-7,3 dias dependendo
+    /// do tamanho do tanque (calibrado supondo o jogador filtrar ao bater o patamar de
+    /// 80%, IncomeWaterPlateau). Só o fator por peixe mudou — tanque vazio/começo de jogo
+    /// não fica mais punitivo, o efeito cresce só com o tanque estabelecido.
+    /// </summary>
+    public decimal DegradationPerFishFactor { get; init; } = 0.30m;
 
     /// <summary>Abaixo disso a velocidade de geração cai.</summary>
     public decimal LowMaintenanceThreshold { get; init; } = 40m;

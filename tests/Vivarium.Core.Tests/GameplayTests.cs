@@ -94,13 +94,13 @@ public class HabitatTickerTests
     [Fact]
     public void DegradacaoEscalaComOsPeixes()
     {
-        // Sem peixes: 60 min → -3 (100→97). Com 10 peixes: fator 1+0.1×10=2 → -6 (100→94).
+        // Sem peixes: 60 min → -3 (100→97). Com 10 peixes: fator 1+0.3×10=4 → -12 (100→88).
         var now = T0.AddMinutes(60);
         var vazio = HabitatTicker.ProcessTick(Estado(heartbeat: now, maintenance: 100m), now, new Random(1), Config);
         var cheio = HabitatTicker.ProcessTick(Estado(heartbeat: now, maintenance: 100m, fishCount: 10), now, new Random(1), Config);
 
         Assert.Equal(97m, vazio.MaintenanceLevel);
-        Assert.Equal(94m, cheio.MaintenanceLevel);
+        Assert.Equal(88m, cheio.MaintenanceLevel);
     }
 
     [Fact]

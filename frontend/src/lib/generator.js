@@ -106,7 +106,7 @@ export const CONFIG = {
   // Venda ao NPC (vendor, §8.12) — espelha VendorCalculator/TickConfig (manter em sincronia)
   vendor: { hoursEquivalent: 2.0, minPrice: 1 },
   // Degradação da água (§8.2/8.6) — espelha TickConfig (DegradationPerMinute, DegradationPerFishFactor, manter em sincronia)
-  degradation: { perMinute: 1 / 20, perFishFactor: 0.10 },
+  degradation: { perMinute: 1 / 20, perFishFactor: 0.30 },
   // Breeding — espelha BreedingDefaults (Gameplay/BreedingConfig.cs, manter em sincronia)
   breeding: { mutationChance: 0.08, rarityBias: 0.15, grandparentReachChance: 0.15 },
   closestPartColor: {
