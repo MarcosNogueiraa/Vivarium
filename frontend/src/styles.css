@@ -116,7 +116,9 @@ button:focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }
 
 input {
   width: 100%;
-  font-family: var(--ui); font-size: 0.95rem; color: var(--ink);
+  /* 16px (não 0.95rem/~15px): abaixo de 16px o Safari/iOS da zoom automatico
+     na pagina inteira ao focar o campo — o "bug" classico de input em celular. */
+  font-family: var(--ui); font-size: 16px; color: var(--ink);
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -290,7 +292,7 @@ input:focus {
   background: rgba(255, 255, 255, 0.03); box-shadow: inset 0 0 0 1px var(--line);
 }
 .sort-select {
-  width: auto; padding: 8px 12px; font-size: 0.85rem;
+  width: auto; padding: 8px 12px; font-size: 16px; /* mesmo motivo do input (zoom no iOS) */
   background: rgba(255, 255, 255, 0.06); color: var(--ink);
   border: 1px solid var(--line); border-radius: var(--radius-sm);
 }
