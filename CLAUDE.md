@@ -364,6 +364,21 @@ Sink pra duplicatas/comuns acumulados: surgiu de uma discussão sobre reduzir a 
 - **Testes:** `VendorCalculatorTests.cs` (Core) + `VendorSaleTests.cs` (Api, 6 casos: credita e some do tanque/mochila, preço escala com raridade, bloqueia se listada/já vendida/de outro usuário) + teste unitário espelho em `generator.test.js`.
 - **Ideias relacionadas discutidas e não implementadas:** fusão "10 peixes iguais → 1 melhor" foi cogitada como sink adicional, mas adiada — risco real de canibalizar o sink de breeding (custo dinâmico, gestação, risco de morte) se virar um caminho determinístico e sem risco pra subir de raridade. Se for retomada, deveria ser um reroll com odds melhoradas (reaproveitando `BiasedInheritProbability`), não um upgrade garantido, e definida por cor de cauda (não raridade) pra também servir de ferramenta de farm temático (sinergia de cor, §8.6).
 
+### 8.13 Peixe inicial no registro (07/08/2026)
+
+Conta nova ganha 1 peixe **já pronto pra coletar** na fila, sem esperar o primeiro ciclo de geração (60 min) — resolve o "primeiro clique vazio" (jogador loga, vê o tanque parado, não tem nada pra fazer até a primeira geração terminar). Implementado em `AuthEndpoints.cs` (register): cria o `GenerationQueueItem` com `ReadyAt = now` no mesmo `SaveChangesAsync` do habitat (usa a navegação `Habitat` do EF em vez de `HabitatId`, já que o Id só existe depois de salvar). Seed sorteado normalmente na coleta (mesma regra de sempre, §8.5) — não é um peixe "especial", só a fila começa com 1 item em vez de 0.
+
+**Backfill único pros jogadores que já existiam (07/08/2026):** rodado direto contra o Neon (script em `scripts/backfill-starter-fish-2026-08-07.sql`, com dry-run antes de aplicar) — deu +1 peixe pronto a todo aquário com espaço na fila. 16 contas afetadas.
+
+### 8.14 Painel de admin (07/08/2026)
+
+`User.IsAdmin` (bool, default false) — não é papel de jogo, é acesso a ferramentas administrativas pontuais. Checado sempre fresco do banco (`AdminService.IsAdminAsync`), nunca embarcado no JWT (token não tem revogação, §12.1 — colocar `IsAdmin` lá deixaria um admin removido continuar admin até o token expirar em 7 dias).
+
+- **Endpoint:** `POST /api/admin/give-starter-fish-all` (`AdminEndpoints.cs`/`AdminService.cs`) — mesma mecânica do peixe inicial (§8.13), aplicada a todos os aquários com espaço na fila de uma vez. Devolve `{ habitatsAffected }`. 403 (`ErrorKind.Forbidden`, novo no `ServiceResult`) se `IsAdmin=false`.
+- **Frontend:** botão "🎣 Dar peixe a todos" no topbar, visível só quando `tank.isAdmin` (campo novo em `TankResponse`, calculado em `GameService.GetTankAsync`) — atrás de um `ConfirmModal` (ação afeta todo mundo, não é reversível).
+- **Ativação:** não existe UI pra promover admin (só acontece via update direto no banco, deliberadamente — não é uma feature de jogo, é acesso operacional). Usuário `marco` (marcosogenio@hotmail.com) é admin.
+- **Testes:** `AdminTests.cs` (não-admin recebe 403; admin dá peixe a todos os aquários elegíveis, respeitando QueueCap).
+
 ---
 
 ## 9. Schema de dados completo (MVP, desacoplado para escalar)
@@ -387,6 +402,7 @@ User
 - PasswordHash
 - CreatedAt
 - LastDailyRewardAt (datetime, nullable) -- último resgate da recompensa diária (8.10)
+- IsAdmin (bool, default false) -- acesso a ferramentas administrativas, não é papel de jogo (8.14)
 
 VipSubscription
 - Id (PK)
@@ -617,6 +633,7 @@ Falta pra ir ao ar de verdade (depende de contas/decisões do usuário):
 | POST | `/api/breeding/start` | ✓ | leva 2 peixes próprios pro habitat de reprodução; debita `CostSoft` dinâmico; registra `Breeding` (sink); aceita `useStabilizer`/`useInsurance` opcionais pra mitigar o risco de morte (8.8) |
 | POST | `/api/breeding/collect` | ✓ | coleta o filhote quando pronto (herança trait-a-trait); devolve os pais sobreviventes ao tanque/mochila; rola risco de morte |
 | POST | `/api/breeding/rush` | ✓ | pula o tempo restante de gestação pagando premium (8.11) |
+| POST | `/api/admin/give-starter-fish-all` | ✓ (admin) | dá +1 peixe pronto a todo aquário com espaço na fila; 403 se `User.IsAdmin=false` (8.14) |
 
 **Itens do MVP** (seed via migration `SeedItemDefinitions`): `filter_basic` (20 soft, restaura água pra 100 — tick roda antes, pra degradação pendente ser aplicada primeiro), `auto_filter` (500 soft, permanente via UserInventory, tick lê e degrada na metade), `tank_upgrade` (base 50 soft, +1 capacidade, preço = base × 1.5^(capacidade − 3) — seção 8.4). Filtro e upgrade aplicam na hora (sem inventário); só o auto_filter fica em UserInventory.
 

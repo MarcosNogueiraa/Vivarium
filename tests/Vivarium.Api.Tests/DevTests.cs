@@ -16,14 +16,17 @@ public class DevTests : IClassFixture<VivariumApiFactory>
 
         (await client.PostAsync("/api/dev/spawn", null)).EnsureSuccessStatusCode();
 
+        // Fila já tinha o peixe inicial do registro — spawn soma mais 1.
         var tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
-        var item = Assert.Single(tank!.Queue);
+        Assert.Equal(2, tank!.Queue.Count);
+        var item = tank.Queue[^1];
         Assert.True(item.IsReady);
         Assert.False(item.IsSick);
 
         (await client.PostAsync($"/api/game/collect/{item.Id}", null)).EnsureSuccessStatusCode();
         tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
-        Assert.Single(tank!.Creatures);
+        Assert.Single(tank!.Creatures); // só coletamos o spawnado; o inicial ainda está na fila
+        Assert.Single(tank.Queue);
     }
 
     [Fact]
@@ -31,7 +34,8 @@ public class DevTests : IClassFixture<VivariumApiFactory>
     {
         var (client, _) = await _factory.RegisterAsync("devspawn2");
 
-        for (int i = 0; i < 5; i++)
+        // Fila já começa com 1 (peixe inicial do registro) — só precisa de +4 pra bater no cap de 5.
+        for (int i = 0; i < 4; i++)
             (await client.PostAsync("/api/dev/spawn", null)).EnsureSuccessStatusCode();
 
         var sixth = await client.PostAsync("/api/dev/spawn", null);

@@ -1,6 +1,6 @@
 namespace Vivarium.Api.Http;
 
-public enum ErrorKind { BadRequest, NotFound, Conflict }
+public enum ErrorKind { BadRequest, NotFound, Conflict, Forbidden }
 
 /// <summary>
 /// Resultado de uma operação de serviço: sucesso (com payload opcional) ou erro
@@ -15,6 +15,7 @@ public sealed record ServiceResult(object? Value, ErrorKind? Kind, string? Error
     public static ServiceResult Bad(string message) => new(null, ErrorKind.BadRequest, message);
     public static ServiceResult NotFound(string message) => new(null, ErrorKind.NotFound, message);
     public static ServiceResult Conflict(string message) => new(null, ErrorKind.Conflict, message);
+    public static ServiceResult Forbidden(string message) => new(null, ErrorKind.Forbidden, message);
 }
 
 public static class ServiceResultExtensions
@@ -28,6 +29,7 @@ public static class ServiceResultExtensions
         {
             ErrorKind.NotFound => ApiError.NotFound(r.Error!),
             ErrorKind.Conflict => ApiError.Conflict(r.Error!),
+            ErrorKind.Forbidden => ApiError.Forbidden(r.Error!),
             _ => ApiError.BadRequest(r.Error!),
         };
     }

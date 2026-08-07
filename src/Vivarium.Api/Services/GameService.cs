@@ -412,6 +412,7 @@ public class GameService(VivariumDbContext db)
             .Select(w => new { w.CurrencyType!.Code, w.Amount })
             .ToDictionaryAsync(x => x.Code, x => x.Amount);
         var coinsPerHour = await CoinsPerHourAsync(habitat);
+        bool isAdmin = await db.Users.Where(u => u.Id == userId).Select(u => u.IsAdmin).FirstAsync();
 
         return ServiceResult.Success(new TankResponse(
             HabitatTicker.IsOnline(habitat.LastHeartbeatAt, now, TickConfig.Default),
@@ -423,7 +424,8 @@ public class GameService(VivariumDbContext db)
             wallet,
             coinsPerHour,
             habitat.GenerationProgressMinutes,
-            habitat.GenerationIntervalMinutes));
+            habitat.GenerationIntervalMinutes,
+            isAdmin));
     }
 
     // Transferência direta entre contas (negociação externa é responsabilidade

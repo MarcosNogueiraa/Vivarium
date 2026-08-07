@@ -23,6 +23,11 @@ public class AuthTests : IClassFixture<VivariumApiFactory>
         Assert.Equal(0m, tank.Wallet["PREMIUM"]);
         Assert.Empty(tank.Creatures);
         Assert.False(tank.Online); // ainda sem heartbeat
+
+        // Peixe inicial já pronto pra coletar, sem esperar o primeiro ciclo de geração.
+        Assert.Single(tank.Queue);
+        Assert.True(tank.Queue[0].IsReady);
+        Assert.False(tank.Queue[0].IsSick);
     }
 
     [Fact]

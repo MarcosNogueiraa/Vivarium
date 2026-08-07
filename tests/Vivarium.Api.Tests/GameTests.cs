@@ -19,20 +19,24 @@ public class GameTests : IClassFixture<VivariumApiFactory>
         return id;
     }
 
-    private async Task InserirItemProntoNaFila(long habitatId, bool sick = false)
+    private async Task<long> InserirItemProntoNaFila(long habitatId, bool sick = false)
     {
-        await _factory.WithDbAsync(db =>
+        long itemId = 0;
+        await _factory.WithDbAsync(async db =>
         {
-            db.GenerationQueueItems.Add(new GenerationQueueItem
+            var item = new GenerationQueueItem
             {
                 HabitatId = habitatId,
                 SpeciesId = 1,
                 ReadyAt = DateTime.UtcNow.AddMinutes(-1),
                 Status = QueueItemStatus.Pending,
                 IsSick = sick,
-            });
-            return Task.CompletedTask;
+            };
+            db.GenerationQueueItems.Add(item);
+            await db.SaveChangesAsync();
+            itemId = item.Id;
         });
+        return itemId;
     }
 
     [Fact]
@@ -52,10 +56,10 @@ public class GameTests : IClassFixture<VivariumApiFactory>
     {
         var (client, userId) = await _factory.RegisterAsync("coletor1");
         long habitatId = await HabitatIdOf(userId);
-        await InserirItemProntoNaFila(habitatId);
+        long itemId = await InserirItemProntoNaFila(habitatId);
 
         var tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
-        var item = Assert.Single(tank!.Queue);
+        var item = tank!.Queue.Single(q => q.Id == itemId);
         Assert.True(item.IsReady);
 
         var response = await client.PostAsync($"/api/game/collect/{item.Id}", null);
@@ -68,7 +72,7 @@ public class GameTests : IClassFixture<VivariumApiFactory>
 
         tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
         Assert.Single(tank!.Creatures);
-        Assert.Empty(tank.Queue);
+        Assert.Single(tank.Queue); // sobra o peixe inicial do registro, ainda não coletado
     }
 
     [Fact]
@@ -90,10 +94,10 @@ public class GameTests : IClassFixture<VivariumApiFactory>
             }
             return Task.CompletedTask;
         });
-        await InserirItemProntoNaFila(habitatId);
+        long itemId = await InserirItemProntoNaFila(habitatId);
 
         var tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
-        var item = Assert.Single(tank!.Queue);
+        var item = tank!.Queue.Single(q => q.Id == itemId);
 
         // Tanque cheio: coleta vai pra mochila, não dá erro
         var response = await client.PostAsync($"/api/game/collect/{item.Id}", null);
@@ -108,10 +112,10 @@ public class GameTests : IClassFixture<VivariumApiFactory>
     {
         var (client, userId) = await _factory.RegisterAsync("coletor2");
         long habitatId = await HabitatIdOf(userId);
-        await InserirItemProntoNaFila(habitatId);
+        long itemId = await InserirItemProntoNaFila(habitatId);
 
         var tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
-        var item = Assert.Single(tank!.Queue);
+        var item = tank!.Queue.Single(q => q.Id == itemId);
 
         (await client.PostAsync($"/api/game/collect/{item.Id}", null)).EnsureSuccessStatusCode();
         var second = await client.PostAsync($"/api/game/collect/{item.Id}", null);
@@ -138,11 +142,12 @@ public class GameTests : IClassFixture<VivariumApiFactory>
         });
         await InserirItemProntoNaFila(habitatId);
 
-        // O GET do tanque roda o tick lazy; VIP online deve coletar sozinho
+        // O GET do tanque roda o tick lazy; VIP online deve coletar sozinho —
+        // inclusive o peixe inicial do registro, que também estava pendente.
         var tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
 
         Assert.Empty(tank!.Queue);
-        Assert.Single(tank.Creatures);
+        Assert.Equal(2, tank.Creatures.Count);
     }
 
     [Fact]
@@ -160,7 +165,8 @@ public class GameTests : IClassFixture<VivariumApiFactory>
 
         var tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
 
-        Assert.Single(tank!.Queue);
+        // Sem VIP, nada é auto-coletado — nem o item inserido, nem o peixe inicial do registro.
+        Assert.Equal(2, tank!.Queue.Count);
         Assert.Empty(tank.Creatures);
     }
 }

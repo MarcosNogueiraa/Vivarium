@@ -76,11 +76,11 @@ public class RushTests : IClassFixture<VivariumApiFactory>
     public async Task Fila_CustoDeAcelerarApareceNoTanqueEEscalaComOTempoRestante()
     {
         var (client, userId) = await _factory.RegisterAsync("rush1");
-        await CreateQueueItem(userId, TimeSpan.FromMinutes(60));
+        long itemId = await CreateQueueItem(userId, TimeSpan.FromMinutes(60));
 
         var tank = await client.GetFromJsonAsync<TankDto>("/api/game/tank");
 
-        var item = Assert.Single(tank!.Queue);
+        var item = tank!.Queue.Single(q => q.Id == itemId);
         Assert.False(item.IsReady);
         Assert.InRange(item.RushCostPremium, 8m, 9m); // ~0.15/min * 60min
     }
@@ -107,7 +107,7 @@ public class RushTests : IClassFixture<VivariumApiFactory>
         rush.EnsureSuccessStatusCode();
 
         var tank = await client.GetFromJsonAsync<TankDto>("/api/game/tank");
-        Assert.True(tank!.Queue.Single().IsReady);
+        Assert.True(tank!.Queue.Single(q => q.Id == itemId).IsReady);
 
         var collect = await client.PostAsync($"/api/game/collect/{itemId}", null);
         collect.EnsureSuccessStatusCode();

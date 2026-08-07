@@ -9,4 +9,5 @@ public static class ApiError
     public static IResult BadRequest(string message) => Results.BadRequest(new { error = message });
     public static IResult NotFound(string message) => Results.NotFound(new { error = message });
     public static IResult Conflict(string message) => Results.Conflict(new { error = message });
+    public static IResult Forbidden(string message) => Results.Json(new { error = message }, statusCode: 403);
 }

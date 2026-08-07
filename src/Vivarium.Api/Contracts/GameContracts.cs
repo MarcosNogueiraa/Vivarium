@@ -14,7 +14,8 @@ public record TankResponse(
     Dictionary<string, decimal> Wallet,
     decimal CoinsPerHour,
     decimal GenerationProgressMinutes,
-    int GenerationIntervalMinutes);
+    int GenerationIntervalMinutes,
+    bool IsAdmin = false);
 
 public record BackpackResponse(int Capacity, IReadOnlyList<CreatureDto> Creatures);
 

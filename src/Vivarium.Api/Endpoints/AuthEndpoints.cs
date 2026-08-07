@@ -51,7 +51,7 @@ public static class AuthEndpoints
 
             var aquariumTypeId = await db.HabitatTypes
                 .Where(h => h.Code == "Aquarium").Select(h => h.Id).FirstAsync();
-            db.Habitats.Add(new Habitat
+            var aquarium = new Habitat
             {
                 UserId = user.Id,
                 HabitatTypeId = aquariumTypeId,
@@ -63,6 +63,20 @@ public static class AuthEndpoints
                 OfflineGenerationRate = HabitatDefaults.OfflineGenerationRate,
                 LastTickAt = now,
                 CreatedAt = now,
+            };
+            db.Habitats.Add(aquarium);
+
+            // Peixe inicial já pronto pra coletar — sem esperar o primeiro ciclo de geração,
+            // o jogador novo tem algo pra fazer no primeiro clique.
+            int aquariumSpeciesId = await db.Species
+                .Where(s => s.HabitatTypeId == aquariumTypeId).Select(s => s.Id).FirstAsync();
+            db.GenerationQueueItems.Add(new GenerationQueueItem
+            {
+                Habitat = aquarium,
+                SpeciesId = aquariumSpeciesId,
+                ReadyAt = now,
+                Status = QueueItemStatus.Pending,
+                IsSick = false,
             });
 
             var breedingTypeId = await db.HabitatTypes

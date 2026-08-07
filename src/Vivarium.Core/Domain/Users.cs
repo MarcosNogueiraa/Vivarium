@@ -9,6 +9,8 @@ public class User
     public DateTime CreatedAt { get; set; }
     /// <summary>Último resgate da recompensa diária (UTC), nullable = nunca resgatou.</summary>
     public DateTime? LastDailyRewardAt { get; set; }
+    /// <summary>Acesso a ferramentas administrativas (ex: painel /api/admin/*). Não é papel de jogo.</summary>
+    public bool IsAdmin { get; set; }
 }
 
 // Separado do User (não um bool IsVip) para permitir histórico e, no futuro,
