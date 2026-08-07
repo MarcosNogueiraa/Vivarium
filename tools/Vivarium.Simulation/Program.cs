@@ -281,7 +281,8 @@ static List<FishIncome> MakeTank(int n, decimal score, bool sameColor)
 static void ReportTank(string label, List<FishIncome> tank, TickConfig cfg)
 {
     decimal gross = IncomeCalculator.TankRatePerHour(tank, 100m, cfg);
-    double degPerHour = (double)(cfg.DegradationPerMinute * 60m) * (1 + (double)cfg.DegradationPerFishFactor * tank.Count);
+    decimal fishWeight = tank.Sum(f => f.RarityScore) / cfg.DegradationRarityRefScore;
+    double degPerHour = (double)(cfg.DegradationPerMinute * 60m) * (1 + (double)cfg.DegradationPerFishFactor * (double)fishWeight);
     double upkeep = degPerHour * 0.2; // ~20 soft por 100 pontos de água (filtro)
     Console.WriteLine($"  {label,-26}: bruto {gross,7:0.0}/h   upkeep {upkeep,5:0.0}/h   líquido {(double)gross - upkeep,7:0.0}/h");
 }
@@ -502,7 +503,7 @@ static void RunPlayerSimulation(string label, double hoursOnlinePerDay, int days
             OnlineGenerationRate: HabitatDefaults.OnlineGenerationRate,
             OfflineGenerationRate: HabitatDefaults.OfflineGenerationRate,
             QueueCap: HabitatDefaults.QueueCap, PendingQueueCount: 0, // atento: coleta tudo na mesma hora
-            HasAutoFilter: hasAutoFilter, ActiveFishCount: tank.Count);
+            HasAutoFilter: hasAutoFilter, ActiveFishWeight: tank.Sum(f => f.Score) / cfg.DegradationRarityRefScore);
 
         var outcome = HabitatTicker.ProcessTick(state, hourEnd, rng, cfg);
         progress = outcome.GenerationProgressMinutes;

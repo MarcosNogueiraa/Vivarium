@@ -40,7 +40,7 @@ public class GameService(VivariumDbContext db)
             QueueCap: habitat.QueueCap,
             PendingQueueCount: pending,
             HasAutoFilter: hasAutoFilter,
-            ActiveFishCount: fish.Count);
+            ActiveFishWeight: fish.Sum(f => f.RarityScore) / TickConfig.Default.DegradationRarityRefScore);
 
         var outcome = HabitatTicker.ProcessTick(state, nowUtc, Random.Shared, TickConfig.Default);
         habitat.LastTickAt = outcome.LastTickAtUtc;

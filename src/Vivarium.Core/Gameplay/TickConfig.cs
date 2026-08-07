@@ -19,6 +19,13 @@ public sealed record TickConfig
     /// não fica mais punitivo, o efeito cresce só com o tanque estabelecido.
     /// </summary>
     public decimal DegradationPerFishFactor { get; init; } = 0.30m;
+    /// <summary>
+    /// Peso por raridade (08/08/2026): cada peixe conta como `score/DegradationRarityRefScore`
+    /// em vez de 1 fixo — quem rende mais suja mais. Ref=5 mantém um comum (score~5) igual
+    /// a antes (peso 1, contribuição ~0,9/h); um épico/lendário (score~15) pesa ~3x mais
+    /// (~2,7/h). Calibrado em CLAUDE.md 8.6/11 antes de implementar.
+    /// </summary>
+    public decimal DegradationRarityRefScore { get; init; } = 5m;
 
     /// <summary>Abaixo disso a velocidade de geração cai.</summary>
     public decimal LowMaintenanceThreshold { get; init; } = 40m;

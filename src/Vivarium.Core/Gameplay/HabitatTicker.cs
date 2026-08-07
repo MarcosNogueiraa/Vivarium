@@ -12,7 +12,8 @@ public sealed record HabitatTickState(
     int QueueCap,
     int PendingQueueCount,
     bool HasAutoFilter,
-    int ActiveFishCount);
+    /// <summary>Soma de `rarityScore/DegradationRarityRefScore` de cada peixe ativo — "nº efetivo" pra degradação (08/08/2026, era contagem simples).</summary>
+    decimal ActiveFishWeight);
 
 /// <summary>Resultado do tick: novos valores a persistir + quantos itens entram na fila.</summary>
 public sealed record TickOutcome(
@@ -55,9 +56,9 @@ public static class HabitatTicker
             onlineMinutes = 0;
         decimal offlineMinutes = elapsedMinutes - onlineMinutes;
 
-        // Degradação escala com o nº de peixes: tanque cheio suja mais rápido
-        // (manutenção vira ralo contínuo proporcional ao tamanho/renda).
-        decimal fishFactor = 1m + config.DegradationPerFishFactor * state.ActiveFishCount;
+        // Degradação escala com o peso (raridade) dos peixes: tanque cheio/rico suja
+        // mais rápido (manutenção vira ralo contínuo proporcional ao tamanho/renda).
+        decimal fishFactor = 1m + config.DegradationPerFishFactor * state.ActiveFishWeight;
         decimal degradation = config.DegradationPerMinute * fishFactor * elapsedMinutes
             * (state.HasAutoFilter ? 0.5m : 1m);
         decimal newMaintenance = Math.Max(0, state.MaintenanceLevel - degradation);

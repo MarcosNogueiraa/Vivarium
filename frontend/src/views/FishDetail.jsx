@@ -32,7 +32,7 @@ export function FishDetail({ creature, onClose, children, inTank = false }) {
           )}
           {inTank && (
             <div className="faint water-impact">
-              💧 −{waterDegradationPerFishPerHour().toFixed(1)} água/h <small>(todo peixe no tanque suja no mesmo ritmo, não importa a raridade)</small>
+              💧 −{waterDegradationPerFishPerHour(score).toFixed(1)} água/h <small>(peixes mais raros sujam mais rápido)</small>
             </div>
           )}
           <div className="faint mono">seed {seed} · {ageOf(creature.createdAt)}</div>

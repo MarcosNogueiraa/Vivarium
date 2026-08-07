@@ -14,7 +14,7 @@ public class HabitatTickerTests
         decimal progress = 0m,
         int pending = 0,
         bool autoFilter = false,
-        int fishCount = 0)
+        decimal fishWeight = 0m)
         => new(
             LastTickAtUtc: T0,
             LastHeartbeatAtUtc: heartbeat,
@@ -26,7 +26,7 @@ public class HabitatTickerTests
             QueueCap: HabitatDefaults.QueueCap,
             PendingQueueCount: pending,
             HasAutoFilter: autoFilter,
-            ActiveFishCount: fishCount);
+            ActiveFishWeight: fishWeight);
 
     [Fact]
     public void JanelaInteiraOnline_GeraNaTaxaCheia()
@@ -94,10 +94,11 @@ public class HabitatTickerTests
     [Fact]
     public void DegradacaoEscalaComOsPeixes()
     {
-        // Sem peixes: 60 min → -3 (100→97). Com 10 peixes: fator 1+0.3×10=4 → -12 (100→88).
+        // Sem peixes: 60 min → -3 (100→97). Com peso 10 (ex: 10 comuns score~5, peso=score/5=1 cada):
+        // fator 1+0.3×10=4 → -12 (100→88).
         var now = T0.AddMinutes(60);
         var vazio = HabitatTicker.ProcessTick(Estado(heartbeat: now, maintenance: 100m), now, new Random(1), Config);
-        var cheio = HabitatTicker.ProcessTick(Estado(heartbeat: now, maintenance: 100m, fishCount: 10), now, new Random(1), Config);
+        var cheio = HabitatTicker.ProcessTick(Estado(heartbeat: now, maintenance: 100m, fishWeight: 10m), now, new Random(1), Config);
 
         Assert.Equal(97m, vazio.MaintenanceLevel);
         Assert.Equal(88m, cheio.MaintenanceLevel);

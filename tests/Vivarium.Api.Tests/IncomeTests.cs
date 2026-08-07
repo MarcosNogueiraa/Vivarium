@@ -78,4 +78,22 @@ public class IncomeTests : IClassFixture<VivariumApiFactory>
         decimal nominal = 21m; // ~CoinsPerHour(8) com água 100
         Assert.True(tank!.CoinsPerHour < nominal * 0.6m);
     }
+
+    [Fact]
+    public async Task PeixeMaisRaro_DegradaAguaMaisRapido()
+    {
+        // Mesma quantidade de peixes (1), raridades diferentes — o mais raro deve sujar mais
+        // (peso = rarityScore/DegradationRarityRefScore, 08/08/2026).
+        var (comumClient, comumUserId) = await _factory.RegisterAsync("degradacomum");
+        await SetupTank(comumUserId, rarity: 5m, sinceLastTick: TimeSpan.FromHours(1));
+
+        var (epicoClient, epicoUserId) = await _factory.RegisterAsync("degradaepico");
+        await SetupTank(epicoUserId, rarity: 12m, sinceLastTick: TimeSpan.FromHours(1));
+
+        var comumTank = await comumClient.GetFromJsonAsync<TankDto>("/api/game/tank");
+        var epicoTank = await epicoClient.GetFromJsonAsync<TankDto>("/api/game/tank");
+
+        Assert.True(epicoTank!.MaintenanceLevel < comumTank!.MaintenanceLevel,
+            $"épico (score 12) deveria sujar mais água que comum (score 5): épico={epicoTank.MaintenanceLevel} comum={comumTank.MaintenanceLevel}");
+    }
 }
