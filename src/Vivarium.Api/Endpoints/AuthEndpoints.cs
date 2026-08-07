@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Vivarium.Api.Contracts;
 using Vivarium.Api.Data;
@@ -109,5 +110,12 @@ public static class AuthEndpoints
 
             return Results.Ok(new AuthResponse(user.Id, user.Username, tokens.CreateToken(user)));
         });
+
+        group.MapGet("/me", async (ClaimsPrincipal principal, VivariumDbContext db) =>
+        {
+            long userId = TokenService.GetUserId(principal);
+            var user = await db.Users.FirstAsync(u => u.Id == userId);
+            return Results.Ok(new MeResponse(user.Id, user.Username, user.Email));
+        }).RequireAuthorization();
     }
 }

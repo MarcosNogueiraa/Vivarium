@@ -11,6 +11,7 @@ export function AuthView({ onAuthed }) {
   const [form, setForm] = useState({ username: "", email: "", password: "" });
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const demoFish = useMemo(
     () => Array.from({ length: 6 }, (_, i) => ({ id: i, seed: randomDemoSeed() })),
@@ -54,11 +55,21 @@ export function AuthView({ onAuthed }) {
           {mode === "register" && (
             <input type="email" placeholder="Email" value={form.email} onChange={set("email")} required autoComplete="email" />
           )}
-          <input
-            type="password" placeholder="Senha (mínimo 8 caracteres)"
-            value={form.password} onChange={set("password")} required minLength={8}
-            autoComplete={mode === "login" ? "current-password" : "new-password"}
-          />
+          <div className="password-field">
+            <input
+              type={showPassword ? "text" : "password"} placeholder="Senha (mínimo 8 caracteres)"
+              value={form.password} onChange={set("password")} required minLength={8}
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
+            />
+            <button
+              type="button" className="password-toggle"
+              onClick={() => setShowPassword((s) => !s)}
+              title={showPassword ? "Ocultar senha" : "Mostrar senha"}
+              aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+            >
+              {showPassword ? "🙈" : "👁️"}
+            </button>
+          </div>
           {error && <div className="error">{error}</div>}
           <button type="submit" className="btn-primary" disabled={busy}>
             {busy ? "…" : mode === "login" ? "Mergulhar" : "Criar meu aquário"}

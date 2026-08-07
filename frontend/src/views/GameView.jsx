@@ -13,6 +13,7 @@ import { BreedingView } from "./BreedingView.jsx";
 import { HowItWorksGuide } from "./HowItWorksGuide.jsx";
 import { RarityGuide } from "./RarityGuide.jsx";
 import { ConfirmModal } from "../components/ConfirmModal.jsx";
+import { AccountMenu } from "../components/AccountMenu.jsx";
 
 export function GameView({ onLogout }) {
   const { tank, userId, refreshTank, syncError } = useGame();
@@ -89,7 +90,7 @@ export function GameView({ onLogout }) {
             🎣 Dar peixe a todos
           </button>
         )}
-        <button onClick={() => { clearToken(); onLogout(); }}>Sair</button>
+        <AccountMenu onLogout={() => { clearToken(); onLogout(); }} />
       </header>
 
       {syncError && (

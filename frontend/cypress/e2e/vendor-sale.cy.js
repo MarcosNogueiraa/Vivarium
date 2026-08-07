@@ -13,7 +13,7 @@ function creature(id, seed, rarityScore) {
   };
 }
 
-const fish = creature(201, 4001, 6.06); // vendorPriceOf(6.06) = 9 (round(coinsPerHourOf(6.06) * 2))
+const fish = creature(201, 4001, 6.06); // vendorPriceOf(6.06) = 7 (round(coinsPerHourOf(6.06) * 2), growth 0.42)
 
 const tankWithFish = {
   online: true, maintenanceLevel: 100, capacity: 3, queueCap: 5, queue: [], creatures: [fish],
@@ -34,19 +34,19 @@ describe("Venda ao NPC", () => {
     cy.wait("@tank");
 
     cy.get(".fish-row").first().click();
-    cy.contains("button", "Vender ao NPC · 9").scrollIntoView().should("be.visible").click();
-    cy.contains("Venda instantânea por 9 moedas soft").should("be.visible");
+    cy.contains("button", "Vender ao NPC · 7").scrollIntoView().should("be.visible").click();
+    cy.contains("Venda instantânea por 7 moedas soft").should("be.visible");
 
-    cy.intercept("POST", "/api/game/creatures/201/sell-vendor", { statusCode: 200, body: { price: 9, wallet: 109 } }).as("sell");
+    cy.intercept("POST", "/api/game/creatures/201/sell-vendor", { statusCode: 200, body: { price: 7, wallet: 107 } }).as("sell");
     cy.intercept("GET", "/api/game/tank", {
-      body: { ...tankWithFish, creatures: [], coinsPerHour: 0, wallet: { SOFT: 109, PREMIUM: 0 } },
+      body: { ...tankWithFish, creatures: [], coinsPerHour: 0, wallet: { SOFT: 107, PREMIUM: 0 } },
     }).as("tankAfter");
 
     cy.contains("button", "Vender agora").click();
     cy.wait("@sell");
     cy.wait("@tankAfter");
 
-    cy.contains("Vendido ao NPC por 9 moedas.");
+    cy.contains("Vendido ao NPC por 7 moedas.");
     cy.get(".fish-row").should("not.exist");
   });
 });

@@ -1,0 +1,40 @@
+import { useEffect, useRef, useState } from "react";
+import { api } from "../lib/api.js";
+
+/** Botão de conta (ícone de pessoa) — dropdown com username/email + sair. */
+export function AccountMenu({ onLogout }) {
+  const [open, setOpen] = useState(false);
+  const [me, setMe] = useState(null);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (open && !me) api.me().then(setMe).catch(() => {});
+  }, [open, me]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onOutside(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    function onEsc(e) { if (e.key === "Escape") setOpen(false); }
+    document.addEventListener("mousedown", onOutside);
+    document.addEventListener("keydown", onEsc);
+    return () => {
+      document.removeEventListener("mousedown", onOutside);
+      document.removeEventListener("keydown", onEsc);
+    };
+  }, [open]);
+
+  return (
+    <div className="account-menu" ref={ref}>
+      <button className="account-btn" onClick={() => setOpen((o) => !o)} aria-label="Conta" title="Conta">👤</button>
+      {open && (
+        <div className="account-dropdown">
+          <div className="account-info">
+            <div className="account-username">{me?.username ?? "…"}</div>
+            <div className="account-email faint">{me?.email ?? ""}</div>
+          </div>
+          <button className="account-logout" onClick={onLogout}>Sair</button>
+        </div>
+      )}
+    </div>
+  );
+}

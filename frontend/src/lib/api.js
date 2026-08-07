@@ -40,6 +40,7 @@ export const api = {
     request("POST", "/api/auth/register", { username, email, password }),
   login: (usernameOrEmail, password) =>
     request("POST", "/api/auth/login", { usernameOrEmail, password }),
+  me: () => request("GET", "/api/auth/me"),
   tank: () => request("GET", "/api/game/tank"),
   heartbeat: () => request("POST", "/api/game/heartbeat"),
   collect: (queueItemId) => request("POST", `/api/game/collect/${queueItemId}`),
