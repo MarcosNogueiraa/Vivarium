@@ -560,14 +560,15 @@ Vale notar: esse nível de desacoplamento (`Habitat` genérico, `CurrencyType` c
 MVP jogável de ponta a ponta, rodando local contra o Neon. Feito:
 - ✅ Motor de geração seed→traits (`Vivarium.Core/Generation`), simulação de pesos e faixas de raridade calibradas
 - ✅ **Traits de movimento** (velocidade/amplitude de cauda e nadadeira; extremos no score com peso 0.5) — seção 5.1
-- ✅ Backend completo (auth JWT, loop de jogo com tick lazy, mercado, loja de itens, transferência direta, camada de serviço `ServiceResult` — fase 4b) — seção 12; **91 testes verdes** (Core + API)
+- ✅ Backend completo (auth JWT, loop de jogo com tick lazy, mercado, loja de itens, transferência direta, camada de serviço `ServiceResult` — fase 4b) — seção 12; **148 testes verdes** (78 API + 70 Core, 07/08/2026)
 - ✅ **Breeding** (30/07/2026, seção 8.8) — habitat de reprodução dedicado, gestação escalada por raridade combinada, herança trait-a-trait; resolve o gap #1 de sink recorrente
 - ✅ Banco no **Neon** (sa-east-1) com migrations aplicadas; connection string em user-secrets local
 - ✅ Frontend React/Vite: auth, **aquário animado** (peixes nadando, seleção por clique), mercado, loja
 - ✅ **Cauda com onda viajante** (undulação em S via sprite + blit por fatias) em `fishRenderer.js` e no protótipo — 100% renderização, tunável em `MOVEMENT_TUNING`
 - ✅ Ferramentas de dev: `dev.cmd` (sobe API+front+navegador), botões dev de gerar/limpar peixes (só em Development)
 
-- ✅ **(06/08/2026) Publicado em produção:** backend no Oracle Cloud (`147.15.36.29`, Docker Compose com `api`+`caddy`, TLS automático via DuckDNS+Let's Encrypt — `deploy/`) em `https://vivarium-online.duckdns.org`; frontend no Cloudflare Pages/Workers em `https://vivarium.marcospdnnogueira.workers.dev`. Testado ponta a ponta (registro, login, tanque). VM protegida (só chave SSH ed25519, senha desabilitada, fail2ban, firewall restrito a 22/80/443).
+- ✅ **(06/08/2026) Publicado em produção:** backend no Oracle Cloud (`147.15.36.29`, Docker Compose com `api`+`caddy`, TLS automático via DuckDNS+Let's Encrypt — `deploy/`) em `https://vivarium-online.duckdns.org`; frontend no Cloudflare Pages/Workers em `https://vivarium.marcospdnnogueira.workers.dev` (auto-deploy a cada push no `master`, confirmado funcionando). Testado ponta a ponta (registro, login, tanque). VM protegida (só chave SSH ed25519, senha desabilitada, fail2ban, firewall restrito a 22/80/443).
+- ⚠️ **(07/08/2026) Redeploy da API pendente:** commits até `4b5de9c` (renda/gestação/degradação rebalanceados, guia in-app, fixes de UI) alteram `Vivarium.Core`/`Vivarium.Api` e exigem `git pull` + `docker compose up -d --build` na VM (esse passo **não** é automático, diferente do frontend). Não deu pra confirmar se terminou: o próprio IP de quem operava a VM foi banido pelo `fail2ban` da VM (conexões SSH repetidas em sequência) a meio do processo — esperar o ban expirar (~1h, bantime 3600s) ou desbanir via Console Connection do Oracle (`sudo fail2ban-client set sshd unbanip <ip>`) antes de tentar de novo. **Verificar antes de confiar na produção:** `ssh` na VM, `git log -1` dentro de `~/vivarium` pra confirmar que está em `4b5de9c`, senão repetir o `docker compose up -d --build`.
 
 Falta pra ir ao ar de verdade (depende de contas/decisões do usuário):
 - ⏳ **Assets do designer** (item 2 abaixo) — trocar as formas procedurais do `fishRenderer.js`/protótipo pelos sprites reais
