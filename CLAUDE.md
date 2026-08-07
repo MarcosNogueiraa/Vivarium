@@ -573,6 +573,8 @@ Falta pra ir ao ar de verdade (depende de contas/decisões do usuário):
 - ⏳ **Assets do designer** (item 2 abaixo) — trocar as formas procedurais do `fishRenderer.js`/protótipo pelos sprites reais
 - ⏳ Domínio próprio (opcional — hoje usa DuckDNS/workers.dev, funcional mas feio); processador de pagamento pra premium (§8.11)
 - ⏳ Trocar heartbeat por WebSocket/SSE (melhoria pós-MVP, seção 8.3); v2: alimentação e breeding (seção 8.6)
+- ⏳ **VIP incompleto (06/08/2026):** o modelo (`VipSubscription`) e a lógica de consumo (`GameService.HasActiveVipAsync`, auto-coleta no tick — §8.1) já existem, mas não há **nenhum** jeito de ativar uma assinatura hoje — sem endpoint, sem item de loja, nem dev-endpoint de teste. Falta: decidir o modelo de venda (assinatura recorrente? preço?), endpoint de compra/renovação e, futuramente, o mesmo processador de pagamento pendente do premium.
+- 💡 **Ideia futura (não decidida):** degradação da água ponderada por raridade — hoje cada peixe soma sempre a mesma fatia fixa (0,3/h) na degradação, não importa o quanto rende. Ideia discutida: pesar por `score/5` (linear, não pela renda exponencial, pra não punir demais tanques de lendário) — comum continua em 0,3/h, lendário (~15) sobe pra ~0,9/h. Não implementado ainda, calibrar via `Vivarium.Simulation` antes de mudar `TickConfig.DegradationPerFishFactor`.
 
 ### Passos originais
 
