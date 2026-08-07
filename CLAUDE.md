@@ -567,10 +567,11 @@ MVP jogável de ponta a ponta, rodando local contra o Neon. Feito:
 - ✅ **Cauda com onda viajante** (undulação em S via sprite + blit por fatias) em `fishRenderer.js` e no protótipo — 100% renderização, tunável em `MOVEMENT_TUNING`
 - ✅ Ferramentas de dev: `dev.cmd` (sobe API+front+navegador), botões dev de gerar/limpar peixes (só em Development)
 
-Falta pra ir ao ar (depende de contas do usuário):
-- ⏳ **Deploy backend** no Oracle Cloud (Dockerfile pronto; env vars `ConnectionStrings__Vivarium`, `Jwt__Key` forte, `Cors__AllowedOrigins__0`)
-- ⏳ **Deploy frontend** no Cloudflare Pages (build `npm run build`, output `frontend/dist`, env `VITE_API_URL`)
+- ✅ **(06/08/2026) Publicado em produção:** backend no Oracle Cloud (`147.15.36.29`, Docker Compose com `api`+`caddy`, TLS automático via DuckDNS+Let's Encrypt — `deploy/`) em `https://vivarium-online.duckdns.org`; frontend no Cloudflare Pages/Workers em `https://vivarium.marcospdnnogueira.workers.dev`. Testado ponta a ponta (registro, login, tanque). VM protegida (só chave SSH ed25519, senha desabilitada, fail2ban, firewall restrito a 22/80/443).
+
+Falta pra ir ao ar de verdade (depende de contas/decisões do usuário):
 - ⏳ **Assets do designer** (item 2 abaixo) — trocar as formas procedurais do `fishRenderer.js`/protótipo pelos sprites reais
+- ⏳ Domínio próprio (opcional — hoje usa DuckDNS/workers.dev, funcional mas feio); processador de pagamento pra premium (§8.11)
 - ⏳ Trocar heartbeat por WebSocket/SSE (melhoria pós-MVP, seção 8.3); v2: alimentação e breeding (seção 8.6)
 
 ### Passos originais
