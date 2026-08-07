@@ -105,8 +105,11 @@ public static class HabitatDefaults
     /// jogo (30/07/2026: 25→60, quase dobra o tempo por peixe). A única forma de acelerar
     /// é pagar em moeda premium pra pular a espera (ver `RushCalculator`/8.11) — o tempo
     /// lento é a fricção intencional; dinheiro é o único jeito de comprimi-lo. Era 15→25→60.
+    /// TEMPORÁRIO (07/08/2026): 60→10 só pra fase de testes com jogadores reais, pra dar
+    /// mais volume de peixe rápido sem esperar horas — reverter pra 60 antes de qualquer
+    /// lançamento "de verdade" (não é uma mudança de design, é conveniência de QA).
     /// </summary>
-    public const int GenerationIntervalMinutes = 60;
+    public const int GenerationIntervalMinutes = 10;
     public const decimal OnlineGenerationRate = 1.0m;
     public const decimal OfflineGenerationRate = 0.45m;
     public const decimal MaintenanceLevel = 100m;
