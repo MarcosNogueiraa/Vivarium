@@ -3,11 +3,11 @@ import { Modal } from "../components/Modal.jsx";
 import { FishCanvas } from "../components/FishCanvas.jsx";
 import { Coin } from "../components/Coin.jsx";
 import { TraitRow } from "../components/TraitRow.jsx";
-import { coinsPerHourOf, rarityBreakdownOf, traitsOf } from "../lib/generator.js";
+import { coinsPerHourOf, rarityBreakdownOf, traitsOf, waterDegradationPerFishPerHour } from "../lib/generator.js";
 import { bandOf, PT, swimSpeedOf } from "../lib/fishRenderer.js";
 import { ageOf, factorLabel, partSummary, speedWord } from "../lib/format.js";
 
-export function FishDetail({ creature, onClose, children }) {
+export function FishDetail({ creature, onClose, children, inTank = false }) {
   const seed = creature.seed;
   const traits = useMemo(() => traitsOf(creature), [creature]);
   const breakdown = useMemo(() => rarityBreakdownOf(creature), [creature]);
@@ -29,6 +29,11 @@ export function FishDetail({ creature, onClose, children }) {
           <div className="detail-coins"><Coin /> ~{coins.toFixed(1)} <small>soft/h a água cheia</small></div>
           {traits.shimmerTier !== "None" && (
             <div className="shimmer-label">✦ {PT.tier[traits.shimmerTier]} · {PT.shimmer[traits.shimmerColor]}</div>
+          )}
+          {inTank && (
+            <div className="faint water-impact">
+              💧 −{waterDegradationPerFishPerHour().toFixed(1)} água/h <small>(todo peixe no tanque suja no mesmo ritmo, não importa a raridade)</small>
+            </div>
           )}
           <div className="faint mono">seed {seed} · {ageOf(creature.createdAt)}</div>
         </div>

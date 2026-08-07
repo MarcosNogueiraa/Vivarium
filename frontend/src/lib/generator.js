@@ -105,6 +105,8 @@ export const CONFIG = {
   synergy: { perMatch: 0.15, maxBonus: 0.80 },
   // Venda ao NPC (vendor, §8.12) — espelha VendorCalculator/TickConfig (manter em sincronia)
   vendor: { hoursEquivalent: 2.0, minPrice: 1 },
+  // Degradação da água (§8.2/8.6) — espelha TickConfig (DegradationPerMinute, DegradationPerFishFactor, manter em sincronia)
+  degradation: { perMinute: 1 / 20, perFishFactor: 0.10 },
   // Breeding — espelha BreedingDefaults (Gameplay/BreedingConfig.cs, manter em sincronia)
   breeding: { mutationChance: 0.08, rarityBias: 0.15, grandparentReachChance: 0.15 },
   closestPartColor: {
@@ -434,6 +436,16 @@ export function vendorPriceOf(rarityScore) {
   const v = CONFIG.vendor;
   const price = Math.round(coinsPerHourOf(rarityScore) * v.hoursEquivalent);
   return Math.max(v.minPrice, price);
+}
+
+/**
+ * Quanto UM peixe no tanque acelera a degradação da água, em pontos de qualidade/hora.
+ * A fórmula do servidor é base·(1 + fator·N) — cada peixe adicional soma sempre a mesma
+ * fatia fixa (base·fator), não importa a raridade nem quantos outros já estão no tanque.
+ */
+export function waterDegradationPerFishPerHour() {
+  const d = CONFIG.degradation;
+  return d.perMinute * d.perFishFactor * 60;
 }
 
 function erf(x) {

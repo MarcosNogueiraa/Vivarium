@@ -221,7 +221,7 @@ export function TankView({ tank, refresh, notify }) {
         <p className="hint">Clique num peixe para ver os detalhes, guardar, vender ou transferir.</p>
       )}
       {selected && (
-        <FishDetail creature={selected} onClose={() => setSelectedId(null)}>
+        <FishDetail creature={selected} onClose={() => setSelectedId(null)} inTank>
           <button onClick={() => store(selected)} title="Guardar na mochila (não farma)">Guardar</button>
           <button onClick={() => sell(selected)}>Vender</button>
           <button onClick={() => transfer(selected)}>Transferir</button>

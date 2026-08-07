@@ -622,6 +622,7 @@ input:focus {
 .detail-score b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .detail-coins { display: inline-flex; align-items: center; gap: 6px; color: var(--gold); font-weight: 700; font-variant-numeric: tabular-nums; }
 .detail-coins small { color: var(--muted); font-weight: 500; }
+.water-impact { font-size: 0.8rem; }
 
 .detail-section { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; }
 .trait-row { display: flex; justify-content: space-between; gap: 14px; padding: 5px 0; font-size: 0.9rem; }
