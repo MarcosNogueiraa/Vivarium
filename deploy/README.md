@@ -16,6 +16,18 @@ lá); isto só cobre onde/como a API roda e como ela ganha HTTPS.
    sudo apt update && sudo apt install -y docker.io docker-compose-plugin
    sudo usermod -aG docker $USER   # relogar depois disso
    ```
+5. **Criar um swapfile antes de qualquer build** — as instâncias Always Free (A1 micro/E2.1.Micro)
+   têm pouca RAM (~1GB) e nenhum swap por padrão; `dotnet publish` dentro do `docker build`
+   esgota a memória e **trava a VM inteira** (SSH e HTTPS param de responder pra todo mundo,
+   não só quem está buildando — já aconteceu, exigiu reboot pelo console do Oracle):
+   ```bash
+   sudo fallocate -l 2G /swapfile
+   sudo chmod 600 /swapfile
+   sudo mkswap /swapfile
+   sudo swapon /swapfile
+   echo '/swapfile swap swap defaults 0 0' | sudo tee -a /etc/fstab
+   free -h   # confirmar "Swap: 2.0Gi" antes de seguir
+   ```
 
 ## 2. DuckDNS (subdomínio grátis)
 
