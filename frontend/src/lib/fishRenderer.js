@@ -300,6 +300,45 @@ function getPartSprite(seed, name, part, path, bbox) {
   return sprite;
 }
 
+// Corpo: gradiente + textura de escama são IDÊNTICOS pra todo peixe (não
+// dependem de seed nem trait — só o shimmer varia, e esse continua desenhado
+// ao vivo por cima). Cacheado uma única vez (chave fixa), não por peixe —
+// antes disso a textura de escama redesenhava ~288 arcos por peixe TODO
+// FRAME (sem cache nenhum), o gargalo real por trás do nado "travado" com
+// vários peixes no tanque (08/08/2026).
+let bodySprite = null;
+
+function getBodySprite() {
+  if (bodySprite) return bodySprite;
+
+  const M = MOVEMENT_TUNING.spriteMargin;
+  const [bx, by, bw, bh] = BODY_BBOX;
+  const canvas = document.createElement("canvas");
+  canvas.width = bw + 2 * M;
+  canvas.height = bh + 2 * M;
+  const sctx = canvas.getContext("2d");
+  sctx.translate(-bx + M, -by + M);
+
+  const bodyGrad = sctx.createLinearGradient(0, by, 0, by + bh);
+  bodyGrad.addColorStop(0, "#9aa1a9");
+  bodyGrad.addColorStop(0.55, "#7d848d");
+  bodyGrad.addColorStop(1, "#5f666f");
+  sctx.fillStyle = bodyGrad;
+  sctx.fill(bodyPath);
+  sctx.strokeStyle = "rgba(0,0,0,0.3)";
+  sctx.lineWidth = 2;
+  sctx.stroke(bodyPath);
+
+  sctx.save();
+  sctx.clip(bodyPath);
+  sctx.globalAlpha = 0.09;
+  drawScaleTexture(sctx, BODY_BBOX, 9, "#e8edf1", 1);
+  sctx.restore();
+
+  bodySprite = { canvas, ox: bx - M, oy: by - M };
+  return bodySprite;
+}
+
 /**
  * Blita o sprite em fatias verticais, cada coluna deslocada por uma onda que
  * viaja de jointX (u=0) até jointX+len (u=1). ampTip = deslocamento na ponta (px).
@@ -382,24 +421,13 @@ export function drawFish(ctx, seed, traits, time = 0, phase = 0) {
     MOVEMENT_TUNING.dorsalWave, MOVEMENT_TUNING.dorsalWave.ampBase * m.tailAmplitude,
     tailPeriod, time, phase);
 
-  const bodyGrad = ctx.createLinearGradient(0, BODY_BBOX[1], 0, BODY_BBOX[1] + BODY_BBOX[3]);
-  bodyGrad.addColorStop(0, "#9aa1a9");
-  bodyGrad.addColorStop(0.55, "#7d848d");
-  bodyGrad.addColorStop(1, "#5f666f");
-  ctx.fillStyle = bodyGrad;
-  ctx.fill(bodyPath);
-  ctx.strokeStyle = "rgba(0,0,0,0.3)";
-  ctx.lineWidth = 2;
-  ctx.stroke(bodyPath);
-
-  // Textura de escama fixa e bem sutil, sempre presente (mesma pra todo peixe
-  // da espécie) — evita o corpo chapado nos ~78% sem shimmer, sem introduzir
-  // trait novo nem variar a silhueta entre indivíduos.
-  ctx.save();
-  ctx.clip(bodyPath);
-  ctx.globalAlpha = 0.09;
-  drawScaleTexture(ctx, BODY_BBOX, 9, "#e8edf1", 1);
-  ctx.restore();
+  // Corpo (gradiente + textura de escama) é um sprite cacheado — idêntico pra
+  // todo peixe, nunca muda frame a frame (só o shimmer, desenhado ao vivo
+  // logo abaixo, varia). Antes disso a textura de escama era redesenhada do
+  // zero (centenas de arcos) a cada frame pra cada peixe — gargalo real com
+  // vários peixes no tanque.
+  const body = getBodySprite();
+  ctx.drawImage(body.canvas, body.ox, body.oy);
 
   drawShimmer(ctx, traits, time);
 
