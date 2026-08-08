@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api.js";
-import { coinsPerHourOf, vendorPriceOf } from "../lib/generator.js";
-import { bandOf, BANDS } from "../lib/fishRenderer.js";
+import { coinsPerHourOf, traitsOf, vendorPriceOf } from "../lib/generator.js";
+import { bandOf, BANDS, PART_HEX, PT } from "../lib/fishRenderer.js";
 import { RarityBadge } from "../components/RarityBadge.jsx";
 import { FishCanvas } from "../components/FishCanvas.jsx";
 import { PromptModal } from "../components/PromptModal.jsx";
@@ -23,6 +23,7 @@ export function BackpackView({ refreshTank, notify }) {
   const [prompt, setPrompt] = useState(null); // { kind: "sell"|"transfer"|"vendor", creature }
   const [sortBy, setSortBy] = useState("rarity-desc");
   const [bandFilter, setBandFilter] = useState("all");
+  const [colorFilter, setColorFilter] = useState("all");
   const [onlyBred, setOnlyBred] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
@@ -78,9 +79,11 @@ export function BackpackView({ refreshTank, notify }) {
     if (!data) return [];
     return data.creatures
       .filter((c) => bandFilter === "all" || bandOf(Number(c.rarityScore)).name === bandFilter)
+      // Cor = cor da cauda, mesma convenção usada em tankMath.js (sinergia de cor, §8.6).
+      .filter((c) => colorFilter === "all" || traitsOf(c).tail.color === colorFilter)
       .filter((c) => !onlyBred || c.isBred)
       .sort(SORTS[sortBy].cmp);
-  }, [data, sortBy, bandFilter, onlyBred]);
+  }, [data, sortBy, bandFilter, colorFilter, onlyBred]);
 
   const selectedCreatures = visible.filter((c) => selected.has(c.id));
   const selectedTotal = selectedCreatures.reduce((sum, c) => sum + vendorPriceOf(Number(c.rarityScore)), 0);
@@ -145,6 +148,22 @@ export function BackpackView({ refreshTank, notify }) {
                   onClick={() => setBandFilter(b.name)}
                 >
                   {b.name}
+                </button>
+              ))}
+            </div>
+            <div className="filter-chips">
+              <button className={`filter-chip${colorFilter === "all" ? " active" : ""}`} onClick={() => setColorFilter("all")}>
+                Toda cor
+              </button>
+              {Object.keys(PART_HEX).map((color) => (
+                <button
+                  key={color}
+                  className={`filter-chip color-chip${colorFilter === color ? " active" : ""}`}
+                  style={{ "--tier": PART_HEX[color] }}
+                  title={PT.color[color]}
+                  onClick={() => setColorFilter(color)}
+                >
+                  <span className="dot-color" style={{ background: PART_HEX[color] }} />
                 </button>
               ))}
             </div>
