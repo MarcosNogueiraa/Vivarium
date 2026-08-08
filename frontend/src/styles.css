@@ -547,6 +547,22 @@ input:focus {
 
 /* ---------- Cards (mercado / loja) ---------- */
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 18px; }
+
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  gap: 10px; padding: 56px 32px; max-width: 420px; margin: 40px auto 0;
+}
+.empty-state-icon {
+  font-size: 2.6rem; line-height: 1;
+  filter: drop-shadow(0 0 18px rgba(84, 230, 209, 0.35));
+  animation: empty-state-bob 3.4s ease-in-out infinite;
+}
+.empty-state strong { font-family: var(--display); font-size: 1.2rem; font-weight: 600; }
+.empty-state p { font-size: 0.9rem; line-height: 1.6; }
+@keyframes empty-state-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
 .card {
   --tier: var(--r-comum);
   position: relative;
@@ -586,6 +602,19 @@ input:focus {
 .store-card-locked { opacity: 0.6; }
 .store-locked-reason { color: var(--coral) !important; font-size: 0.8rem !important; flex: none !important; }
 .filter-status-card { background: rgba(84, 230, 209, 0.05); border-color: rgba(84, 230, 209, 0.25); }
+
+/* Hierarquia visual da loja (08/08/2026): sem isso, um filtro de 20 soft e o
+   Aquário Master de 12000 tinham o mesmo peso visual (feedback do usuário).
+   Ícone por item + acento de cor pros produtos de maior faixa. */
+.store-card-icon { font-size: 1.7rem; line-height: 1; filter: drop-shadow(0 0 10px rgba(84, 230, 209, 0.22)); }
+.store-card--rare { border-color: color-mix(in srgb, var(--r-raro) 42%, var(--line)); }
+.store-card--rare .store-card-icon { filter: drop-shadow(0 0 12px color-mix(in srgb, var(--r-raro) 55%, transparent)); }
+.store-card--premium {
+  border-color: color-mix(in srgb, var(--gold) 45%, var(--line));
+  box-shadow: var(--shadow), var(--hi), 0 0 0 1px rgba(240, 190, 90, 0.16) inset;
+}
+.store-card--premium .store-card-icon { filter: drop-shadow(0 0 14px rgba(240, 190, 90, 0.5)); }
+.store-card--premium .price { font-size: 1.15rem; }
 
 /* ---------- Badges ---------- */
 .badge {
@@ -814,6 +843,20 @@ input:focus {
 }
 .peek-title { font-family: var(--display); font-weight: 600; font-size: 0.92rem; margin-bottom: 2px; }
 .peek-card .peek-row { text-align: left; }
+
+/* Grade do Ninho (08/08/2026): o peek-anchor flutuante (fixed + coordenadas)
+   quase sempre sobrepunha a linha vizinha do grid — o painel (~150px) é bem
+   mais alto que o espaço entre linhas, então "acima" ou "abaixo" da linha
+   sempre esbarrava em outro card (feedback do usuário). Substituído por um
+   overlay preenchendo o PRÓPRIO card — zero matemática de posição, nunca
+   sobrepõe outro peixe, funciona igual em qualquer linha/coluna da grade. */
+.peek-overlay {
+  position: absolute; inset: 0; z-index: 5; border-radius: inherit;
+  display: flex; align-items: center; justify-content: center; padding: 12px;
+  background: var(--panel-strong);
+  pointer-events: none; animation: fade-in 0.15s ease;
+}
+.peek-overlay .peek-card { width: 100%; box-shadow: none; background: transparent; }
 
 /* ---------- Barra fixa (ex: confirmar cruzamento no Ninho) ---------- */
 .sticky-bar {

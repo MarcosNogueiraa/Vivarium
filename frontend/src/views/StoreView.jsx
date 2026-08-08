@@ -14,6 +14,19 @@ const DESCRIPTIONS = {
   aquario_master: "Troca de aquário: sobe pra faixa 10-15 de capacidade, o teto do MVP. Preço fixo, o maior sink de soft do jogo.",
 };
 
+// Ícone + "peso" visual por item — sem isso todo card da loja tinha o mesmo
+// destaque, de um filtro de 20 soft a um Aquário Master de 12000 (feedback
+// do usuário). Master usa coroa: mesma linguagem "premium" da moldura
+// dourada do tank-stage (TankView.jsx tier-master).
+const ICONS = {
+  filter_basic: "💧",
+  auto_filter: "⚙️", auto_filter_2: "⚙️", auto_filter_3: "⚙️",
+  tank_upgrade: "📐",
+  aquario_grande: "🐳",
+  aquario_master: "👑",
+};
+const TIERS = { aquario_grande: "rare", aquario_master: "premium" };
+
 const FILTER_KEYS = ["auto_filter", "auto_filter_2", "auto_filter_3"];
 
 export function StoreView({ tank, refreshTank, notify }) {
@@ -64,8 +77,11 @@ export function StoreView({ tank, refreshTank, notify }) {
           )
           : <p className="muted">Você ainda não tem filtro automático — a água degrada na velocidade cheia.</p>}
       </div>
-      {items.map((item) => (
-        <div key={item.key} className={`card store-card${item.locked ? " store-card-locked" : ""}`}>
+      {items.map((item) => {
+        const tier = TIERS[item.key];
+        return (
+        <div key={item.key} className={`card store-card${tier ? ` store-card--${tier}` : ""}${item.locked ? " store-card-locked" : ""}`}>
+          <span className="store-card-icon">{ICONS[item.key]}</span>
           <strong>{item.name}</strong>
           <p className="muted">{DESCRIPTIONS[item.key] ?? ""}</p>
           {item.locked && <p className="muted store-locked-reason">🔒 {item.lockedReason}</p>}
@@ -80,7 +96,8 @@ export function StoreView({ tank, refreshTank, notify }) {
                 : <button className="btn-primary" onClick={() => buy(item)}>Comprar</button>}
           </div>
         </div>
-      ))}
+        );
+      })}
       {warnFilter && filterItem && (
         <ConfirmModal
           title="Água já está limpa"
