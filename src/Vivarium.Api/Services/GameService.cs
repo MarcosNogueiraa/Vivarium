@@ -24,10 +24,13 @@ public class GameService(VivariumDbContext db)
         int pending = await db.GenerationQueueItems
             .CountAsync(q => q.HabitatId == habitat.Id && q.Status == QueueItemStatus.Pending);
         decimal filterCapacity = await FilterCapacityAsync(habitat.UserId);
-        // Hook futuro (cascudo, CLAUDE.md §8.13): quando a criatura de limpeza passiva
-        // existir, seu bônus entra aqui somado a `filterCapacity` (ou como multiplicador
-        // extra no fator de filtro em HabitatTicker) — sem estrutura nova, mais um termo
-        // na mesma fórmula.
+        // Hook futuro (cascudo, CLAUDE.md §8.15/16): "cascudo" é um PEIXE novo (uma
+        // criatura, não um item de loja — diferente do filtro automático/`filterCapacity`
+        // acima, que é equipamento comprado). Quando essa espécie existir, o bônus de
+        // limpeza passiva dela entraria aqui somado a `filterCapacity` (ou como
+        // multiplicador extra no fator de filtro em HabitatTicker) — sem estrutura nova,
+        // mais um termo na mesma fórmula, só a origem do bônus é diferente (peixe vivo
+        // no tanque, não item comprado).
         decimal bandFactor = CapacityBands.BandFor(habitat.Capacity).DegradationBandFactor;
         var fish = await TankFishAsync(habitat);
 

@@ -1,7 +1,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { roll01, traitsOf } from "../lib/generator.js";
 import {
-  bandOf, drawFish, drawTankBackground, drawTankForeground, swimSpeedOf, VIEW_H, VIEW_W,
+  bandOf, drawFish, drawFishShadow, drawTankBackground, drawTankForeground,
+  SUBSTRATE_BAND_H, swimSpeedOf, VIEW_H, VIEW_W,
 } from "../lib/fishRenderer.js";
 import { reducedMotion } from "../lib/motion.js";
 
@@ -137,6 +138,10 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
       ctx.setTransform(resScaleRef.current, 0, 0, resScaleRef.current, 0, 0);
       drawTankBackground(ctx, W, H, time, q, th, decor);
 
+      // Garante o estado de cada peixe e agrupa por cor de cauda pra uma leve
+      // coesão de cardume — mesmo campo/limiar (n >= 2) que tankSynergy usa pro
+      // bônus de renda (tankMath.js), só aplicado aqui visualmente.
+      const schoolCentroids = new Map(); // cor -> { sumX, sumY, count }
       for (const c of creaturesRef.current) {
         let s = statesRef.current.get(c.id);
         if (!s) {
@@ -145,14 +150,47 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
             y: 100 + roll01(c.bigSeed, "pos_y") * (H - 200),
             vx: (roll01(c.bigSeed, "dir") < 0.5 ? -1 : 1) * swimSpeedOf(c.traits),
             phase: roll01(c.bigSeed, "phase") * Math.PI * 2,
+            nextTurnAt: time + 8000 + roll01(c.bigSeed, "turn0") * 12000,
           };
           statesRef.current.set(c.id, s);
+        }
+        const color = c.traits.tail.color;
+        const g = schoolCentroids.get(color) ?? { sumX: 0, sumY: 0, count: 0 };
+        g.sumX += s.x; g.sumY += s.y; g.count++;
+        schoolCentroids.set(color, g);
+      }
+
+      for (const c of creaturesRef.current) {
+        const s = statesRef.current.get(c.id);
+
+        // Coesão de cardume: puxão bem sutil na posição-base em direção ao
+        // centro do grupo de mesma cor (não mexe em vx — evita acelerar sem
+        // limite; a nadada continua independente, só a posição converge um
+        // pouco).
+        const group = schoolCentroids.get(c.traits.tail.color);
+        if (group && group.count >= 2) {
+          const avgX = group.sumX / group.count;
+          const avgY = group.sumY / group.count;
+          s.x += (avgX - s.x) * 0.06 * dt;
+          s.y += (avgY - s.y) * 0.03 * dt;
         }
 
         s.x += s.vx * dt * speedFactor;
         if (s.x < 90) { s.x = 90; s.vx = Math.abs(s.vx); }
         if (s.x > W - 90) { s.x = W - 90; s.vx = -Math.abs(s.vx); }
+
+        // Vira sozinho de vez em quando no meio do tanque também (não só nas
+        // paredes) — evita o ping-pong mecânico. Próximo giro reagendado sempre
+        // que acontece um (seeded pelo instante atual, continua determinístico).
+        if (time > s.nextTurnAt) {
+          s.vx = -s.vx;
+          s.nextTurnAt = time + 8000 + roll01(c.bigSeed, `turn_${Math.floor(time / 1000)}`) * 12000;
+        }
+
         const y = s.y + Math.sin(time / 900 + s.phase) * 7;
+
+        // Sombra no substrato — quanto mais fundo o peixe, maior/mais escura.
+        drawFishShadow(ctx, s.x, y, H - SUBSTRATE_BAND_H);
 
         // Aura no contorno pra peixes raros+ (lendário reluz de leve).
         // Cortes seguem as faixas de raridade v2 (Raro ≥ 7.5, Lendário ≥ 14.0).
