@@ -423,31 +423,43 @@ function drawRockCluster(ctx, W, H) {
   }
 }
 
-/** Baú do tesouro (tier 2, Aquário Master) — centerpiece com brilho piscando. */
+/**
+ * Baú do tesouro (tier 2, Aquário Master) — decoração ambiente, não interativa.
+ * Fora do centro (não compete com a área de clique dos peixes) e com um brilho
+ * pequeno e lento (não pulsa como os botões reais do jogo, ex: recompensa diária —
+ * um halo grande pulsando lia como call-to-action clicável, o que confundia).
+ */
 function drawTreasureChest(ctx, W, H, time) {
-  const cx = W * 0.5, baseY = H - 34, w = 74, h = 40;
+  const cx = W * 0.66, baseY = H - 34, w = 64, h = 34;
   ctx.save();
   // corpo do baú
   ctx.fillStyle = "#5a3a1e";
   ctx.fillRect(cx - w / 2, baseY - h, w, h);
   ctx.fillStyle = "#7a5028";
   ctx.beginPath();
-  ctx.ellipse(cx, baseY - h, w / 2, 14, 0, Math.PI, 0);
+  ctx.ellipse(cx, baseY - h, w / 2, 12, 0, Math.PI, 0);
   ctx.fill();
   // fivela dourada
   ctx.fillStyle = "#d9b24c";
-  ctx.fillRect(cx - 6, baseY - h - 4, 12, 18);
-  // brilho piscando
-  const sparkle = 0.4 + 0.35 * Math.max(0, Math.sin(time / 900));
+  ctx.fillRect(cx - 5, baseY - h - 3, 10, 15);
+  // dois glints pequenos e lentos, sem halo grande — leitura de "reflexo", não "botão"
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
-  const glow = ctx.createRadialGradient(cx, baseY - h * 0.7, 0, cx, baseY - h * 0.7, 60);
-  glow.addColorStop(0, `rgba(255, 224, 140, ${sparkle})`);
-  glow.addColorStop(1, "rgba(255, 224, 140, 0)");
-  ctx.fillStyle = glow;
-  ctx.beginPath();
-  ctx.arc(cx, baseY - h * 0.7, 60, 0, Math.PI * 2);
-  ctx.fill();
+  const glints = [
+    { dx: -w * 0.22, dy: -h * 0.85, r: 5, speed: 2600, phase: 0 },
+    { dx: w * 0.18, dy: -h * 0.55, r: 3.5, speed: 3100, phase: 1.7 },
+  ];
+  for (const g of glints) {
+    const tw = 0.18 + 0.2 * Math.max(0, Math.sin(time / g.speed + g.phase));
+    const gx = cx + g.dx, gy = baseY - h + g.dy;
+    const glow = ctx.createRadialGradient(gx, gy, 0, gx, gy, g.r * 3);
+    glow.addColorStop(0, `rgba(255, 224, 140, ${tw})`);
+    glow.addColorStop(1, "rgba(255, 224, 140, 0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(gx, gy, g.r * 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.restore();
   ctx.restore();
 }
