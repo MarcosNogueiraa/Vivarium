@@ -98,13 +98,20 @@ public sealed record TickConfig
 /// <c>Habitat</c> por faixas com nome, preço e degradação próprios, em vez de um único
 /// upgrade infinito. Ver CLAUDE.md §8.13.
 /// </summary>
+/// <param name="TransitionCost">
+/// Custo de TROCAR pra essa faixa (a compra que leva de <c>MinCapacity</c> da faixa anterior
+/// pra <c>MinCapacity+1</c> desta) — deliberadamente bem acima da curva suave de upgrades
+/// dentro da faixa, pra exigir farm real de moedas em vez de ser só mais um passo incremental
+/// (08/08/2026, pedido do usuário). 0 na primeira faixa (Aquário — não tem "de onde vir").
+/// </param>
 public sealed record CapacityBand(
     int MinCapacity,
     int MaxCapacity,
     string Name,
     decimal PriceBase,
     double PriceGrowth,
-    decimal DegradationBandFactor);
+    decimal DegradationBandFactor,
+    decimal TransitionCost = 0m);
 
 /// <summary>
 /// As 3 faixas de capacidade do MVP (08/08/2026): "Aquário" (3-5), "Aquário Grande" (5-10),
@@ -115,8 +122,8 @@ public sealed record CapacityBand(
 public static class CapacityBands
 {
     public static readonly CapacityBand Aquario = new(3, 5, "Aquário", PriceBase: 50m, PriceGrowth: 1.5, DegradationBandFactor: 1.0m);
-    public static readonly CapacityBand AquarioGrande = new(5, 10, "Aquário Grande", PriceBase: 140m, PriceGrowth: 1.45, DegradationBandFactor: 1.25m);
-    public static readonly CapacityBand AquarioMaster = new(10, 15, "Aquário Master", PriceBase: 400m, PriceGrowth: 1.4, DegradationBandFactor: 1.55m);
+    public static readonly CapacityBand AquarioGrande = new(5, 10, "Aquário Grande", PriceBase: 140m, PriceGrowth: 1.45, DegradationBandFactor: 1.25m, TransitionCost: 4000m);
+    public static readonly CapacityBand AquarioMaster = new(10, 15, "Aquário Master", PriceBase: 400m, PriceGrowth: 1.4, DegradationBandFactor: 1.55m, TransitionCost: 12000m);
 
     public static readonly IReadOnlyList<CapacityBand> All = [Aquario, AquarioGrande, AquarioMaster];
 
@@ -133,6 +140,21 @@ public static class CapacityBands
             if (capacity <= band.MaxCapacity)
                 return band;
         return All[^1];
+    }
+
+    /// <summary>
+    /// Preço de subir a capacidade em +1 a partir de <paramref name="currentCapacity"/>. Quando
+    /// essa compra cruza pro teto de uma faixa nova (capacidade atual já no teto da faixa
+    /// atual), cobra o <see cref="CapacityBand.TransitionCost"/> da faixa de destino — bem
+    /// acima da curva suave — em vez de continuá-la, pra exigir farm real de moedas na troca de
+    /// aquário (08/08/2026, pedido do usuário), não ser só mais um incremento.
+    /// </summary>
+    public static decimal PriceForUpgrade(int currentCapacity)
+    {
+        var band = BandFor(currentCapacity);
+        if (currentCapacity >= band.MaxCapacity && currentCapacity < MaxCapacity)
+            return BandFor(currentCapacity + 1).TransitionCost;
+        return Math.Ceiling(band.PriceBase * (decimal)Math.Pow(band.PriceGrowth, currentCapacity - band.MinCapacity));
     }
 }
 

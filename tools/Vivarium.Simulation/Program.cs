@@ -266,9 +266,11 @@ static void EconomyReport()
     Console.WriteLine("\nPreço do upgrade de tanque por faixa de capacidade (CapacityBands):");
     foreach (var band in CapacityBands.All)
     {
+        if (band.TransitionCost > 0)
+            Console.WriteLine($"  >>> TROCA pra {band.Name}: {band.TransitionCost:0} soft (cap {band.MinCapacity}->{band.MinCapacity + 1}) — custo de gate, bem acima da curva suave");
         Console.Write($"  {band.Name} (base {band.PriceBase:0} × {band.PriceGrowth:0.00}^n, degradação x{band.DegradationBandFactor:0.00}): ");
-        for (int cap = band.MinCapacity; cap < band.MaxCapacity; cap++)
-            Console.Write($"cap {cap}->{cap + 1}: {Math.Ceiling(band.PriceBase * (decimal)Math.Pow(band.PriceGrowth, cap - band.MinCapacity)):0}  ");
+        for (int cap = band.MinCapacity + (band.TransitionCost > 0 ? 1 : 0); cap < band.MaxCapacity; cap++)
+            Console.Write($"cap {cap}->{cap + 1}: {CapacityBands.PriceForUpgrade(cap):0}  ");
         Console.WriteLine();
     }
 }
@@ -465,11 +467,7 @@ static void RunPlayerSimulation(string label, double hoursOnlinePerDay, int days
     // Níveis de filtro automático (08/08/2026): cada um cobre uma capacidade de peixes
     // (peso por raridade); o melhor nível possuído prevalece, não empilha.
     var filterTiers = new (decimal Capacity, decimal Cost)[] { (5m, 500m), (10m, 1200m), (18m, 2500m) };
-    decimal TankUpgradePrice(int capacity)
-    {
-        var band = CapacityBands.BandFor(capacity);
-        return Math.Ceiling(band.PriceBase * (decimal)Math.Pow(band.PriceGrowth, capacity - band.MinCapacity));
-    }
+    decimal TankUpgradePrice(int capacity) => CapacityBands.PriceForUpgrade(capacity);
 
     var cfg = TickConfig.Default;
     var rng = new Random(seed);
@@ -591,17 +589,24 @@ static void RunPlayerSimulation(string label, double hoursOnlinePerDay, int days
 
             // Upgrade de tanque quando peixes estão transbordando pra mochila e dá pra pagar
             // (respeitando o teto absoluto das faixas de capacidade, CapacityBands.MaxCapacity).
-            if (backpackOverflow > 0 && capacity < CapacityBands.MaxCapacity)
+            bool wantsUpgrade = backpackOverflow > 0 && capacity < CapacityBands.MaxCapacity;
+            decimal upgradePrice = wantsUpgrade ? TankUpgradePrice(capacity) : 0m;
+            if (wantsUpgrade && wallet >= upgradePrice)
             {
-                decimal price = TankUpgradePrice(capacity);
-                if (wallet >= price)
-                {
-                    wallet -= price; spentUpgrade += price; upgradesBought++; capacity++;
-                }
+                wallet -= upgradePrice; spentUpgrade += upgradePrice; upgradesBought++; capacity++;
+                wantsUpgrade = false;
             }
 
+            // Jogador racional: com o transbordo persistindo e o upgrade ainda fora de
+            // alcance, prioriza POUPAR pra ele (pausa novas gestações) em vez de manter
+            // gastando em breeding e nunca juntar o suficiente pro custo de troca de faixa
+            // (`TransitionCost`, 08/08/2026) — sem isso a simulação nunca via ninguém trocar
+            // de faixa em 120 dias, mesmo o perfil dedicado, porque breeding consumia o
+            // caixa todo dia antes de acumular.
+            bool savingForUpgrade = wantsUpgrade && wallet < upgradePrice;
+
             // Breeding: cruza os 2 melhores do tanque quando não há gestação ativa e dá pra pagar
-            if (gestation is null && tank.Count >= 2)
+            if (!savingForUpgrade && gestation is null && tank.Count >= 2)
             {
                 var pair = tank.OrderByDescending(f => f.Score).Take(2).ToList();
                 decimal cost = BreedingCalculator.CostSoft(pair[0].Score, pair[1].Score);

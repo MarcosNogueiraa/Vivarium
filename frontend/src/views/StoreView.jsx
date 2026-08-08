@@ -9,14 +9,21 @@ const DESCRIPTIONS = {
   auto_filter: "Permanente: cobre até 5 de peso de peixes com metade da degradação (acima disso, o benefício cai aos poucos).",
   auto_filter_2: "Permanente: cobre até 10 de peso de peixes — upgrade do Filtro Automático (não acumula com ele).",
   auto_filter_3: "Permanente: cobre até 18 de peso de peixes — o nível mais forte, pro tanque Master cheio.",
-  tank_upgrade: "+1 de capacidade no tanque (preço sobe a cada compra, muda de faixa em 5 e 10).",
+  tank_upgrade: "+1 de capacidade no tanque (preço sobe a cada compra; trocar de aquário em 5 e 10 tem um custo bem mais alto, exige farm de verdade).",
 };
 
 const FILTER_KEYS = ["auto_filter", "auto_filter_2", "auto_filter_3"];
 
+// Capacidades onde a próxima compra de tank_upgrade cruza pra uma faixa nova
+// e cobra o custo de transição (bem mais alto que a curva suave normal) —
+// espelha CapacityBands.All (TickConfig.cs), só os limites, não a tabela
+// inteira. Mantém em sincronia se as faixas mudarem.
+const TRANSITION_CAPACITIES = [5, 10];
+
 export function StoreView({ tank, refreshTank, notify }) {
   const [items, setItems] = useState(null);
   const [warnFilter, setWarnFilter] = useState(false);
+  const [warnTransition, setWarnTransition] = useState(false);
 
   const refresh = useCallback(async () => { setItems(await api.items()); }, []);
   useEffect(() => { refresh().catch((err) => notify(err.message)); }, [refresh, notify]);
@@ -24,6 +31,7 @@ export function StoreView({ tank, refreshTank, notify }) {
   async function doBuy(item) {
     await api.buyItem(item.key);
     setWarnFilter(false);
+    setWarnTransition(false);
     notify(`${item.name} comprado!`);
     await Promise.all([refresh(), refreshTank()]);
   }
@@ -33,12 +41,17 @@ export function StoreView({ tank, refreshTank, notify }) {
       setWarnFilter(true);
       return;
     }
+    if (item.key === "tank_upgrade" && TRANSITION_CAPACITIES.includes(Number(tank?.capacity))) {
+      setWarnTransition(true);
+      return;
+    }
     try { await doBuy(item); }
     catch (err) { notify(err.message); }
   }
 
   if (items === null) return <p className="hint">Carregando loja…</p>;
   const filterItem = items.find((i) => i.key === "filter_basic");
+  const tankUpgradeItem = items.find((i) => i.key === "tank_upgrade");
 
   // Nível ativo de fato = o de MAIOR índice possuído (níveis não empilham — o
   // melhor prevalece, GameService.FilterCapacityAsync). Os demais possuídos viraram
@@ -82,6 +95,14 @@ export function StoreView({ tank, refreshTank, notify }) {
           message={`Sua água está a ${Number(tank?.maintenanceLevel ?? 0).toFixed(0)}% — um filtro agora não faria diferença na renda. Comprar mesmo assim?`}
           confirmLabel="Comprar mesmo assim"
           onConfirm={() => doBuy(filterItem)} onClose={() => setWarnFilter(false)}
+        />
+      )}
+      {warnTransition && tankUpgradeItem && (
+        <ConfirmModal
+          title="Trocar de aquário"
+          message={`Essa compra troca de faixa de tanque e custa ${Number(tankUpgradeItem.price).toFixed(0)} soft — bem mais que um upgrade normal. Confirma o gasto?`}
+          confirmLabel={`Trocar por ${Number(tankUpgradeItem.price).toFixed(0)}`}
+          onConfirm={() => doBuy(tankUpgradeItem)} onClose={() => setWarnTransition(false)}
         />
       )}
     </div>
