@@ -49,6 +49,17 @@ body {
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  transition: background 0.25s ease;
+}
+/* Modo cinema (aba Tanque, `.cinema-mode` em GameView.jsx): em telas largas,
+   `.content` (max-width: 1160px) deixa a margem lateral mostrando o fundo
+   padrão da página — os dois brilhos radiais azul/aqua liam como "ainda tem
+   azul claro em volta" mesmo com a topbar/seções apagadas (feedback do
+   usuário). Enquanto o cinema está ativo, o fundo INTEIRO da página vai pra
+   um tom quase preto, sem os brilhos — só o tanque (que tem seu próprio halo
+   dourado/aqua) fica colorido na tela. */
+body:has(.app-shell.cinema-mode) {
+  background: linear-gradient(180deg, #010609 0%, #010507 55%, #000203 100%);
 }
 
 #root { min-height: 100%; }
