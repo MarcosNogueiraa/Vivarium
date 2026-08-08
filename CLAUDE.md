@@ -90,6 +90,8 @@ Se o corpo saiu em Tier 2, 3 ou 4 (brilho vibrante, raro ou lendário), a tabela
 
 Exemplo: corpo saiu "Tier 3 — Preto absoluto" → peso de "Preto" nas partes sobe de 3% para ~18%, o resto da tabela é reduzido proporcionalmente. Isso cria a sensação de "conjunto raro combinando" sem eliminar a chance das outras cores aparecerem.
 
+**Cor absoluta (visual, 08/08/2026, ideia do usuário):** quando cauda, dorsal e peitoral saem todas na MESMA cor (a mesma condição do bônus `sameColor3`, §8.6), o corpo — normalmente sempre cinza — passa a ser tingido com essa cor também (`fishRenderer.getBodySprite(tintColor)`, overlay sobre o gradiente cinza, mantém a textura de escama por baixo). Puramente visual — o score **não muda**, o bônus de conjunto já existe desde antes; isso só dá uma recompensa visual condizente com a raridade extra que o conjunto já rende. Sem correlação de brilho (Tier ≥2) ativa, a chance de sair um peixe "de cor absoluta" do zero é baixa (Σ p_cor³ sobre a paleta) — em torno de **3%** somando todas as cores, dominado pelas cores mais comuns (Laranja sozinha ≈1.06%, Branco puro sozinho ≈0.0001%). Cruzar dois pais com as 3 partes já na mesma cor no Ninho aumenta bastante essa chance (cada parte herda ~50/50 de um dos pais, então se os dois pais oferecem a mesma cor pra aquela parte, ela quase sempre "vence"), mas não garante — mutação (§8.8) sempre pode resortear do zero.
+
 ---
 
 ## 5. Cálculo de Rarity Score (não arbitrário)
