@@ -1,5 +1,5 @@
 // Cálculos derivados do estado do tanque (só display; o servidor é a fonte da renda).
-import { coinsPerHourOf, synergyMultiplier, traitsOf } from "./generator.js";
+import { CONFIG, coinsPerHourOf, synergyMultiplier, traitsOf } from "./generator.js";
 import { PT } from "./fishRenderer.js";
 
 /** Acima disso, comprar filtro não muda nada (a renda já está no teto) — avisar antes de gastar. */
@@ -47,6 +47,11 @@ export function tankPotential(creatures) {
     const col = traitsOf(c).tail.color;
     return s + coinsPerHourOf(Number(c.rarityScore), synergyMultiplier(counts[col]));
   }, 0);
+}
+
+/** "Peso" do tanque pra fins de filtro/degradação — espelha `ActiveFishWeight` do backend (só display). */
+export function tankFishWeight(creatures) {
+  return creatures.reduce((s, c) => s + Number(c.rarityScore), 0) / CONFIG.degradation.rarityRefScore;
 }
 
 /** Estimativa do próximo peixe na fila a partir do progresso de geração. */

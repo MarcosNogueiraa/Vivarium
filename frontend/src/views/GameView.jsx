@@ -14,9 +14,10 @@ import { HowItWorksGuide } from "./HowItWorksGuide.jsx";
 import { RarityGuide } from "./RarityGuide.jsx";
 import { ConfirmModal } from "../components/ConfirmModal.jsx";
 import { AccountMenu } from "../components/AccountMenu.jsx";
+import { TankUpgradeCelebration } from "../components/TankUpgradeCelebration.jsx";
 
 export function GameView({ onLogout }) {
-  const { tank, userId, refreshTank, syncError } = useGame();
+  const { tank, userId, refreshTank, syncError, bandUpgrade, dismissBandUpgrade } = useGame();
   const { toast, notify } = useToast();
   const { status: dailyReward, refresh: refreshDailyReward } = useDailyReward();
   const [tab, setTab] = useState("tank");
@@ -129,6 +130,7 @@ export function GameView({ onLogout }) {
           onClose={() => setShowGiveFishConfirm(false)}
         />
       )}
+      {bandUpgrade && <TankUpgradeCelebration bandName={bandUpgrade} onClose={dismissBandUpgrade} />}
     </div>
   );
 }

@@ -11,8 +11,16 @@ public sealed record HabitatTickState(
     decimal OfflineGenerationRate,
     int QueueCap,
     int PendingQueueCount,
-    bool HasAutoFilter,
-    int ActiveFishCount);
+    /// <summary>
+    /// Capacidade de peixes coberta pelo melhor filtro automático do jogador (0 = sem
+    /// filtro). Substitui o antigo bool binário (08/08/2026) — acima dessa capacidade o
+    /// benefício tapera suavemente em vez de sumir (ver <see cref="HabitatTicker.ProcessTick"/>).
+    /// </summary>
+    decimal FilterCapacity,
+    /// <summary>Soma de `rarityScore/DegradationRarityRefScore` de cada peixe ativo — "nº efetivo" pra degradação (08/08/2026, era contagem simples).</summary>
+    decimal ActiveFishWeight,
+    /// <summary>Fator de degradação da faixa de capacidade atual do tanque (`CapacityBands.BandFor`, 08/08/2026).</summary>
+    decimal CapacityBandDegradationFactor);
 
 /// <summary>Resultado do tick: novos valores a persistir + quantos itens entram na fila.</summary>
 public sealed record TickOutcome(
@@ -55,11 +63,23 @@ public static class HabitatTicker
             onlineMinutes = 0;
         decimal offlineMinutes = elapsedMinutes - onlineMinutes;
 
-        // Degradação escala com o nº de peixes: tanque cheio suja mais rápido
-        // (manutenção vira ralo contínuo proporcional ao tamanho/renda).
-        decimal fishFactor = 1m + config.DegradationPerFishFactor * state.ActiveFishCount;
-        decimal degradation = config.DegradationPerMinute * fishFactor * elapsedMinutes
-            * (state.HasAutoFilter ? 0.5m : 1m);
+        // Degradação escala com o peso (raridade) dos peixes: tanque cheio/rico suja
+        // mais rápido (manutenção vira ralo contínuo proporcional ao tamanho/renda).
+        decimal fishFactor = 1m + config.DegradationPerFishFactor * state.ActiveFishWeight;
+
+        // Filtro em nível (08/08/2026): cobertura total reduz a degradação pela metade
+        // (mesmo benefício de sempre); acima da capacidade do filtro, o benefício tapera
+        // suavemente de volta a 1.0 conforme o excedente cresce — sem penhasco, mesmo
+        // princípio do IncomeWaterPlateau/IncomeWaterExp (CLAUDE.md §8.6).
+        decimal filterFactor = state.FilterCapacity <= 0
+            ? 1m
+            : state.ActiveFishWeight <= state.FilterCapacity
+                ? 0.5m
+                : 0.5m + 0.5m * (1m - (decimal)Math.Pow(
+                    (double)(state.FilterCapacity / state.ActiveFishWeight), config.FilterTaperExponent));
+
+        decimal degradation = config.DegradationPerMinute * fishFactor * state.CapacityBandDegradationFactor
+            * elapsedMinutes * filterFactor;
         decimal newMaintenance = Math.Max(0, state.MaintenanceLevel - degradation);
 
         // Fator de manutenção usa o nível no início da janela (simplificação:

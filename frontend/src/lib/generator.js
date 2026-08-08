@@ -106,7 +106,7 @@ export const CONFIG = {
   // Venda ao NPC (vendor, §8.12) — espelha VendorCalculator/TickConfig (manter em sincronia)
   vendor: { hoursEquivalent: 2.0, minPrice: 1 },
   // Degradação da água (§8.2/8.6) — espelha TickConfig (DegradationPerMinute, DegradationPerFishFactor, manter em sincronia)
-  degradation: { perMinute: 1 / 20, perFishFactor: 0.30 },
+  degradation: { perMinute: 1 / 20, perFishFactor: 0.30, rarityRefScore: 5 },
   // Breeding — espelha BreedingDefaults (Gameplay/BreedingConfig.cs, manter em sincronia)
   breeding: { mutationChance: 0.08, rarityBias: 0.15, grandparentReachChance: 0.15 },
   closestPartColor: {
@@ -440,12 +440,15 @@ export function vendorPriceOf(rarityScore) {
 
 /**
  * Quanto UM peixe no tanque acelera a degradação da água, em pontos de qualidade/hora.
- * A fórmula do servidor é base·(1 + fator·N) — cada peixe adicional soma sempre a mesma
- * fatia fixa (base·fator), não importa a raridade nem quantos outros já estão no tanque.
+ * A fórmula do servidor é base·(1 + fator·pesoTotal)·fatorDaFaixa — cada peixe soma
+ * `score/rarityRefScore` ao peso total (08/08/2026: era 1 fixo por peixe, agora quem
+ * rende mais suja mais). `bandFactor` vem do backend (`tank.capacityBandDegradationFactor`,
+ * CapacityBands) — não duplicamos as faixas aqui, só recebemos o fator já resolvido.
  */
-export function waterDegradationPerFishPerHour() {
+export function waterDegradationPerFishPerHour(rarityScore, bandFactor = 1) {
   const d = CONFIG.degradation;
-  return d.perMinute * d.perFishFactor * 60;
+  const weight = rarityScore / d.rarityRefScore;
+  return d.perMinute * d.perFishFactor * weight * bandFactor * 60;
 }
 
 function erf(x) {

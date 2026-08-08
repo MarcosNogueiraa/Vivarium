@@ -263,10 +263,14 @@ static void EconomyReport()
     ReportTank("25 raros MESMA cor", MakeTank(25, 7.5m, true), cfg);
     ReportTank("1 lendário (score 15)", MakeTank(1, 15m, false), cfg);
 
-    Console.WriteLine("\nPreço do upgrade de tanque (base 50 × 1.5^(cap-3)):");
-    for (int cap = 3; cap <= 9; cap++)
-        Console.Write($"  cap {cap}->{cap + 1}: {Math.Ceiling(50 * Math.Pow(1.5, cap - 3)):0}");
-    Console.WriteLine();
+    Console.WriteLine("\nPreço do upgrade de tanque por faixa de capacidade (CapacityBands):");
+    foreach (var band in CapacityBands.All)
+    {
+        Console.Write($"  {band.Name} (base {band.PriceBase:0} × {band.PriceGrowth:0.00}^n, degradação x{band.DegradationBandFactor:0.00}): ");
+        for (int cap = band.MinCapacity; cap < band.MaxCapacity; cap++)
+            Console.Write($"cap {cap}->{cap + 1}: {Math.Ceiling(band.PriceBase * (decimal)Math.Pow(band.PriceGrowth, cap - band.MinCapacity)):0}  ");
+        Console.WriteLine();
+    }
 }
 
 static List<FishIncome> MakeTank(int n, decimal score, bool sameColor)
@@ -281,7 +285,8 @@ static List<FishIncome> MakeTank(int n, decimal score, bool sameColor)
 static void ReportTank(string label, List<FishIncome> tank, TickConfig cfg)
 {
     decimal gross = IncomeCalculator.TankRatePerHour(tank, 100m, cfg);
-    double degPerHour = (double)(cfg.DegradationPerMinute * 60m) * (1 + (double)cfg.DegradationPerFishFactor * tank.Count);
+    decimal fishWeight = tank.Sum(f => f.RarityScore) / cfg.DegradationRarityRefScore;
+    double degPerHour = (double)(cfg.DegradationPerMinute * 60m) * (1 + (double)cfg.DegradationPerFishFactor * (double)fishWeight);
     double upkeep = degPerHour * 0.2; // ~20 soft por 100 pontos de água (filtro)
     Console.WriteLine($"  {label,-26}: bruto {gross,7:0.0}/h   upkeep {upkeep,5:0.0}/h   líquido {(double)gross - upkeep,7:0.0}/h");
 }
@@ -457,9 +462,14 @@ static void RunPlayerSimulation(string label, double hoursOnlinePerDay, int days
 {
     // Espelha os preços reais de ItemService/SeedItemDefinitions — manter em sincronia.
     const decimal FilterCost = 20m;
-    const decimal AutoFilterCost = 500m;
-    const decimal TankUpgradeBase = 50m;
-    decimal TankUpgradePrice(int capacity) => Math.Ceiling(TankUpgradeBase * (decimal)Math.Pow(1.5, capacity - HabitatDefaults.Capacity));
+    // Níveis de filtro automático (08/08/2026): cada um cobre uma capacidade de peixes
+    // (peso por raridade); o melhor nível possuído prevalece, não empilha.
+    var filterTiers = new (decimal Capacity, decimal Cost)[] { (5m, 500m), (10m, 1200m), (18m, 2500m) };
+    decimal TankUpgradePrice(int capacity)
+    {
+        var band = CapacityBands.BandFor(capacity);
+        return Math.Ceiling(band.PriceBase * (decimal)Math.Pow(band.PriceGrowth, capacity - band.MinCapacity));
+    }
 
     var cfg = TickConfig.Default;
     var rng = new Random(seed);
@@ -468,7 +478,7 @@ static void RunPlayerSimulation(string label, double hoursOnlinePerDay, int days
     int capacity = HabitatDefaults.Capacity;
     decimal maintenance = HabitatDefaults.MaintenanceLevel;
     decimal progress = 0m;
-    bool hasAutoFilter = false;
+    decimal filterCapacity = 0m;
 
     var tank = new List<(long Seed, decimal Score, PartColor TailColor, int BreedCount)>();
     int backpackOverflow = 0;
@@ -502,7 +512,8 @@ static void RunPlayerSimulation(string label, double hoursOnlinePerDay, int days
             OnlineGenerationRate: HabitatDefaults.OnlineGenerationRate,
             OfflineGenerationRate: HabitatDefaults.OfflineGenerationRate,
             QueueCap: HabitatDefaults.QueueCap, PendingQueueCount: 0, // atento: coleta tudo na mesma hora
-            HasAutoFilter: hasAutoFilter, ActiveFishCount: tank.Count);
+            FilterCapacity: filterCapacity, ActiveFishWeight: tank.Sum(f => f.Score) / cfg.DegradationRarityRefScore,
+            CapacityBandDegradationFactor: CapacityBands.BandFor(capacity).DegradationBandFactor);
 
         var outcome = HabitatTicker.ProcessTick(state, hourEnd, rng, cfg);
         progress = outcome.GenerationProgressMinutes;
@@ -569,14 +580,18 @@ static void RunPlayerSimulation(string label, double hoursOnlinePerDay, int days
         {
             if (Environment.GetEnvironmentVariable("SIM_DEBUG") == "1" && label.StartsWith("casual"))
                 Console.Error.WriteLine($"dia {day + 1,3}: wallet={wallet,8:0.00} tank={tank.Count,2} cap={capacity,2} overflow={backpackOverflow,5} maint={maintenance,6:0.0} gestation={(gestation is null ? "-" : "ativa")}");
-            // Auto-filtro uma vez, quando sobra uma folga confortável (evita zerar o caixa por isso)
-            if (!hasAutoFilter && wallet >= AutoFilterCost * 1.5m)
+            // Sobe de nível de filtro quando o tanque pesa mais que a cobertura atual e
+            // sobra uma folga confortável (evita zerar o caixa por isso).
+            decimal fishWeight = tank.Sum(f => f.Score) / cfg.DegradationRarityRefScore;
+            var nextTier = filterTiers.FirstOrDefault(t => t.Capacity > filterCapacity);
+            if (fishWeight > filterCapacity && nextTier != default && wallet >= nextTier.Cost * 1.5m)
             {
-                wallet -= AutoFilterCost; spentUpgrade += AutoFilterCost; hasAutoFilter = true;
+                wallet -= nextTier.Cost; spentUpgrade += nextTier.Cost; filterCapacity = nextTier.Capacity;
             }
 
             // Upgrade de tanque quando peixes estão transbordando pra mochila e dá pra pagar
-            if (backpackOverflow > 0)
+            // (respeitando o teto absoluto das faixas de capacidade, CapacityBands.MaxCapacity).
+            if (backpackOverflow > 0 && capacity < CapacityBands.MaxCapacity)
             {
                 decimal price = TankUpgradePrice(capacity);
                 if (wallet >= price)
@@ -609,8 +624,8 @@ static void RunPlayerSimulation(string label, double hoursOnlinePerDay, int days
     foreach (var (d, w) in walletAtCheckpoint.OrderBy(kv => kv.Key))
         Console.WriteLine($"    saldo no dia {d,3}: {w,10:0}");
     Console.WriteLine($"  Peixes coletados: {fishCollected} ({legendariesFound} lendário(s)) — no tanque: {tank.Count}, na mochila (transbordo): {backpackOverflow}");
-    Console.WriteLine($"  Filtros comprados: {filtersBought} ({spentFilter:0} soft){(hasAutoFilter ? " + auto-filtro" : "")}");
-    Console.WriteLine($"  Upgrades de tanque: {upgradesBought} ({(spentUpgrade - (hasAutoFilter ? AutoFilterCost : 0)):0} soft, capacidade {HabitatDefaults.Capacity}->{capacity})");
+    Console.WriteLine($"  Filtros comprados: {filtersBought} ({spentFilter:0} soft){(filterCapacity > 0 ? $" + auto-filtro (cobre {filterCapacity})" : "")}");
+    Console.WriteLine($"  Upgrades de tanque: {upgradesBought} ({spentUpgrade:0} soft (inclui filtros automáticos), capacidade {HabitatDefaults.Capacity}->{capacity})");
     Console.WriteLine($"  Gestações iniciadas: {breedingsStarted} ({spentBreeding:0} soft) — mortes de pais: {breedingDeaths}");
     Console.WriteLine();
 }

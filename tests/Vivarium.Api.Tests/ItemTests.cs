@@ -11,15 +11,17 @@ public class ItemTests : IClassFixture<VivariumApiFactory>
     public ItemTests(VivariumApiFactory factory) => _factory = factory;
 
     [Fact]
-    public async Task Catalogo_ListaOsTresItensDoMvp()
+    public async Task Catalogo_ListaOsCincoItensDoMvp()
     {
         var (client, _) = await _factory.RegisterAsync("lojista1");
 
         var items = await client.GetFromJsonAsync<List<ItemDto>>("/api/items/");
 
-        Assert.Equal(3, items!.Count);
+        Assert.Equal(5, items!.Count);
         Assert.Contains(items, i => i.Key == "filter_basic" && i.Price == 20m);
         Assert.Contains(items, i => i.Key == "auto_filter" && i.Price == 500m && !i.Owned);
+        Assert.Contains(items, i => i.Key == "auto_filter_2" && i.Price == 1200m && !i.Owned);
+        Assert.Contains(items, i => i.Key == "auto_filter_3" && i.Price == 2500m && !i.Owned);
         Assert.Contains(items, i => i.Key == "tank_upgrade" && i.Price == 50m);
     }
 
@@ -84,6 +86,41 @@ public class ItemTests : IClassFixture<VivariumApiFactory>
 
         var second = await client.PostAsync("/api/items/auto_filter/buy", null);
         Assert.Equal(HttpStatusCode.BadRequest, second.StatusCode);
+    }
+
+    [Fact]
+    public async Task ComprarFiltroNivel2_NaoBloqueiaMesmoJaTendoNivel1()
+    {
+        var (client, userId) = await _factory.RegisterAsync("lojista7");
+        await _factory.WithDbAsync(async db =>
+        {
+            var wallet = await db.WalletBalances.FirstAsync(w => w.UserId == userId && w.CurrencyTypeId == 1);
+            wallet.Amount = 5000m;
+        });
+
+        (await client.PostAsync("/api/items/auto_filter/buy", null)).EnsureSuccessStatusCode();
+        var second = await client.PostAsync("/api/items/auto_filter_2/buy", null);
+        second.EnsureSuccessStatusCode();
+
+        var items = await client.GetFromJsonAsync<List<ItemDto>>("/api/items/");
+        Assert.True(items!.First(i => i.Key == "auto_filter").Owned);
+        Assert.True(items!.First(i => i.Key == "auto_filter_2").Owned);
+    }
+
+    [Fact]
+    public async Task UpgradeNoTetoDaCapacidade_Retorna400()
+    {
+        var (client, userId) = await _factory.RegisterAsync("lojista8");
+        await _factory.WithDbAsync(async db =>
+        {
+            var habitat = await db.Habitats.FirstAsync(h => h.UserId == userId && h.HabitatType!.Code == "Aquarium");
+            habitat.Capacity = 15; // teto absoluto (CapacityBands.MaxCapacity)
+            var wallet = await db.WalletBalances.FirstAsync(w => w.UserId == userId && w.CurrencyTypeId == 1);
+            wallet.Amount = 100000m;
+        });
+
+        var response = await client.PostAsync("/api/items/tank_upgrade/buy", null);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]

@@ -4,6 +4,7 @@ using Vivarium.Api.Data;
 using Vivarium.Api.Http;
 using Vivarium.Api.Services;
 using Vivarium.Core.Domain;
+using Vivarium.Core.Gameplay;
 
 namespace Vivarium.Api.Endpoints;
 
@@ -84,6 +85,44 @@ public static class DevEndpoints
             });
             await db.SaveChangesAsync();
             return Results.Ok(new { credited = credit, currency = code, balance = wallet.Amount });
+        });
+
+        // Volta o tanque do jogador logado pro estado inicial: capacidade 3, água
+        // 100%, remove os filtros automáticos comprados (pra ver a progressão de
+        // níveis de novo), manda os peixes do tanque pra mochila (não apaga nada)
+        // e credita um saldo generoso de soft pra testar as compras sem esperar a
+        // renda passiva. Só pra contas de teste — nunca existe em produção.
+        group.MapPost("/reset-tank", async (ClaimsPrincipal principal, VivariumDbContext db, GameService game) =>
+        {
+            long userId = TokenService.GetUserId(principal);
+            var habitat = await game.FindHabitatAsync(userId);
+            if (habitat is null)
+                return Results.NotFound();
+
+            habitat.Capacity = HabitatDefaults.Capacity;
+            habitat.MaintenanceLevel = HabitatDefaults.MaintenanceLevel;
+
+            int movedToBackpack = await db.CreatureInstances
+                .Where(c => c.HabitatId == habitat.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(c => c.HabitatId, (long?)null));
+
+            int filtersRemoved = await db.UserInventories
+                .Where(i => i.UserId == userId && i.ItemDefinition!.Category == ItemCategory.AutoFilter)
+                .ExecuteDeleteAsync();
+
+            int softId = await db.CurrencyTypes.Where(c => c.Code == "SOFT").Select(c => c.Id).FirstAsync();
+            var wallet = await db.WalletBalances.FirstAsync(w => w.UserId == userId && w.CurrencyTypeId == softId);
+            wallet.Amount = 5000m;
+
+            await db.SaveChangesAsync();
+            return Results.Ok(new
+            {
+                capacity = habitat.Capacity,
+                maintenanceLevel = habitat.MaintenanceLevel,
+                movedToBackpack,
+                filtersRemoved,
+                wallet = wallet.Amount,
+            });
         });
 
         // Zera o tempo de gestação restante (não muda o resultado, só a hora) — pra

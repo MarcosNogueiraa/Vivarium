@@ -23,10 +23,15 @@ public class GameService(VivariumDbContext db)
     {
         int pending = await db.GenerationQueueItems
             .CountAsync(q => q.HabitatId == habitat.Id && q.Status == QueueItemStatus.Pending);
-        bool hasAutoFilter = await db.UserInventories.AnyAsync(i =>
-            i.UserId == habitat.UserId
-            && i.Quantity > 0
-            && i.ItemDefinition!.Category == ItemCategory.AutoFilter);
+        decimal filterCapacity = await FilterCapacityAsync(habitat.UserId);
+        // Hook futuro (cascudo, CLAUDE.md §8.15/16): "cascudo" é um PEIXE novo (uma
+        // criatura, não um item de loja — diferente do filtro automático/`filterCapacity`
+        // acima, que é equipamento comprado). Quando essa espécie existir, o bônus de
+        // limpeza passiva dela entraria aqui somado a `filterCapacity` (ou como
+        // multiplicador extra no fator de filtro em HabitatTicker) — sem estrutura nova,
+        // mais um termo na mesma fórmula, só a origem do bônus é diferente (peixe vivo
+        // no tanque, não item comprado).
+        decimal bandFactor = CapacityBands.BandFor(habitat.Capacity).DegradationBandFactor;
         var fish = await TankFishAsync(habitat);
 
         var state = new HabitatTickState(
@@ -39,8 +44,9 @@ public class GameService(VivariumDbContext db)
             OfflineGenerationRate: habitat.OfflineGenerationRate,
             QueueCap: habitat.QueueCap,
             PendingQueueCount: pending,
-            HasAutoFilter: hasAutoFilter,
-            ActiveFishCount: fish.Count);
+            FilterCapacity: filterCapacity,
+            ActiveFishWeight: fish.Sum(f => f.RarityScore) / TickConfig.Default.DegradationRarityRefScore,
+            CapacityBandDegradationFactor: bandFactor);
 
         var outcome = HabitatTicker.ProcessTick(state, nowUtc, Random.Shared, TickConfig.Default);
         habitat.LastTickAt = outcome.LastTickAtUtc;
@@ -84,6 +90,26 @@ public class GameService(VivariumDbContext db)
 
     private static PartColor TailColorOf(long seed)
         => TailColorCache.GetOrAdd(seed, s => TraitGenerator.Generate(s).Tail.Color);
+
+    /// <summary>
+    /// Capacidade coberta pelo melhor filtro automático do jogador (08/08/2026) — níveis não
+    /// empilham, o maior `filterCapacity` possuído prevalece. 0 = sem filtro.
+    /// </summary>
+    private async Task<decimal> FilterCapacityAsync(long userId)
+    {
+        var effectJsons = await db.UserInventories
+            .Where(i => i.UserId == userId && i.Quantity > 0 && i.ItemDefinition!.Category == ItemCategory.AutoFilter)
+            .Select(i => i.ItemDefinition!.EffectJson)
+            .ToListAsync();
+        decimal max = 0m;
+        foreach (var json in effectJsons)
+        {
+            decimal capacity = ItemEffect.Parse(json).FilterCapacity ?? 0m;
+            if (capacity > max)
+                max = capacity;
+        }
+        return max;
+    }
 
     /// <summary>Peixes ativos do tanque como entrada de renda (raridade + cor de cauda pra sinergia).</summary>
     private async Task<List<FishIncome>> TankFishAsync(Habitat habitat)
@@ -413,6 +439,7 @@ public class GameService(VivariumDbContext db)
             .ToDictionaryAsync(x => x.Code, x => x.Amount);
         var coinsPerHour = await CoinsPerHourAsync(habitat);
         bool isAdmin = await db.Users.Where(u => u.Id == userId).Select(u => u.IsAdmin).FirstAsync();
+        decimal filterCapacity = await FilterCapacityAsync(userId);
 
         return ServiceResult.Success(new TankResponse(
             HabitatTicker.IsOnline(habitat.LastHeartbeatAt, now, TickConfig.Default),
@@ -425,7 +452,11 @@ public class GameService(VivariumDbContext db)
             coinsPerHour,
             habitat.GenerationProgressMinutes,
             habitat.GenerationIntervalMinutes,
-            isAdmin));
+            isAdmin,
+            CapacityBands.BandFor(habitat.Capacity).Name,
+            CapacityBands.MaxCapacity,
+            CapacityBands.BandFor(habitat.Capacity).DegradationBandFactor,
+            filterCapacity));
     }
 
     // Transferência direta entre contas (negociação externa é responsabilidade

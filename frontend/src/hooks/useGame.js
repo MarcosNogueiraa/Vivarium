@@ -16,9 +16,24 @@ export function useGame() {
   const [tank, setTank] = useState(null);
   const [userId, setUserId] = useState(null);
   const [syncError, setSyncError] = useState(false);
+  const [bandUpgrade, setBandUpgrade] = useState(null);
   const failCountRef = useRef(0);
+  const prevBandRef = useRef(null);
 
-  const refreshTank = useCallback(async () => { setTank(await api.tank()); }, []);
+  const refreshTank = useCallback(async () => {
+    const next = await api.tank();
+    setTank(next);
+    // Celebra só quando a faixa realmente MUDA pra uma capacidade maior — não no
+    // primeiro load da sessão (prevBandRef ainda null) nem em refreshes normais.
+    const prevBand = prevBandRef.current;
+    if (prevBand && next.capacityBandName && next.capacityBandName !== prevBand.name
+      && next.capacity > prevBand.capacity) {
+      setBandUpgrade(next.capacityBandName);
+    }
+    prevBandRef.current = { name: next.capacityBandName, capacity: next.capacity };
+  }, []);
+
+  const dismissBandUpgrade = useCallback(() => setBandUpgrade(null), []);
 
   useEffect(() => {
     try {
@@ -38,5 +53,5 @@ export function useGame() {
     return () => { clearInterval(heartbeatTimer); clearInterval(tankTimer); };
   }, [refreshTank]);
 
-  return { tank, userId, refreshTank, syncError };
+  return { tank, userId, refreshTank, syncError, bandUpgrade, dismissBandUpgrade };
 }

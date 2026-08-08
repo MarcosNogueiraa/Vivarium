@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   biasedInheritProbability, breedTraits, CONFIG, coinsPerHourOf, effectiveParentTraits, generateTraits,
   probabilityOf, rarityBreakdown, resolveOwnTraits, roll01, synergyMultiplier, traitsOf, vendorPriceOf,
+  waterDegradationPerFishPerHour,
 } from "./generator.js";
 
 function findSeedWithTailColor(color, searchLimit = 5000) {
@@ -261,5 +262,14 @@ describe("rarityBreakdown", () => {
   it("sempre inclui o fator de shimmerTier do corpo", () => {
     const { factors } = rarityBreakdown(42n);
     expect(factors.some((f) => f.key === "shimmerTier")).toBe(true);
+  });
+});
+
+describe("waterDegradationPerFishPerHour", () => {
+  it("cresce com a raridade (peixe mais raro suja mais)", () => {
+    const comum = waterDegradationPerFishPerHour(5);
+    const epico = waterDegradationPerFishPerHour(15);
+    expect(epico).toBeGreaterThan(comum);
+    expect(epico).toBeCloseTo(comum * 3, 10); // score 15 / ref 5 = 3x o peso de score 5
   });
 });
