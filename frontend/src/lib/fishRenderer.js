@@ -300,16 +300,29 @@ function getPartSprite(seed, name, part, path, bbox) {
   return sprite;
 }
 
-// Corpo: gradiente + textura de escama são IDÊNTICOS pra todo peixe (não
-// dependem de seed nem trait — só o shimmer varia, e esse continua desenhado
-// ao vivo por cima). Cacheado uma única vez (chave fixa), não por peixe —
-// antes disso a textura de escama redesenhava ~288 arcos por peixe TODO
-// FRAME (sem cache nenhum), o gargalo real por trás do nado "travado" com
-// vários peixes no tanque (08/08/2026).
-let bodySprite = null;
+// Corpo: gradiente + textura de escama são IDÊNTICOS pra todo peixe cinza
+// comum (não dependem de seed nem trait — só o shimmer varia, e esse
+// continua desenhado ao vivo por cima). Cacheado por variante de cor (no
+// máximo 9: cinza padrão + as 8 cores da paleta de partes) — antes disso a
+// textura de escama redesenhava ~288 arcos por peixe TODO FRAME (sem cache
+// nenhum), o gargalo real por trás do nado "travado" com vários peixes no
+// tanque (08/08/2026). Poucas variantes fixas não reintroduz esse problema.
+const bodySpriteCache = new Map();
 
-function getBodySprite() {
-  if (bodySprite) return bodySprite;
+/**
+ * `tintColor` (chave de PART_HEX, opcional): "cor absoluta" (08/08/2026,
+ * ideia do usuário) — quando cauda, dorsal e peitoral saem todas na MESMA
+ * cor, o corpo (normalmente sempre cinza) herda essa cor também, virando um
+ * peixe de cor sólida de ponta a ponta. Puramente visual — a raridade já
+ * soma o bônus de conjunto nessa condição (`sameColor3`, CLAUDE.md 8.6),
+ * nada muda no cálculo de score. Tint em "overlay" por cima do gradiente
+ * cinza mantém a luz/sombra e a textura de escama aparecendo através da
+ * cor, em vez de virar uma cor chapada sem volume.
+ */
+function getBodySprite(tintColor = null) {
+  const cacheKey = tintColor ?? "default";
+  const cached = bodySpriteCache.get(cacheKey);
+  if (cached) return cached;
 
   const M = MOVEMENT_TUNING.spriteMargin;
   const [bx, by, bw, bh] = BODY_BBOX;
@@ -335,8 +348,19 @@ function getBodySprite() {
   drawScaleTexture(sctx, BODY_BBOX, 9, "#e8edf1", 1);
   sctx.restore();
 
-  bodySprite = { canvas, ox: bx - M, oy: by - M };
-  return bodySprite;
+  if (tintColor) {
+    sctx.save();
+    sctx.clip(bodyPath);
+    sctx.globalCompositeOperation = "overlay";
+    sctx.globalAlpha = 0.85;
+    sctx.fillStyle = PART_HEX[tintColor];
+    sctx.fillRect(...BODY_BBOX);
+    sctx.restore();
+  }
+
+  const sprite = { canvas, ox: bx - M, oy: by - M };
+  bodySpriteCache.set(cacheKey, sprite);
+  return sprite;
 }
 
 /**
@@ -430,11 +454,20 @@ export function drawFish(ctx, seed, traits, time = 0, phase = 0, layers = FULL_F
     tailPeriod, time, phase);
 
   // Corpo (gradiente + textura de escama) é um sprite cacheado — idêntico pra
-  // todo peixe, nunca muda frame a frame (só o shimmer, desenhado ao vivo
-  // logo abaixo, varia). Antes disso a textura de escama era redesenhada do
-  // zero (centenas de arcos) a cada frame pra cada peixe — gargalo real com
-  // vários peixes no tanque.
-  const body = getBodySprite();
+  // todo peixe da mesma cor "absoluta" (ou cinza padrão), nunca muda frame a
+  // frame (só o shimmer, desenhado ao vivo logo abaixo, varia). Antes disso
+  // a textura de escama era redesenhada do zero (centenas de arcos) a cada
+  // frame pra cada peixe — gargalo real com vários peixes no tanque.
+  // "Cor absoluta": só conta quando as 3 partes estão de fato desenhadas
+  // (`layers.tail/dorsal/pectoral`) — na revelação suspense da coleta
+  // (CollectCelebration.jsx), o corpo só vira colorido no último clique,
+  // junto com a última nadadeira, em vez de entregar a combinação antes da
+  // hora.
+  const allPartsShown = layers.tail && layers.dorsal && layers.pectoral;
+  const absoluteColor = allPartsShown
+    && traits.tail.color === traits.dorsal.color && traits.dorsal.color === traits.pectoral.color
+    ? traits.tail.color : null;
+  const body = getBodySprite(absoluteColor);
   ctx.drawImage(body.canvas, body.ox, body.oy);
 
   if (layers.shimmer) drawShimmer(ctx, traits, time);
