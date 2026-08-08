@@ -138,13 +138,13 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
       ctx.setTransform(resScaleRef.current, 0, 0, resScaleRef.current, 0, 0);
       drawTankBackground(ctx, W, H, time, q, th, decor);
 
-      // Garante o estado de cada peixe e agrupa por cor de cauda pra coesão de
-      // cardume — mesmo campo/limiar (n >= 2) que tankSynergy usa pro bônus de
-      // renda (tankMath.js), só aplicado aqui visualmente. Soma vx também, pra
-      // alinhar a DIREÇÃO do grupo (não só juntar posição — sem isso, dois
-      // peixes da mesma cor podiam nadar em sentidos opostos pra sempre e
-      // nunca parecer cardume de verdade).
-      const schoolCentroids = new Map(); // cor -> { sumX, sumY, sumVx, count }
+      // Garante o estado de cada peixe e agrupa por cor de cauda pra cardume
+      // com LÍDER — mesmo campo/limiar (n >= 2) que tankSynergy usa pro bônus
+      // de renda (tankMath.js), só aplicado aqui visualmente. O líder de cada
+      // grupo é o peixe com maior `baseSpeed` (velocidade de nado derivada dos
+      // traits de movimento, `swimSpeedOf`) — empate resolvido por id crescente,
+      // determinístico.
+      const schoolGroups = new Map(); // cor -> [{ c, s }, ...]
       for (const c of creaturesRef.current) {
         let s = statesRef.current.get(c.id);
         if (!s) {
@@ -156,13 +156,24 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
             baseSpeed,
             phase: roll01(c.bigSeed, "phase") * Math.PI * 2,
             nextTurnAt: time + 8000 + roll01(c.bigSeed, "turn0") * 12000,
+            waiting: false,
           };
           statesRef.current.set(c.id, s);
         }
         const color = c.traits.tail.color;
-        const g = schoolCentroids.get(color) ?? { sumX: 0, sumY: 0, sumVx: 0, count: 0 };
-        g.sumX += s.x; g.sumY += s.y; g.sumVx += s.vx; g.count++;
-        schoolCentroids.set(color, g);
+        const arr = schoolGroups.get(color) ?? [];
+        arr.push({ c, s });
+        schoolGroups.set(color, arr);
+      }
+
+      const leaderByColor = new Map(); // cor -> { id, s }
+      for (const [color, members] of schoolGroups) {
+        if (members.length < 2) continue;
+        let leader = members[0];
+        for (const m of members)
+          if (m.s.baseSpeed > leader.s.baseSpeed || (m.s.baseSpeed === leader.s.baseSpeed && m.c.id < leader.c.id))
+            leader = m;
+        leaderByColor.set(color, { id: leader.c.id, s: leader.s });
       }
 
       // Distância mínima entre peixes (qualquer cor) — separação, pra nunca
@@ -187,26 +198,40 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
       for (const c of creaturesRef.current) {
         const s = statesRef.current.get(c.id);
 
-        // Coesão de cardume: puxa a posição em direção à média do grupo de
-        // mesma cor, moderada (a separação acima cuida de nunca sobrepor).
-        // Alinhamento de direção mistura vx com a média do grupo, mas nunca
-        // deixa a velocidade colapsar perto de zero (bug anterior: dois peixes
-        // em sentidos opostos tinham média ~0 e praticamente paravam,
-        // "grudados" no mesmo lugar) — sempre mantém pelo menos 60% da
-        // velocidade própria do peixe.
-        const group = schoolCentroids.get(c.traits.tail.color);
-        if (group && group.count >= 2) {
-          const avgX = group.sumX / group.count;
-          const avgY = group.sumY / group.count;
-          const avgVx = group.sumVx / group.count;
-          s.x += (avgX - s.x) * 0.35 * dt;
-          s.y += (avgY - s.y) * 0.25 * dt;
-          s.vx += (avgVx - s.vx) * 0.5 * dt;
+        const leader = leaderByColor.get(c.traits.tail.color);
+        let moveFactor = 1;
+
+        if (leader && leader.id !== c.id) {
+          // Seguidor: persegue a posição/velocidade do LÍDER (não mais a média
+          // do grupo) — alvo único e estável, dá pra puxar com mais confiança
+          // sem ficar "elástico". Continua com vx/parede/timer de virada
+          // próprios por cima disso — é isso que dá a sensação de "tenta
+          // acompanhar, mas não de forma seca". Piso de velocidade evita travar
+          // perto do líder (mesma proteção de antes).
+          const ls = leader.s;
+          s.x += (ls.x - s.x) * 0.5 * dt;
+          s.y += (ls.y - s.y) * 0.35 * dt;
+          s.vx += (ls.vx - s.vx) * 0.5 * dt;
           const minSpeed = s.baseSpeed * 0.6;
           if (Math.abs(s.vx) < minSpeed) s.vx = Math.sign(s.vx || 1) * minSpeed;
+        } else if (leader && leader.id === c.id) {
+          // Líder: nada o puxa: só desacelera (não pára — "espera nadando
+          // devagar") quando os seguidores ficam muito pra trás, até
+          // reagruparem. Histerese entre os dois limiares evita ligar/desligar
+          // toda hora perto da borda.
+          const members = schoolGroups.get(c.traits.tail.color);
+          let maxDist = 0;
+          for (const m of members) {
+            if (m.c.id === c.id) continue;
+            const d = Math.hypot(m.s.x - s.x, m.s.y - s.y);
+            if (d > maxDist) maxDist = d;
+          }
+          if (maxDist > 260) s.waiting = true;
+          else if (maxDist < 130) s.waiting = false;
+          moveFactor = s.waiting ? 0.2 : 1;
         }
 
-        s.x += s.vx * dt * speedFactor;
+        s.x += s.vx * dt * speedFactor * moveFactor;
         if (s.x < 90) { s.x = 90; s.vx = Math.abs(s.vx); }
         if (s.x > W - 90) { s.x = W - 90; s.vx = -Math.abs(s.vx); }
 
