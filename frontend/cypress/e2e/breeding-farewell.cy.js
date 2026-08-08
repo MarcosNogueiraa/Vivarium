@@ -62,8 +62,14 @@ describe("Despedida do pai que não sobrevive à gestação", () => {
     cy.contains("Uma despedida").should("be.visible");
     cy.contains("Um dos pais não resistiu à gestação").should("be.visible");
     // O retrato do pai A (score 6.2, banda Incomum) aparece — não só a contagem genérica.
+    // Visível mesmo com o filhote (score 8.4, Raro) ainda em revelação suspense —
+    // pais/despedida não fazem parte do "mistério" (CLAUDE.md 8.8).
     cy.get(".farewell-fish").should("have.length", 1);
     cy.get(".farewell-fish").contains("6.2");
+
+    // Filhote é Raro (8.4 ≥ 7.5) — revelação clique-a-clique (CollectCelebration.jsx)
+    // esconde "Maravilha!" até tocar o peixe as 4 vezes (corpo/cauda/dorsal/peitoral).
+    cy.get(".celebrate-fish").click().click().click().click();
 
     cy.contains("button", "Maravilha!").click();
     cy.contains("Uma despedida").should("not.exist");

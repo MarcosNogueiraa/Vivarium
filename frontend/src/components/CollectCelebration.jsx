@@ -1,31 +1,30 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Modal } from "./Modal.jsx";
-import { FishCanvas } from "./FishCanvas.jsx";
+import { FishCanvas, REVEAL_STEP_COUNT } from "./FishCanvas.jsx";
 import { Coin } from "./Coin.jsx";
 import { PeekAnchor } from "./PeekPanel.jsx";
 import { coinsPerHourOf, traitsOf } from "../lib/generator.js";
 import { bandOf, PT } from "../lib/fishRenderer.js";
 import { partSummary } from "../lib/format.js";
 
-// Revelação suspense (08/08/2026, pedido do usuário): peixe Épico+ (score ≥
-// 9.8, mesmo corte de BANDS/§5) coletado do tanque revela um atributo por vez
-// em vez de tudo de uma vez — corpo/brilho → cauda → dorsal → peitoral →
-// raridade final. Clicar a qualquer momento pula pro final. Só na coleta do
-// tanque (`variant="tank"`) — o Ninho já tem seu próprio ritmo de celebração
-// (pais, despedida) e sempre mostra a tela, raro ou não.
-const REVEAL_STEPS = ["shimmer", "tail", "dorsal", "pectoral"];
-const REVEAL_DELAY_MS = 900;
-
-function useSuspenseReveal(active) {
-  const [step, setStep] = useState(active ? 0 : REVEAL_STEPS.length + 1);
-  useEffect(() => {
-    if (!active || step > REVEAL_STEPS.length) return;
-    const t = setTimeout(() => setStep((s) => s + 1), REVEAL_DELAY_MS);
-    return () => clearTimeout(t);
-  }, [active, step]);
-  const done = step > REVEAL_STEPS.length;
-  return { step, done, skip: () => setStep(REVEAL_STEPS.length + 1) };
-}
+// Revelação suspense (08/08/2026, pedido do usuário; estendida a Raro+ e ao
+// Ninho no mesmo dia; depois trocada de automática pra CLIQUE-A-CLIQUE, a
+// pedido do usuário): peixe/filhote Raro+ (score ≥ 7.5, mesmo corte de
+// BANDS/§5 que já abre a celebração) é MONTADO na tela parte a parte — cada
+// clique no peixe desenha uma parte a mais de verdade no canvas (corpo, que
+// já começa visível como "base", → brilho → cauda → dorsal → peitoral), via
+// `FishCanvas revealStep` (novo prop, `fishRenderer.drawFish` ganhou um
+// parâmetro `layers` pra desenhar só um subconjunto das partes). Raridade
+// final some atrás de "???" até a última parte. No Ninho (`variant=
+// "breeding"`), só o FILHOTE em si passa pela revelação — os retratos dos
+// pais e a seção de despedida (se algum não sobreviveu) continuam visíveis
+// desde o início, já que eles não são o "mistério" do momento.
+const REVEAL_LABELS = [
+  { key: "shimmer", label: "Corpo" },
+  { key: "tail", label: "Cauda" },
+  { key: "dorsal", label: "Nadadeira dorsal" },
+  { key: "pectoral", label: "Nadadeira peitoral" },
+];
 
 /** Um pai que não sobreviveu à gestação — retrato + mensagem de despedida. */
 function Farewell({ creature }) {
@@ -79,8 +78,12 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
   const [peek, setPeek] = useState(null);
   const traits = traitsOf(creature);
 
-  const suspense = !isBreeding && score >= 9.8; // Épico+ (BANDS/§5)
-  const { step: revealStep, done: revealed, skip: skipReveal } = useSuspenseReveal(suspense);
+  // Raro+ (BANDS/§5) — no Ninho o filhote também revela (pais/despedida
+  // continuam visíveis na hora, só o filhote em si é o "mistério").
+  const suspense = score >= 7.5;
+  const [step, setStep] = useState(0);
+  const revealed = !suspense || step >= REVEAL_STEP_COUNT;
+  function revealNext() { if (!revealed) setStep((s) => Math.min(s + 1, REVEAL_STEP_COUNT)); }
   const tierColor = revealed ? band.color : "var(--muted)";
   const attrLines = [
     { key: "shimmer", label: "Corpo", value: traits.shimmerTier === "None" ? "Cinza, sem brilho" : `${PT.tier[traits.shimmerTier]} · ${PT.shimmer[traits.shimmerColor]}` },
@@ -98,22 +101,32 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
   return (
     <Modal onClose={onClose} narrow className="celebrate">
       <div className="celebrate-rays" style={{ "--tier": tierColor }} aria-hidden="true" />
-      <div className={`celebrate-body${suspense && !revealed ? " is-revealing" : ""}`} onClick={suspense && !revealed ? skipReveal : undefined}>
+      <div className="celebrate-body">
         <div className="eyebrow" style={{ color: tierColor }}>
           {!revealed ? "✨ Abrindo peixe raro…" : isBreeding ? "🐣 Seu filhote nasceu!" : legendary ? "✦ Lendário! ✦" : "Peixe raro coletado"}
         </div>
-        <div className={`celebrate-fish${suspense && !revealed ? " mystery" : ""}`} style={{ "--tier": tierColor }}>
-          <FishCanvas seed={creature.seed} width={220} isBred={creature.isBred} parentASeed={creature.parentASeed} parentBSeed={creature.parentBSeed} />
+        <div
+          className={`celebrate-fish${suspense && !revealed ? " tap-to-reveal" : ""}`}
+          style={{ "--tier": tierColor }}
+          onClick={suspense && !revealed ? revealNext : undefined}
+        >
+          <FishCanvas
+            seed={creature.seed} width={220} isBred={creature.isBred}
+            parentASeed={creature.parentASeed} parentBSeed={creature.parentBSeed}
+            revealStep={suspense ? step : null}
+          />
         </div>
 
         {suspense && !revealed && (
           <>
             <div className="reveal-attrs">
-              {attrLines.slice(0, revealStep).map((a) => (
+              {attrLines.slice(0, step).map((a) => (
                 <div className="reveal-attr" key={a.key}><b>{a.label}:</b> {a.value}</div>
               ))}
             </div>
-            <p className="faint" style={{ fontSize: "0.8rem" }}>toque pra revelar tudo</p>
+            <p className="faint" style={{ fontSize: "0.8rem" }}>
+              toque no peixe pra revelar {REVEAL_LABELS[step]?.label.toLowerCase()}
+            </p>
           </>
         )}
         {revealed && suspense && (

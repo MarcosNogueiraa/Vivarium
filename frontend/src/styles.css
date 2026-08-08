@@ -962,10 +962,15 @@ input:focus {
 .celebrate-body .badge.big { align-self: center; }
 .celebrate-body .btn-primary { margin-top: 4px; padding: 11px 26px; }
 
-/* Revelação suspense de peixe Épico+ (08/08/2026) — corpo/cauda/dorsal/
-   peitoral aparecem um de cada vez antes do peixe/raridade serem revelados. */
-.celebrate-body.is-revealing { cursor: pointer; }
-.celebrate-fish.mystery { filter: blur(16px) brightness(0.45) saturate(0.6); transition: filter 0.4s ease; }
+/* Revelação suspense clique-a-clique (08/08/2026) — cada toque no peixe
+   desenha uma parte a mais de verdade (FishCanvas revealStep), em vez de só
+   mostrar/esconder texto. Pulso convida a tocar; brilho ao redor do stage
+   reforça o convite sem esconder o que já foi montado. */
+.celebrate-fish.tap-to-reveal { cursor: pointer; animation: tap-invite 1.6s ease-in-out infinite; }
+@keyframes tap-invite {
+  0%, 100% { box-shadow: 0 0 40px -6px var(--tier), inset 0 1px 0 rgba(255, 255, 255, 0.10); }
+  50% { box-shadow: 0 0 54px 2px var(--tier), inset 0 1px 0 rgba(255, 255, 255, 0.10); }
+}
 .mystery-badge { letter-spacing: 0.08em; }
 .reveal-attrs { display: flex; flex-direction: column; gap: 5px; min-height: 20px; width: 100%; max-width: 320px; }
 .reveal-attrs.revealed { margin-bottom: 2px; }
