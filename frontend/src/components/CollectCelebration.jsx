@@ -1,10 +1,31 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Modal } from "./Modal.jsx";
 import { FishCanvas } from "./FishCanvas.jsx";
 import { Coin } from "./Coin.jsx";
 import { PeekAnchor } from "./PeekPanel.jsx";
-import { coinsPerHourOf } from "../lib/generator.js";
-import { bandOf } from "../lib/fishRenderer.js";
+import { coinsPerHourOf, traitsOf } from "../lib/generator.js";
+import { bandOf, PT } from "../lib/fishRenderer.js";
+import { partSummary } from "../lib/format.js";
+
+// Revelação suspense (08/08/2026, pedido do usuário): peixe Épico+ (score ≥
+// 9.8, mesmo corte de BANDS/§5) coletado do tanque revela um atributo por vez
+// em vez de tudo de uma vez — corpo/brilho → cauda → dorsal → peitoral →
+// raridade final. Clicar a qualquer momento pula pro final. Só na coleta do
+// tanque (`variant="tank"`) — o Ninho já tem seu próprio ritmo de celebração
+// (pais, despedida) e sempre mostra a tela, raro ou não.
+const REVEAL_STEPS = ["shimmer", "tail", "dorsal", "pectoral"];
+const REVEAL_DELAY_MS = 900;
+
+function useSuspenseReveal(active) {
+  const [step, setStep] = useState(active ? 0 : REVEAL_STEPS.length + 1);
+  useEffect(() => {
+    if (!active || step > REVEAL_STEPS.length) return;
+    const t = setTimeout(() => setStep((s) => s + 1), REVEAL_DELAY_MS);
+    return () => clearTimeout(t);
+  }, [active, step]);
+  const done = step > REVEAL_STEPS.length;
+  return { step, done, skip: () => setStep(REVEAL_STEPS.length + 1) };
+}
 
 /** Um pai que não sobreviveu à gestação — retrato + mensagem de despedida. */
 function Farewell({ creature }) {
@@ -56,6 +77,17 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
   const hasLoss = deadParents.length > 0;
   const parents = [parentA, parentB].filter(Boolean);
   const [peek, setPeek] = useState(null);
+  const traits = traitsOf(creature);
+
+  const suspense = !isBreeding && score >= 9.8; // Épico+ (BANDS/§5)
+  const { step: revealStep, done: revealed, skip: skipReveal } = useSuspenseReveal(suspense);
+  const tierColor = revealed ? band.color : "var(--muted)";
+  const attrLines = [
+    { key: "shimmer", label: "Corpo", value: traits.shimmerTier === "None" ? "Cinza, sem brilho" : `${PT.tier[traits.shimmerTier]} · ${PT.shimmer[traits.shimmerColor]}` },
+    { key: "tail", label: "Cauda", value: partSummary(traits.tail) },
+    { key: "dorsal", label: "Nadadeira dorsal", value: partSummary(traits.dorsal) },
+    { key: "pectoral", label: "Nadadeira peitoral", value: partSummary(traits.pectoral) },
+  ];
 
   function showPeek(e, c) {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -65,18 +97,40 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
 
   return (
     <Modal onClose={onClose} narrow className="celebrate">
-      <div className="celebrate-rays" style={{ "--tier": band.color }} aria-hidden="true" />
-      <div className="celebrate-body">
-        <div className="eyebrow" style={{ color: band.color }}>
-          {isBreeding ? "🐣 Seu filhote nasceu!" : legendary ? "✦ Lendário! ✦" : "Peixe raro coletado"}
+      <div className="celebrate-rays" style={{ "--tier": tierColor }} aria-hidden="true" />
+      <div className={`celebrate-body${suspense && !revealed ? " is-revealing" : ""}`} onClick={suspense && !revealed ? skipReveal : undefined}>
+        <div className="eyebrow" style={{ color: tierColor }}>
+          {!revealed ? "✨ Abrindo peixe raro…" : isBreeding ? "🐣 Seu filhote nasceu!" : legendary ? "✦ Lendário! ✦" : "Peixe raro coletado"}
         </div>
-        <div className="celebrate-fish" style={{ "--tier": band.color }}>
+        <div className={`celebrate-fish${suspense && !revealed ? " mystery" : ""}`} style={{ "--tier": tierColor }}>
           <FishCanvas seed={creature.seed} width={220} isBred={creature.isBred} parentASeed={creature.parentASeed} parentBSeed={creature.parentBSeed} />
         </div>
-        <span className="badge big" style={{ "--tier": band.color }}>
-          <span className="gem" /> {band.name} · {score.toFixed(1)}
-        </span>
-        <div className="detail-coins"><Coin /> ~{coins.toFixed(1)} <small>soft/h a água cheia</small></div>
+
+        {suspense && !revealed && (
+          <>
+            <div className="reveal-attrs">
+              {attrLines.slice(0, revealStep).map((a) => (
+                <div className="reveal-attr" key={a.key}><b>{a.label}:</b> {a.value}</div>
+              ))}
+            </div>
+            <p className="faint" style={{ fontSize: "0.8rem" }}>toque pra revelar tudo</p>
+          </>
+        )}
+        {revealed && suspense && (
+          <div className="reveal-attrs revealed">
+            {attrLines.map((a) => <div className="reveal-attr" key={a.key}><b>{a.label}:</b> {a.value}</div>)}
+          </div>
+        )}
+        {revealed ? (
+          <>
+            <span className="badge big reveal-pop" style={{ "--tier": band.color }}>
+              <span className="gem" /> {band.name} · {score.toFixed(1)}
+            </span>
+            <div className="detail-coins"><Coin /> ~{coins.toFixed(1)} <small>soft/h a água cheia</small></div>
+          </>
+        ) : (
+          <span className="badge big mystery-badge" style={{ "--tier": "#3a5560" }}><span className="gem" /> ???</span>
+        )}
 
         {isBreeding && parents.length > 0 && (
           <div className="parents-row">
@@ -112,7 +166,7 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
           </div>
         )}
 
-        <button className="btn-primary" onClick={onClose}>Maravilha!</button>
+        {revealed && <button className="btn-primary" onClick={onClose}>Maravilha!</button>}
       </div>
       {peek && <PeekAnchor x={peek.x} y={peek.y} creature={peek.creature} />}
     </Modal>
