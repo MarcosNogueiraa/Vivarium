@@ -23,10 +23,15 @@ public class ItemService(VivariumDbContext db, GameService game)
 
         var ownedIds = await OwnedItemDefinitionIdsAsync(userId);
         var items = (await db.ItemDefinitions.ToListAsync())
-            .Select(i => new ItemDto(
-                i.Key, i.Name, i.Category.ToString(),
-                CurrentPrice(i, habitat),
-                ownedIds.Contains(i.Id)))
+            .Select(i =>
+            {
+                if (i.Category == ItemCategory.HabitatUpgrade)
+                {
+                    var (price, owned, locked, reason) = TankItemState(i.Key, habitat);
+                    return new ItemDto(i.Key, i.Name, i.Category.ToString(), price, owned, locked, reason);
+                }
+                return new ItemDto(i.Key, i.Name, i.Category.ToString(), i.PriceSoft, ownedIds.Contains(i.Id));
+            })
             .ToList();
         return ServiceResult.Success(items);
     }
@@ -42,15 +47,28 @@ public class ItemService(VivariumDbContext db, GameService game)
         if (habitat is null)
             return ServiceResult.NotFound("Habitat não encontrado");
 
-        if (item.Category == ItemCategory.AutoFilter && (await OwnedItemDefinitionIdsAsync(userId)).Contains(item.Id))
-            return ServiceResult.Bad("Você já tem esse filtro");
-        if (item.Category == ItemCategory.HabitatUpgrade && habitat.Capacity >= CapacityBands.MaxCapacity)
-            return ServiceResult.Bad("Tanque já está na capacidade máxima");
+        decimal price;
+        if (item.Category == ItemCategory.AutoFilter)
+        {
+            if ((await OwnedItemDefinitionIdsAsync(userId)).Contains(item.Id))
+                return ServiceResult.Bad("Você já tem esse filtro");
+            price = item.PriceSoft;
+        }
+        else if (item.Category == ItemCategory.HabitatUpgrade)
+        {
+            var (tankPrice, owned, locked, reason) = TankItemState(item.Key, habitat);
+            if (owned) return ServiceResult.Bad("Você já tem esse aquário");
+            if (locked) return ServiceResult.Bad(reason ?? "Ainda não disponível");
+            price = tankPrice;
+        }
+        else
+        {
+            price = item.PriceSoft;
+        }
 
         // Tick antes: a degradação pendente é aplicada antes de restaurar/pagar
         await game.ApplyTickAsync(habitat, now);
 
-        decimal price = CurrentPrice(item, habitat);
         int softId = await db.CurrencyTypes.Where(c => c.Code == "SOFT").Select(c => c.Id).FirstAsync();
         var wallet = await db.WalletBalances.FirstAsync(w => w.UserId == userId && w.CurrencyTypeId == softId);
         if (wallet.Amount < price)
@@ -100,17 +118,30 @@ public class ItemService(VivariumDbContext db, GameService game)
     }
 
     /// <summary>
-    /// Upgrade de tanque tem custo crescente dentro da faixa de capacidade atual
-    /// (`CapacityBands.BandFor`, 08/08/2026) — cada faixa (Aquário/Grande/Master) tem
-    /// sua própria curva de preço, não uma extensão da anterior. Trocar de faixa (a compra
-    /// que cruza o teto) cobra `TransitionCost` — um custo bem mais alto, de propósito
-    /// (`CapacityBands.PriceForUpgrade`), pra exigir farm real em vez de ser só mais um passo.
+    /// Estado (preço/dono/bloqueado) de um dos 3 produtos de tanque — SEPARADOS na loja
+    /// (08/08/2026, pedido do usuário): "Upgrade de tanque" (curva suave, só dentro da
+    /// faixa atual) e um item PRÓPRIO por faixa de destino ("Aquário Grande"/"Aquário
+    /// Master", preço fixo = `CapacityBand.TransitionCost`) — trocar de aquário deixa de
+    /// ser "mais um clique no mesmo botão" e vira uma decisão de compra distinta.
     /// </summary>
-    private static decimal CurrentPrice(ItemDefinition item, Habitat habitat)
+    private static (decimal Price, bool Owned, bool Locked, string? LockedReason) TankItemState(string key, Habitat habitat)
     {
-        if (item.Category != ItemCategory.HabitatUpgrade)
-            return item.PriceSoft;
-        return CapacityBands.PriceForUpgrade(habitat.Capacity);
+        if (key == "tank_upgrade")
+        {
+            if (habitat.Capacity >= CapacityBands.MaxCapacity)
+                return (0m, false, true, "Capacidade máxima do aquário atingida.");
+            var band = CapacityBands.BandFor(habitat.Capacity);
+            if (habitat.Capacity >= band.MaxCapacity)
+                return (0m, false, true, $"Tanque no limite do {band.Name} — compre o próximo aquário pra continuar.");
+            return (CapacityBands.SmoothPrice(habitat.Capacity), false, false, null);
+        }
+
+        var targetBand = key == "aquario_grande" ? CapacityBands.AquarioGrande : CapacityBands.AquarioMaster;
+        if (habitat.Capacity > targetBand.MinCapacity)
+            return (targetBand.TransitionCost, true, false, null); // já trocou pra esse aquário (ou além)
+        if (habitat.Capacity < targetBand.MinCapacity)
+            return (targetBand.TransitionCost, false, true, $"Disponível ao atingir capacidade {targetBand.MinCapacity}.");
+        return (targetBand.TransitionCost, false, false, null); // no teto exato — comprável agora
     }
 
     private async Task<HashSet<int>> OwnedItemDefinitionIdsAsync(long userId)

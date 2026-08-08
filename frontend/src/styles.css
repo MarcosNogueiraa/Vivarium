@@ -518,6 +518,8 @@ input:focus {
 .store-card p { font-size: 0.86rem; line-height: 1.5; flex: 1; }
 .owned { color: var(--muted); font-weight: 700; font-size: 0.85rem; }
 .owned-active { color: var(--r-incomum) !important; }
+.store-card-locked { opacity: 0.6; }
+.store-locked-reason { color: var(--coral) !important; font-size: 0.8rem !important; flex: none !important; }
 .filter-status-card { background: rgba(84, 230, 209, 0.05); border-color: rgba(84, 230, 209, 0.25); }
 
 /* ---------- Badges ---------- */
