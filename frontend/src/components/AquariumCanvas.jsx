@@ -235,6 +235,13 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
         if (s.x < 90) { s.x = 90; s.vx = Math.abs(s.vx); }
         if (s.x > W - 90) { s.x = W - 90; s.vx = -Math.abs(s.vx); }
 
+        // Y nunca tinha limite (só o bob senoidal mexia nele, sempre pequeno e
+        // em torno do valor inicial) — agora que cardume/separação empurram o
+        // y continuamente, precisa de um teto/piso, senão o peixe escapa aos
+        // poucos pra fora do aquário. Mesma faixa do spawn inicial.
+        if (s.y < 100) s.y = 100;
+        if (s.y > H - 100) s.y = H - 100;
+
         // Vira sozinho de vez em quando no meio do tanque também (não só nas
         // paredes) — evita o ping-pong mecânico. Próximo giro reagendado sempre
         // que acontece um (seeded pelo instante atual, continua determinístico).
