@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
+using Vivarium.Core.Gameplay;
 
 namespace Vivarium.Api.Tests;
 
@@ -57,6 +58,26 @@ public class ItemTests : IClassFixture<VivariumApiFactory>
 
         var items = await client.GetFromJsonAsync<List<ItemDto>>("/api/items/");
         Assert.Equal(75m, items!.First(i => i.Key == "tank_upgrade").Price); // 50 × 1.5
+    }
+
+    [Fact]
+    public async Task ComprarUpgrade_NoTetoDaFaixa_CobraOCustoDeTransicao()
+    {
+        var (client, userId) = await _factory.RegisterAsync("lojista9");
+        await _factory.WithDbAsync(async db =>
+        {
+            var habitat = await db.Habitats.FirstAsync(h => h.UserId == userId && h.HabitatType!.Code == "Aquarium");
+            habitat.Capacity = 5; // teto do Aquário — próxima compra cruza pro Aquário Grande
+            var wallet = await db.WalletBalances.FirstAsync(w => w.UserId == userId && w.CurrencyTypeId == 1);
+            wallet.Amount = 10000m;
+        });
+
+        var response = await client.PostAsync("/api/items/tank_upgrade/buy", null);
+        response.EnsureSuccessStatusCode();
+
+        var tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
+        Assert.Equal(6, tank!.Capacity);
+        Assert.Equal(10000m - CapacityBands.AquarioGrande.TransitionCost, tank.Wallet["SOFT"]);
     }
 
     [Fact]

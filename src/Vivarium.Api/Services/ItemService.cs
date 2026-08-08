@@ -102,14 +102,15 @@ public class ItemService(VivariumDbContext db, GameService game)
     /// <summary>
     /// Upgrade de tanque tem custo crescente dentro da faixa de capacidade atual
     /// (`CapacityBands.BandFor`, 08/08/2026) — cada faixa (Aquário/Grande/Master) tem
-    /// sua própria curva de preço, não uma extensão da anterior.
+    /// sua própria curva de preço, não uma extensão da anterior. Trocar de faixa (a compra
+    /// que cruza o teto) cobra `TransitionCost` — um custo bem mais alto, de propósito
+    /// (`CapacityBands.PriceForUpgrade`), pra exigir farm real em vez de ser só mais um passo.
     /// </summary>
     private static decimal CurrentPrice(ItemDefinition item, Habitat habitat)
     {
         if (item.Category != ItemCategory.HabitatUpgrade)
             return item.PriceSoft;
-        var band = CapacityBands.BandFor(habitat.Capacity);
-        return Math.Ceiling(band.PriceBase * (decimal)Math.Pow(band.PriceGrowth, habitat.Capacity - band.MinCapacity));
+        return CapacityBands.PriceForUpgrade(habitat.Capacity);
     }
 
     private async Task<HashSet<int>> OwnedItemDefinitionIdsAsync(long userId)

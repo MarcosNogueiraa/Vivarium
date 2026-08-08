@@ -242,6 +242,33 @@ public class CapacityBandsTests
     [Fact]
     public void BandFor_AcimaDoTeto_RetornaAUltimaFaixa()
         => Assert.Equal(CapacityBands.AquarioMaster, CapacityBands.BandFor(999));
+
+    [Fact]
+    public void PriceForUpgrade_DentroDaFaixa_SeguACurvaSuave()
+    {
+        // Dentro do Aquário (3-5): base 50 × 1.5^n, sem transição.
+        Assert.Equal(50m, CapacityBands.PriceForUpgrade(3));
+        Assert.Equal(75m, CapacityBands.PriceForUpgrade(4));
+    }
+
+    [Fact]
+    public void PriceForUpgrade_NoTetoDaFaixa_CobraOCustoDeTransicao()
+    {
+        // Capacidade 5 é o teto do Aquário — a próxima compra (5->6) entra no
+        // Aquário Grande e cobra o TransitionCost dele, não a curva suave.
+        Assert.Equal(CapacityBands.AquarioGrande.TransitionCost, CapacityBands.PriceForUpgrade(5));
+        Assert.Equal(CapacityBands.AquarioMaster.TransitionCost, CapacityBands.PriceForUpgrade(10));
+    }
+
+    [Fact]
+    public void PriceForUpgrade_CustoDeTransicaoEhBemMaiorQueOUltimoDegrauDaFaixaAnterior()
+    {
+        // Garante que a troca de faixa é um "gate" de verdade, não só mais um passo.
+        decimal lastStepAquario = CapacityBands.PriceForUpgrade(4);
+        decimal lastStepGrande = CapacityBands.PriceForUpgrade(9);
+        Assert.True(CapacityBands.AquarioGrande.TransitionCost > lastStepAquario * 10);
+        Assert.True(CapacityBands.AquarioMaster.TransitionCost > lastStepGrande * 10);
+    }
 }
 
 public class CreatureCollectorTests
