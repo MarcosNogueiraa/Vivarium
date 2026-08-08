@@ -148,10 +148,12 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
       for (const c of creaturesRef.current) {
         let s = statesRef.current.get(c.id);
         if (!s) {
+          const baseSpeed = swimSpeedOf(c.traits);
           s = {
             x: 120 + roll01(c.bigSeed, "pos_x") * (W - 240),
             y: 100 + roll01(c.bigSeed, "pos_y") * (H - 200),
-            vx: (roll01(c.bigSeed, "dir") < 0.5 ? -1 : 1) * swimSpeedOf(c.traits),
+            vx: (roll01(c.bigSeed, "dir") < 0.5 ? -1 : 1) * baseSpeed,
+            baseSpeed,
             phase: roll01(c.bigSeed, "phase") * Math.PI * 2,
             nextTurnAt: time + 8000 + roll01(c.bigSeed, "turn0") * 12000,
           };
@@ -163,22 +165,45 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
         schoolCentroids.set(color, g);
       }
 
+      // Distância mínima entre peixes (qualquer cor) — separação, pra nunca
+      // ficarem sobrepostos mesmo quando a coesão de cardume os aproxima.
+      const MIN_FISH_DIST = 95;
+      const fishList = creaturesRef.current;
+      for (let i = 0; i < fishList.length; i++) {
+        const si = statesRef.current.get(fishList[i].id);
+        for (let j = i + 1; j < fishList.length; j++) {
+          const sj = statesRef.current.get(fishList[j].id);
+          const dx = sj.x - si.x, dy = sj.y - si.y;
+          const dist = Math.hypot(dx, dy) || 0.001;
+          if (dist < MIN_FISH_DIST) {
+            const push = (MIN_FISH_DIST - dist) * 0.5 * dt * 6;
+            const ux = dx / dist, uy = dy / dist;
+            si.x -= ux * push; si.y -= uy * push;
+            sj.x += ux * push; sj.y += uy * push;
+          }
+        }
+      }
+
       for (const c of creaturesRef.current) {
         const s = statesRef.current.get(c.id);
 
-        // Coesão de cardume: puxa posição E direção em direção à média do
-        // grupo de mesma cor — sem alinhar vx, o cardume nunca lê como "nadando
-        // junto" (dois peixes podiam convergir na posição e ainda cruzar em
-        // sentidos opostos). Tempo de convergência ~1-2s (antes era ~17s,
-        // imperceptível competindo com o zigue-zague independente dos peixes).
+        // Coesão de cardume: puxa a posição em direção à média do grupo de
+        // mesma cor, moderada (a separação acima cuida de nunca sobrepor).
+        // Alinhamento de direção mistura vx com a média do grupo, mas nunca
+        // deixa a velocidade colapsar perto de zero (bug anterior: dois peixes
+        // em sentidos opostos tinham média ~0 e praticamente paravam,
+        // "grudados" no mesmo lugar) — sempre mantém pelo menos 60% da
+        // velocidade própria do peixe.
         const group = schoolCentroids.get(c.traits.tail.color);
         if (group && group.count >= 2) {
           const avgX = group.sumX / group.count;
           const avgY = group.sumY / group.count;
           const avgVx = group.sumVx / group.count;
-          s.x += (avgX - s.x) * 0.7 * dt;
-          s.y += (avgY - s.y) * 0.4 * dt;
-          s.vx += (avgVx - s.vx) * 0.8 * dt;
+          s.x += (avgX - s.x) * 0.35 * dt;
+          s.y += (avgY - s.y) * 0.25 * dt;
+          s.vx += (avgVx - s.vx) * 0.5 * dt;
+          const minSpeed = s.baseSpeed * 0.6;
+          if (Math.abs(s.vx) < minSpeed) s.vx = Math.sign(s.vx || 1) * minSpeed;
         }
 
         s.x += s.vx * dt * speedFactor;
