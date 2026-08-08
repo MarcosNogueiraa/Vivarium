@@ -3,7 +3,7 @@ import { Modal } from "./Modal.jsx";
 import { FishCanvas, REVEAL_STEP_COUNT } from "./FishCanvas.jsx";
 import { Coin } from "./Coin.jsx";
 import { PeekAnchor } from "./PeekPanel.jsx";
-import { coinsPerHourOf, traitsOf } from "../lib/generator.js";
+import { coinsPerHourOf, rarityBreakdownOf, traitsOf } from "../lib/generator.js";
 import { bandOf, PT } from "../lib/fishRenderer.js";
 import { partSummary } from "../lib/format.js";
 
@@ -85,11 +85,20 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
   const revealed = !suspense || step >= REVEAL_STEP_COUNT;
   function revealNext() { if (!revealed) setStep((s) => Math.min(s + 1, REVEAL_STEP_COUNT)); }
   const tierColor = revealed ? band.color : "var(--muted)";
+
+  // Pontos de raridade por parte revelada (pedido do usuário) — soma os
+  // fatores de `rarityBreakdownOf` (mesmo cálculo de "por que é raro" do
+  // FishDetail) que pertencem a cada grupo. `part: null` = fatores do corpo
+  // (shimmerTier) ou de conjunto (samePattern/sameColor, mostrados à parte
+  // como bônus só no reveal final, já que dependem das 3 partes juntas).
+  const breakdown = rarityBreakdownOf(creature);
+  const pointsOf = (pred) => breakdown.factors.filter(pred).reduce((sum, f) => sum + f.points, 0);
+  const bonusPoints = pointsOf((f) => f.key === "samePattern" || f.key === "sameColor");
   const attrLines = [
-    { key: "shimmer", label: "Corpo", value: traits.shimmerTier === "None" ? "Cinza, sem brilho" : `${PT.tier[traits.shimmerTier]} · ${PT.shimmer[traits.shimmerColor]}` },
-    { key: "tail", label: "Cauda", value: partSummary(traits.tail) },
-    { key: "dorsal", label: "Nadadeira dorsal", value: partSummary(traits.dorsal) },
-    { key: "pectoral", label: "Nadadeira peitoral", value: partSummary(traits.pectoral) },
+    { key: "shimmer", label: "Corpo", value: traits.shimmerTier === "None" ? "Cinza, sem brilho" : `${PT.tier[traits.shimmerTier]} · ${PT.shimmer[traits.shimmerColor]}`, points: pointsOf((f) => f.key === "shimmerTier") },
+    { key: "tail", label: "Cauda", value: partSummary(traits.tail), points: pointsOf((f) => f.part === "tail") },
+    { key: "dorsal", label: "Nadadeira dorsal", value: partSummary(traits.dorsal), points: pointsOf((f) => f.part === "dorsal") },
+    { key: "pectoral", label: "Nadadeira peitoral", value: partSummary(traits.pectoral), points: pointsOf((f) => f.part === "pectoral" || f.part === "fin") },
   ];
 
   function showPeek(e, c) {
@@ -121,7 +130,9 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
           <>
             <div className="reveal-attrs">
               {attrLines.slice(0, step).map((a) => (
-                <div className="reveal-attr" key={a.key}><b>{a.label}:</b> {a.value}</div>
+                <div className="reveal-attr" key={a.key}>
+                  <b>{a.label}:</b> {a.value} <span className="reveal-pts">+{a.points.toFixed(2)}</span>
+                </div>
               ))}
             </div>
             <p className="faint" style={{ fontSize: "0.8rem" }}>
@@ -131,7 +142,15 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
         )}
         {revealed && suspense && (
           <div className="reveal-attrs revealed">
-            {attrLines.map((a) => <div className="reveal-attr" key={a.key}><b>{a.label}:</b> {a.value}</div>)}
+            {attrLines.map((a) => (
+              <div className="reveal-attr" key={a.key}>
+                <b>{a.label}:</b> {a.value} <span className="reveal-pts">+{a.points.toFixed(2)}</span>
+              </div>
+            ))}
+            {bonusPoints > 0 && (
+              <div className="reveal-attr"><b>Conjunto combinando:</b> <span className="reveal-pts">+{bonusPoints.toFixed(2)}</span></div>
+            )}
+            <div className="reveal-attr reveal-total"><b>Score total:</b> {breakdown.total.toFixed(2)}</div>
           </div>
         )}
         {revealed ? (
