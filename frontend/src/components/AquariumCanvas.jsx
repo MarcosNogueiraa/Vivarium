@@ -138,10 +138,13 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
       ctx.setTransform(resScaleRef.current, 0, 0, resScaleRef.current, 0, 0);
       drawTankBackground(ctx, W, H, time, q, th, decor);
 
-      // Garante o estado de cada peixe e agrupa por cor de cauda pra uma leve
-      // coesão de cardume — mesmo campo/limiar (n >= 2) que tankSynergy usa pro
-      // bônus de renda (tankMath.js), só aplicado aqui visualmente.
-      const schoolCentroids = new Map(); // cor -> { sumX, sumY, count }
+      // Garante o estado de cada peixe e agrupa por cor de cauda pra coesão de
+      // cardume — mesmo campo/limiar (n >= 2) que tankSynergy usa pro bônus de
+      // renda (tankMath.js), só aplicado aqui visualmente. Soma vx também, pra
+      // alinhar a DIREÇÃO do grupo (não só juntar posição — sem isso, dois
+      // peixes da mesma cor podiam nadar em sentidos opostos pra sempre e
+      // nunca parecer cardume de verdade).
+      const schoolCentroids = new Map(); // cor -> { sumX, sumY, sumVx, count }
       for (const c of creaturesRef.current) {
         let s = statesRef.current.get(c.id);
         if (!s) {
@@ -155,24 +158,27 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
           statesRef.current.set(c.id, s);
         }
         const color = c.traits.tail.color;
-        const g = schoolCentroids.get(color) ?? { sumX: 0, sumY: 0, count: 0 };
-        g.sumX += s.x; g.sumY += s.y; g.count++;
+        const g = schoolCentroids.get(color) ?? { sumX: 0, sumY: 0, sumVx: 0, count: 0 };
+        g.sumX += s.x; g.sumY += s.y; g.sumVx += s.vx; g.count++;
         schoolCentroids.set(color, g);
       }
 
       for (const c of creaturesRef.current) {
         const s = statesRef.current.get(c.id);
 
-        // Coesão de cardume: puxão bem sutil na posição-base em direção ao
-        // centro do grupo de mesma cor (não mexe em vx — evita acelerar sem
-        // limite; a nadada continua independente, só a posição converge um
-        // pouco).
+        // Coesão de cardume: puxa posição E direção em direção à média do
+        // grupo de mesma cor — sem alinhar vx, o cardume nunca lê como "nadando
+        // junto" (dois peixes podiam convergir na posição e ainda cruzar em
+        // sentidos opostos). Tempo de convergência ~1-2s (antes era ~17s,
+        // imperceptível competindo com o zigue-zague independente dos peixes).
         const group = schoolCentroids.get(c.traits.tail.color);
         if (group && group.count >= 2) {
           const avgX = group.sumX / group.count;
           const avgY = group.sumY / group.count;
-          s.x += (avgX - s.x) * 0.06 * dt;
-          s.y += (avgY - s.y) * 0.03 * dt;
+          const avgVx = group.sumVx / group.count;
+          s.x += (avgX - s.x) * 0.7 * dt;
+          s.y += (avgY - s.y) * 0.4 * dt;
+          s.vx += (avgVx - s.vx) * 0.8 * dt;
         }
 
         s.x += s.vx * dt * speedFactor;
