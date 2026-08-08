@@ -343,20 +343,15 @@ input:focus {
   background: radial-gradient(ellipse 65% 55% at 50% 14%, transparent 0%, rgba(1, 6, 9, 0.5) 55%, rgba(0, 2, 3, 0.8) 100%);
 }
 
-/* Auréola de luz atrás do aquário — bleeds pra fora do stage (por isso um
-   wrapper à parte: o tank-stage tem overflow:hidden pro canvas arredondado,
-   o que cortaria qualquer brilho tentando escapar dele). Cor padrão aqua;
-   Master ganha um tom dourado, reforçando a moldura premium (abaixo). */
-.tank-spotlight { position: relative; isolation: isolate; }
-.tank-spotlight::before {
-  content: ""; position: absolute; inset: -80px -50px; z-index: -1; pointer-events: none;
-  border-radius: 60px;
-  background: radial-gradient(closest-side, rgba(84, 230, 209, 0.32), rgba(84, 230, 209, 0.12) 45%, transparent 75%);
-  filter: blur(8px);
-}
-.tank-spotlight.tier-master::before {
-  background: radial-gradient(closest-side, rgba(240, 190, 90, 0.4), rgba(240, 190, 90, 0.15) 45%, transparent 75%);
-}
+/* A auréola de luz ao redor do stage (1ª tentativa do cinema) virou o
+   problema seguinte: com o fundo bem mais escuro, ela lia como "ainda tem
+   uma parte azul mais clara fora da caixa" (feedback do usuário). Cinema de
+   verdade (referência dada: modo teatro do YouTube) não tem brilho vazando
+   ao redor do vídeo — é a caixa nítida contra o preto, sem gradiente de
+   transição. Removida; `.tank-spotlight` fica só como wrapper estrutural
+   (permite a moldura do Master, abaixo, sem herdar o overflow:hidden do
+   tank-stage). */
+.tank-spotlight { position: relative; }
 
 /* Apaga cor/brilho de tudo que não é o próprio aquário — o "resto da tela"
    que sobrava vivo demais na 1ª tentativa do efeito cinema. Some ao passar o
