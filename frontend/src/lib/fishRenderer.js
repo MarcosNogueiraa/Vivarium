@@ -46,9 +46,13 @@ export const decorTierOf = (capacityBandName) => {
   return i < 0 ? 0 : i;
 };
 
+// Focinho arredondado (não é mais um único vértice em V — as duas curvas
+// aproximam de pontos próximos, ligados por um pequeno arco na ponta), mesma
+// silhueta única compartilhada por todo peixe da espécie.
 const bodyPath = new Path2D(
-  "M 130 210 C 155 150 235 125 305 138 C 348 147 376 178 384 210 " +
-  "C 376 242 348 273 305 282 C 235 295 155 270 130 210 Z");
+  "M 134 199 C 158 150 235 125 305 138 C 348 147 376 178 384 210 " +
+  "C 376 242 348 273 305 282 C 235 295 158 270 134 221 " +
+  "Q 122 210 134 199 Z");
 const tailPath = new Path2D(
   "M 378 200 C 405 185 432 168 452 152 C 440 172 426 192 422 210 " +
   "C 426 228 440 248 452 268 C 432 252 405 235 378 220 Q 371 210 378 200 Z");
@@ -61,7 +65,7 @@ const pectoralPath = new Path2D(
 const TAIL_BBOX = [372, 148, 84, 124];
 const DORSAL_BBOX = [224, 78, 110, 68];
 const PECTORAL_BBOX = [220, 240, 70, 56];
-const BODY_BBOX = [128, 124, 260, 172];
+const BODY_BBOX = [122, 124, 266, 172];
 
 // Mapeamento visual dos traits de movimento (velocidade 0-100 vem do motor)
 export const MOVEMENT_TUNING = {
@@ -88,6 +92,26 @@ export function swimSpeedOf(traits) {
   const w = MOVEMENT_TUNING.swimTailWeight;
   const factor = w * (traits.movement.tailSpeed / 100) + (1 - w) * (traits.movement.finSpeed / 100);
   return MOVEMENT_TUNING.swimBase + factor * MOVEMENT_TUNING.swimRange;
+}
+
+/**
+ * Grade de arcos de escama dentro de `bbox` — compartilhada pelo padrão "Scales"
+ * (trait sorteado, cor/tamanho variam) e pela textura fixa e sutil do corpo
+ * (sempre presente, mesma pra todo peixe da espécie).
+ */
+function drawScaleTexture(ctx, bbox, r, strokeStyle, lineWidth) {
+  const [bx, by, bw, bh] = bbox;
+  const stepX = r * 1.8, stepY = r * 1.05;
+  ctx.lineWidth = lineWidth;
+  ctx.strokeStyle = strokeStyle;
+  for (let row = 0, y = by; y < by + bh + stepY; row++, y += stepY) {
+    const off = row % 2 ? stepX / 2 : 0;
+    for (let x = bx + off; x < bx + bw + stepX; x += stepX) {
+      ctx.beginPath();
+      ctx.arc(x, y, r, Math.PI * 0.15, Math.PI * 0.85);
+      ctx.stroke();
+    }
+  }
 }
 
 function drawPattern(ctx, seed, part, path, bbox) {
@@ -140,17 +164,7 @@ function drawPattern(ctx, seed, part, path, bbox) {
     }
   } else if (part.pattern === "Scales") {
     const r = 4 + size * 0.09;
-    const stepX = r * 1.8, stepY = r * 1.05;
-    ctx.lineWidth = Math.max(1, r * 0.16);
-    ctx.strokeStyle = color;
-    for (let row = 0, y = by; y < by + bh + stepY; row++, y += stepY) {
-      const off = row % 2 ? stepX / 2 : 0;
-      for (let x = bx + off; x < bx + bw + stepX; x += stepX) {
-        ctx.beginPath();
-        ctx.arc(x, y, r, Math.PI * 0.15, Math.PI * 0.85);
-        ctx.stroke();
-      }
-    }
+    drawScaleTexture(ctx, bbox, r, color, Math.max(1, r * 0.16));
   } else if (part.pattern === "Chevron") {
     const amp = 5 + size * 0.07;
     const wl = amp * 1.8;
@@ -224,6 +238,42 @@ function fillPart(ctx, path, color) {
   ctx.stroke(path);
 }
 
+// Ponto de encaixe (onde a nadadeira nasce do corpo) e o leque de ângulos dos
+// raios, por nadadeira — mesmos pontos de partida/fechamento dos Path2D acima
+// (ex: tailPath começa/fecha em ~378,205 — é onde a cauda "nasce"). Ângulos em
+// radianos, 0 = +x (canvas). Igual pra TODO peixe da espécie (só cor/padrão
+// variam) — não introduz variação de forma entre indivíduos.
+const FIN_RAYS = {
+  tail: { joint: [378, 206], angleFrom: -0.85, angleTo: 0.85, length: 74, count: 6 },
+  dorsal: { joint: [228, 138], angleFrom: -2.15, angleTo: -1.05, length: 62, count: 5 },
+  pectoral: { joint: [228, 244], angleFrom: 0.35, angleTo: 1.15, length: 48, count: 4 },
+};
+
+/** Linhas finas translúcidas irradiando do encaixe — dá leitura de "raio de nadadeira" ao blob sólido. */
+function drawFinRays(ctx, seed, name, path) {
+  const spec = FIN_RAYS[name];
+  if (!spec) return;
+  const { joint, angleFrom, angleTo, length, count } = spec;
+  const [jx, jy] = joint;
+
+  ctx.save();
+  ctx.clip(path);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.22)";
+  ctx.lineWidth = 1.1;
+  ctx.lineCap = "round";
+  for (let i = 0; i < count; i++) {
+    const t = count > 1 ? i / (count - 1) : 0.5;
+    const jitter = (roll01(seed, `finray_${name}_${i}`) - 0.5) * 0.12;
+    const angle = angleFrom + (angleTo - angleFrom) * t + jitter;
+    const len = length * (0.85 + roll01(seed, `finraylen_${name}_${i}`) * 0.25);
+    ctx.beginPath();
+    ctx.moveTo(jx, jy);
+    ctx.lineTo(jx + Math.cos(angle) * len, jy + Math.sin(angle) * len);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 // Rasteriza a parte (fill + padrão) uma vez num canvas offscreen e cacheia por
 // seed+nome. A onda viajante depois só reposiciona fatias desse sprite — o padrão
 // acompanha de graça, sem redesenhar por frame.
@@ -243,6 +293,7 @@ function getPartSprite(seed, name, part, path, bbox) {
   sctx.translate(-bx + M, -by + M); // ponto absoluto (X,Y) → (X-bx+M, Y-by+M)
   fillPart(sctx, path, part.color);
   drawPattern(sctx, seed, part, path, bbox);
+  drawFinRays(sctx, seed, name, path);
 
   const sprite = { canvas, ox: bx - M, oy: by - M };
   spriteCache.set(key, sprite);
@@ -341,6 +392,15 @@ export function drawFish(ctx, seed, traits, time = 0, phase = 0) {
   ctx.lineWidth = 2;
   ctx.stroke(bodyPath);
 
+  // Textura de escama fixa e bem sutil, sempre presente (mesma pra todo peixe
+  // da espécie) — evita o corpo chapado nos ~78% sem shimmer, sem introduzir
+  // trait novo nem variar a silhueta entre indivíduos.
+  ctx.save();
+  ctx.clip(bodyPath);
+  ctx.globalAlpha = 0.09;
+  drawScaleTexture(ctx, BODY_BBOX, 9, "#e8edf1", 1);
+  ctx.restore();
+
   drawShimmer(ctx, traits, time);
 
   ctx.fillStyle = "#f2f5f7";
@@ -349,6 +409,42 @@ export function drawFish(ctx, seed, traits, time = 0, phase = 0) {
   ctx.beginPath(); ctx.arc(186, 199, 4.5, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = "rgba(255,255,255,0.85)";
   ctx.beginPath(); ctx.arc(184, 196.5, 1.6, 0, Math.PI * 2); ctx.fill();
+
+  // Guelra: crescente fixo atrás da cabeça, sempre presente (mesmo detalhe pra
+  // todo peixe da espécie) — leve pulso de opacidade simulando a respiração.
+  const gillBreath = 0.18 + 0.08 * Math.sin(time / 1100 + phase);
+  ctx.save();
+  ctx.clip(bodyPath);
+  ctx.strokeStyle = `rgba(30, 38, 44, ${gillBreath})`;
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.arc(222, 205, 20, Math.PI * 0.62, Math.PI * 1.38);
+  ctx.stroke();
+  ctx.restore();
+
+  // Bolha ocasional da boca — puramente determinística por seed+time (sem
+  // estado extra pra guardar): um ciclo de repouso longo, uma janela curta
+  // onde a bolha sobe e desaparece.
+  if (time > 0) {
+    const bubblePeriod = 4200 + roll01(seed, "bubble_period") * 5200;
+    const bubblePhase = roll01(seed, "bubble_phase") * bubblePeriod;
+    const bubbleT = (time + bubblePhase) % bubblePeriod;
+    const bubbleDur = 1100;
+    if (bubbleT < bubbleDur) {
+      const p = bubbleT / bubbleDur;
+      const bx = 170 + Math.sin(p * 6) * 3;
+      const by = 197 - p * 32;
+      ctx.save();
+      ctx.globalAlpha = (1 - p) * 0.5;
+      ctx.strokeStyle = "rgba(200,240,245,0.8)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(bx, by, 1.6 + p * 1.4, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
 
   // Peitoral: flutter sutil, período e fase próprios do finSpeed
   wavyBlit(ctx, getPartSprite(seed, "pectoral", traits.pectoral, pectoralPath, PECTORAL_BBOX),
@@ -408,7 +504,32 @@ const ROCKS_TIER1 = [
   { x: 0.14, w: 46, h: 30 }, { x: 0.53, w: 60, h: 38 }, { x: 0.80, w: 40, h: 26 },
 ];
 
-function drawRockCluster(ctx, W, H) {
+/**
+ * Manchas de alga sobre um item de decoração — aparecem e crescem conforme a
+ * água suja (`murk`, o mesmo fator 0-1 que já esverdeia a água/névoa/bordas do
+ * vidro). Abaixo de ~10% de sujeira não desenha nada (água "limpa" não tem
+ * mancha visível, mesmo padrão de corte do MURK_CLEAN_ABOVE).
+ *
+ * TODO (futuro, não implementado): "cascudo" é um PEIXE novo (uma espécie/criatura
+ * que nadaria no tanque — diferente do filtro automático, que é item de loja/
+ * equipamento; hook do bônus dele já documentado em GameService.cs/CLAUDE.md
+ * §8.15/16). O efeito visual do cascudo seria reduzir/limpar essas manchas onde
+ * ele passa — reaproveitar `drawAlgaePatches`/`murk` em vez de criar sistema novo.
+ */
+function drawAlgaePatches(ctx, spots, murk) {
+  if (murk <= 0.1) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "multiply";
+  for (const [x, y, r] of spots) {
+    ctx.fillStyle = `rgba(70, 120, 40, ${Math.min(0.5, murk * 0.6)})`;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r * murk, r * murk * 0.55, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawRockCluster(ctx, W, H, murk) {
   for (const r of ROCKS_TIER1) {
     const cx = r.x * W;
     const cy = H - 34;
@@ -420,6 +541,7 @@ function drawRockCluster(ctx, W, H) {
     ctx.beginPath();
     ctx.ellipse(cx - r.w * 0.2, cy - r.h * 0.35, r.w * 0.4, r.h * 0.3, 0, Math.PI, 0);
     ctx.fill();
+    drawAlgaePatches(ctx, [[cx - r.w * 0.3, cy - r.h * 0.5, r.w * 0.45], [cx + r.w * 0.25, cy - r.h * 0.25, r.w * 0.3]], murk);
   }
 }
 
@@ -429,7 +551,7 @@ function drawRockCluster(ctx, W, H) {
  * fica coberto por ela — dá a sensação de profundidade/camadas que só decoração
  * de fundo (sempre atrás de tudo) não consegue.
  */
-function drawSunkenShip(ctx, W, H, time) {
+function drawSunkenShip(ctx, W, H, time, murk) {
   const cx = W * 0.20, baseY = H - 30;
   ctx.save();
   ctx.translate(cx, baseY);
@@ -460,11 +582,8 @@ function drawSunkenShip(ctx, W, H, time) {
     ctx.arc(px, -20, 6, 0, Math.PI * 2);
     ctx.fill();
   }
-  // Algas cobrindo o casco
-  ctx.fillStyle = "rgba(60, 110, 60, 0.35)";
-  ctx.beginPath();
-  ctx.ellipse(-40, -10, 30, 14, -0.2, 0, Math.PI * 2);
-  ctx.fill();
+  // Algas cobrindo o casco — cresce com a água suja (mesmo helper das rochas).
+  drawAlgaePatches(ctx, [[-40, -10, 34], [30, -18, 22]], murk);
 
   // Mastro quebrado + farrapo de vela balançando
   ctx.strokeStyle = "#3d332c";
@@ -490,7 +609,7 @@ function drawSunkenShip(ctx, W, H, time) {
  * pequeno e lento (não pulsa como os botões reais do jogo, ex: recompensa diária —
  * um halo grande pulsando lia como call-to-action clicável, o que confundia).
  */
-function drawTreasureChest(ctx, W, H, time) {
+function drawTreasureChest(ctx, W, H, time, murk) {
   const cx = W * 0.66, baseY = H - 34, w = 64, h = 34;
   ctx.save();
   // corpo do baú
@@ -503,6 +622,7 @@ function drawTreasureChest(ctx, W, H, time) {
   // fivela dourada
   ctx.fillStyle = "#d9b24c";
   ctx.fillRect(cx - 5, baseY - h - 3, 10, 15);
+  drawAlgaePatches(ctx, [[cx - w * 0.28, baseY - h * 0.4, w * 0.32]], murk);
   // dois glints pequenos e lentos, sem halo grande — leitura de "reflexo", não "botão"
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
@@ -530,7 +650,7 @@ function drawTreasureChest(ctx, W, H, time) {
  * (fish passam por trás, mesma ideia do navio) pra quebrar o plano horizontal e
  * reforçar a sensação de profundidade/camadas.
  */
-function drawObstacleSpire(ctx, x, H, hgt) {
+function drawObstacleSpire(ctx, x, H, hgt, murk) {
   const baseY = H - 28;
   ctx.save();
   ctx.fillStyle = "rgba(46, 58, 56, 0.92)";
@@ -548,6 +668,90 @@ function drawObstacleSpire(ctx, x, H, hgt) {
   ctx.quadraticCurveTo(x - 2, baseY - hgt * 0.4, x - 2, baseY);
   ctx.closePath();
   ctx.fill();
+  drawAlgaePatches(ctx, [[x - 8, baseY - hgt * 0.3, 16], [x + 6, baseY - hgt * 0.55, 12]], murk);
+  ctx.restore();
+}
+
+// Posição fixa do air stone (fração de W) — longe dos elementos do decorTier 2
+// (navio ~0.10-0.29, espinha ~0.38-0.46, baú ~0.63-0.69, espinha ~0.88-0.93).
+const AIR_STONE_X_FRAC = 0.335;
+
+/** Corpo da pedra de ar (presente em toda faixa de capacidade) — desenhado uma vez, no foreground. */
+function drawAirStoneBase(ctx, W, H) {
+  const x = AIR_STONE_X_FRAC * W;
+  const baseY = H - 30;
+  ctx.save();
+  ctx.fillStyle = "rgba(60, 66, 68, 0.9)";
+  ctx.beginPath();
+  ctx.ellipse(x, baseY, 11, 6, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "rgba(90, 98, 100, 0.6)";
+  ctx.beginPath();
+  ctx.ellipse(x - 3, baseY - 1.5, 4, 2.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+const AIR_STONE_R_SPLIT = 1.9;
+
+/**
+ * Coluna de bolhas contínua nascendo sempre do mesmo ponto (diferente das
+ * bolhas ambiente, que nascem espalhadas e aleatórias pela tela) — como um
+ * aquário de verdade. `big` filtra qual metade desenhar: as pequenas entram
+ * no fundo (`drawTankBackground`, atrás dos peixes) e as grandes na frente
+ * (`drawTankForeground`) — dá noção de profundidade (bolha longe = pequena e
+ * atrás; bolha perto do vidro = grande e na frente).
+ */
+function drawAirStoneBubbles(ctx, W, H, time, big) {
+  const x = AIR_STONE_X_FRAC * W;
+  const baseY = H - 30;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  const count = 7;
+  for (let i = 0; i < count; i++) {
+    const r = 1.1 + hash01(i * 2.4 + 92) * 1.6;
+    if (big !== (r >= AIR_STONE_R_SPLIT)) continue;
+    const speed = 46 + hash01(i * 5.7 + 90) * 20;
+    const cycle = H + 30;
+    const by = baseY - (((time / 1000) * speed + hash01(i * 3.1 + 91) * cycle) % cycle);
+    const sway = Math.sin(time / 500 + i * 1.9) * 3;
+    const bx = x + sway;
+    ctx.strokeStyle = "rgba(190, 245, 250, 0.4)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(bx, by, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(210, 250, 255, 0.12)";
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+const AMBIENT_BUBBLE_R_SPLIT = 3.1;
+
+/**
+ * Bolhas ambiente (nascem espalhadas pela tela, sem fonte fixa — diferente do
+ * air stone). Mesmo split por tamanho: pequenas atrás dos peixes, grandes na
+ * frente — reforça a sensação de profundidade (pedido do usuário, 08/08/2026).
+ */
+function drawAmbientBubbles(ctx, W, H, time, big) {
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (let i = 0; i < 9; i++) {
+    const r = 1.6 + hash01(i * 2.2) * 3;
+    if (big !== (r >= AMBIENT_BUBBLE_R_SPLIT)) continue;
+    const col = hash01(i * 4.2) * W;
+    const speed = 34 + hash01(i * 4.6) * 30;
+    const bx = col + Math.sin(time / 900 + i * 2.3) * 10;
+    const by = H - (((time / 1000) * speed + hash01(i * 3.3) * H) % (H + 40));
+    ctx.strokeStyle = "rgba(180, 240, 245, 0.35)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(bx, by, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(200, 245, 250, 0.10)";
+    ctx.fill();
+  }
   ctx.restore();
 }
 
@@ -571,6 +775,9 @@ function drawPlantClump(ctx, baseX, baseY, clump, time, alpha, sat, light) {
 
 /** Tinge levemente de rosa/quente pro tema "breeding" (ninho) — sutil, sem exagero. */
 const romanticTint = (hex, theme) => (theme === "breeding" ? mixHex(hex, "#ff6e93", 0.14) : hex);
+
+/** Altura da faixa de substrato (areia/cascalho) no fundo do tanque — usada pelo chão da sombra dos peixes também. */
+export const SUBSTRATE_BAND_H = 52;
 
 /** Fundo: gradiente de água, raios de luz, plantas de trás, substrato. */
 export function drawTankBackground(ctx, W, H, time, quality = 100, theme = "default", decorTier = 0) {
@@ -628,17 +835,38 @@ export function drawTankBackground(ctx, W, H, time, quality = 100, theme = "defa
   if (decorTier >= 1) {
     for (const clump of PLANTS_BACK_TIER1)
       drawPlantClump(ctx, clump.x * W, H - 30, clump, time, 0.5, 42, 24);
-    drawRockCluster(ctx, W, H);
+    drawRockCluster(ctx, W, H, murk);
   }
 
-  // 5. Substrato (areia/cascalho escuro)
-  const bandH = 52;
+  // 5. Substrato (areia/cascalho escuro) — grão com profundidade (luz/sombra
+  // própria) e leve ondulação, como se a correnteza do filtro moldasse a areia.
+  const bandH = SUBSTRATE_BAND_H;
   const sub = ctx.createLinearGradient(0, H - bandH, 0, H);
   sub.addColorStop(0, "rgba(12, 46, 44, 0)");
   sub.addColorStop(0.35, "#0c302e");
   sub.addColorStop(1, "#123a34");
   ctx.fillStyle = sub;
   ctx.fillRect(0, H - bandH, W, bandH);
+
+  // Ondulações de areia: faixas onduladas bem sutis, fase deslizando devagar
+  // (mesmo espírito da correnteza que já balança as plantas).
+  ctx.save();
+  ctx.globalCompositeOperation = "overlay";
+  const ripples = 5;
+  for (let i = 0; i < ripples; i++) {
+    const ry = H - bandH * 0.15 - i * (bandH * 0.16);
+    ctx.strokeStyle = `rgba(180, 210, 200, ${0.05 + 0.02 * (i % 2)})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let x = 0; x <= W; x += 12) {
+      const wobble = Math.sin(x / 46 + time / 5200 + i * 1.7) * 2.2;
+      const py = ry + wobble;
+      if (x === 0) ctx.moveTo(x, py); else ctx.lineTo(x, py);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+
   for (let i = 0; i < 46; i++) {
     const px = hash01(i * 3.3 + 1) * W;
     const py = H - hash01(i * 3.3 + 2) * bandH * 0.7;
@@ -648,7 +876,24 @@ export function drawTankBackground(ctx, W, H, time, quality = 100, theme = "defa
     ctx.beginPath();
     ctx.ellipse(px, py, r, r * 0.72, 0, 0, Math.PI * 2);
     ctx.fill();
+    // Grãos maiores ganham luz/sombra própria — leitura de bolinha 3D, não um disco chapado.
+    if (r > 3) {
+      ctx.fillStyle = `hsla(${160 + hash01(i) * 20}, 30%, ${Math.min(78, l + 26)}%, 0.55)`;
+      ctx.beginPath();
+      ctx.ellipse(px - r * 0.3, py - r * 0.3, r * 0.4, r * 0.28, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `hsla(${160 + hash01(i) * 20}, 24%, ${Math.max(8, l - 16)}%, 0.5)`;
+      ctx.beginPath();
+      ctx.ellipse(px + r * 0.3, py + r * 0.22, r * 0.42, r * 0.3, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
+
+  // Metade "pequena" das bolhas (ambiente + air stone) nasce aqui, no fundo —
+  // fica atrás de todo peixe, dando noção de profundidade (a outra metade,
+  // maior, nasce no foreground — ver drawTankForeground).
+  drawAmbientBubbles(ctx, W, H, time, false);
+  drawAirStoneBubbles(ctx, W, H, time, false);
 }
 
 function drawHeart(ctx, x, y, size, alpha) {
@@ -677,10 +922,10 @@ export function drawTankForeground(ctx, W, H, time, quality = 100, theme = "defa
     for (const clump of PLANTS_FRONT_TIER1)
       drawPlantClump(ctx, clump.x * W, H - 26, clump, time, 0.62, 46, 32);
   if (decorTier >= 2) {
-    drawSunkenShip(ctx, W, H, time);
-    drawObstacleSpire(ctx, W * 0.42, H, 92);
-    drawTreasureChest(ctx, W, H, time);
-    drawObstacleSpire(ctx, W * 0.90, H, 70);
+    drawSunkenShip(ctx, W, H, time, murk);
+    drawObstacleSpire(ctx, W * 0.42, H, 92, murk);
+    drawTreasureChest(ctx, W, H, time, murk);
+    drawObstacleSpire(ctx, W * 0.90, H, 70, murk);
   }
 
   // Algas/sujeira flutuando (mais e mais verdes conforme a água piora)
@@ -710,6 +955,24 @@ export function drawTankForeground(ctx, W, H, time, quality = 100, theme = "defa
     ctx.fillRect(0, 0, W, H);
   }
 
+  // Microfauna de fundo: pontinhos de vida ambiente perto do substrato, se
+  // mexendo em voltas pequenas e erráticas (não sobem como as partículas de
+  // detrito abaixo) — sugere um ecossistema vivo além dos peixes do jogador,
+  // sem ser uma "espécie" nova (nenhum trait, nenhuma forma, só textura viva).
+  ctx.save();
+  ctx.fillStyle = "rgba(210, 235, 225, 0.9)";
+  for (let i = 0; i < 16; i++) {
+    const baseX = hash01(i * 7.1 + 80) * W;
+    const baseY = H - SUBSTRATE_BAND_H * 0.55 - hash01(i * 7.1 + 81) * 34;
+    const driftX = Math.sin(time / 1800 + i * 2.1) * 9 + Math.cos(time / 3300 + i) * 5;
+    const driftY = Math.cos(time / 2200 + i * 1.4) * 4;
+    ctx.globalAlpha = 0.08 + hash01(i * 3.7 + 82) * 0.14;
+    ctx.beginPath();
+    ctx.arc(baseX + driftX, baseY + driftY, 0.7 + hash01(i * 5.3 + 83) * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
   // Partículas em suspensão (detritos finos subindo devagar)
   ctx.save();
   ctx.fillStyle = "rgba(200, 235, 240, 0.5)";
@@ -724,24 +987,14 @@ export function drawTankForeground(ctx, W, H, time, quality = 100, theme = "defa
   }
   ctx.restore();
 
-  // Bolhas (colunas subindo, oscilando)
-  ctx.save();
-  ctx.globalCompositeOperation = "lighter";
-  for (let i = 0; i < 9; i++) {
-    const col = hash01(i * 4.2) * W;
-    const speed = 34 + hash01(i * 4.6) * 30;
-    const bx = col + Math.sin(time / 900 + i * 2.3) * 10;
-    const by = H - (((time / 1000) * speed + hash01(i * 3.3) * H) % (H + 40));
-    const r = 1.6 + hash01(i * 2.2) * 3;
-    ctx.strokeStyle = "rgba(180, 240, 245, 0.35)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(bx, by, r, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.fillStyle = "rgba(200, 245, 250, 0.10)";
-    ctx.fill();
-  }
-  ctx.restore();
+  // Bolhas (colunas subindo, oscilando) — metade "grande" nasce aqui, na
+  // frente dos peixes; a metade pequena já nasceu no fundo (drawTankBackground).
+  drawAmbientBubbles(ctx, W, H, time, true);
+
+  // Air stone: corpo sempre no foreground + metade grande da coluna de bolhas
+  // (a pequena já nasceu atrás, no fundo).
+  drawAirStoneBase(ctx, W, H);
+  drawAirStoneBubbles(ctx, W, H, time, true);
 
   // Corações subindo, bem sutis — só no tema "breeding" (ninho)
   if (theme === "breeding") {
@@ -772,4 +1025,32 @@ export function drawTankForeground(ctx, W, H, time, quality = 100, theme = "defa
   glass.addColorStop(1, "rgba(200, 245, 250, 0)");
   ctx.fillStyle = glass;
   ctx.fillRect(0, 0, W, H * 0.4);
+}
+
+/**
+ * Sombra projetada no substrato (função pura, testável) — quanto mais fundo o
+ * peixe está (perto do chão), maior e mais escura a sombra; perto da superfície,
+ * quase some. `maxDist` é a distância (em px) acima da qual a sombra já está no
+ * mínimo.
+ */
+export function shadowParamsFor(y, floorY, maxDist = 220) {
+  const dist = Math.max(0, floorY - y);
+  const t = Math.min(1, Math.max(0.15, 1 - dist / maxDist));
+  return { radiusX: 14 + 30 * t, alpha: 0.08 + 0.26 * t };
+}
+
+/** Desenha a sombra elíptica de um peixe no substrato, na posição x do peixe. */
+export function drawFishShadow(ctx, x, y, floorY) {
+  const { radiusX, alpha } = shadowParamsFor(y, floorY);
+  ctx.save();
+  ctx.translate(x, floorY - 4);
+  ctx.scale(1, 0.32);
+  const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, radiusX);
+  grad.addColorStop(0, `rgba(2, 10, 8, ${alpha})`);
+  grad.addColorStop(1, "rgba(2, 10, 8, 0)");
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(0, 0, radiusX, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
