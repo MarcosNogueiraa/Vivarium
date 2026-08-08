@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api.js";
 import { useBreeding } from "../hooks/useBreeding.js";
 import { AquariumCanvas } from "../components/AquariumCanvas.jsx";
@@ -6,11 +6,19 @@ import { RarityBadge } from "../components/RarityBadge.jsx";
 import { FishCanvas } from "../components/FishCanvas.jsx";
 import { Modal } from "../components/Modal.jsx";
 import { Coin } from "../components/Coin.jsx";
+import { Select } from "../components/Select.jsx";
 import { CollectCelebration } from "../components/CollectCelebration.jsx";
 import { PeekPanel } from "../components/PeekPanel.jsx";
-import { bandOf, PT } from "../lib/fishRenderer.js";
-import { breedingPreview } from "../lib/generator.js";
+import { bandOf, BANDS, PART_HEX, PT } from "../lib/fishRenderer.js";
+import { breedingPreview, coinsPerHourOf, traitsOf } from "../lib/generator.js";
 import { PART_PT, partSummary } from "../lib/format.js";
+
+const SORTS = {
+  "rarity-desc": { label: "Raridade (maior primeiro)", cmp: (a, b) => Number(b.rarityScore) - Number(a.rarityScore) },
+  "rarity-asc": { label: "Raridade (menor primeiro)", cmp: (a, b) => Number(a.rarityScore) - Number(b.rarityScore) },
+  "production-desc": { label: "Produção (maior primeiro)", cmp: (a, b) => coinsPerHourOf(Number(b.rarityScore)) - coinsPerHourOf(Number(a.rarityScore)) },
+  "production-asc": { label: "Produção (menor primeiro)", cmp: (a, b) => coinsPerHourOf(Number(a.rarityScore)) - coinsPerHourOf(Number(b.rarityScore)) },
+};
 
 function ParentPreviewCard({ label, creature, traits }) {
   const score = Number(creature.rarityScore);
@@ -75,6 +83,10 @@ export function BreedingView({ tank, refreshTank, notify }) {
   const [peekId, setPeekId] = useState(null); // id do peixe com o painel de detalhes aberto (pairar 1s)
   const peekTimer = useRef(null);
   const [, forceTick] = useState(0);
+  const [sortBy, setSortBy] = useState("rarity-desc");
+  const [bandFilter, setBandFilter] = useState("all");
+  const [colorFilter, setColorFilter] = useState("all");
+  const [onlyBred, setOnlyBred] = useState(false);
 
   const softBalance = Number(tank.wallet?.SOFT ?? 0);
   const premiumBalance = Number(tank.wallet?.PREMIUM ?? 0);
@@ -88,6 +100,19 @@ export function BreedingView({ tank, refreshTank, notify }) {
     const t = setInterval(() => forceTick((n) => n + 1), 30_000);
     return () => clearInterval(t);
   }, []);
+
+  // Hooks precisam rodar em toda renderização, mesmo antes do backpack
+  // carregar — por isso o useMemo vem ANTES do `return` de loading abaixo
+  // (colocar depois violava a regra dos hooks: nº de hooks mudava entre a
+  // renderização de "carregando" e a normal, e o React quebrava com
+  // "Rendered more hooks than during the previous render").
+  const candidates = backpack ? [...tank.creatures, ...backpack.creatures] : [];
+  const visibleCandidates = useMemo(() => candidates
+    .filter((c) => bandFilter === "all" || bandOf(Number(c.rarityScore)).name === bandFilter)
+    .filter((c) => colorFilter === "all" || traitsOf(c).tail.color === colorFilter)
+    .filter((c) => !onlyBred || c.isBred)
+    .sort(SORTS[sortBy].cmp),
+  [candidates, bandFilter, colorFilter, onlyBred, sortBy]);
 
   if (status === null || backpack === null) return <p className="hint">Carregando o ninho…</p>;
 
@@ -169,7 +194,6 @@ export function BreedingView({ tank, refreshTank, notify }) {
     setPeekId(null);
   }
 
-  const candidates = [...tank.creatures, ...backpack.creatures];
   const bothPicked = pickA && pickB;
   const preview = bothPicked ? breedingPreview(pickA, pickB) : null;
 
@@ -225,8 +249,52 @@ export function BreedingView({ tank, refreshTank, notify }) {
           <p className="hint">
             Escolha 2 peixes pra levar pro ninho. Quanto mais raro o casal, mais demorada (e cara) a gestação.
           </p>
+          <div className="backpack-toolbar">
+            <Select
+              value={sortBy} onChange={setSortBy}
+              options={Object.entries(SORTS).map(([key, { label }]) => ({ value: key, label }))}
+            />
+            <div className="filter-chips">
+              <button className={`filter-chip${bandFilter === "all" ? " active" : ""}`} onClick={() => setBandFilter("all")}>
+                Todos
+              </button>
+              {BANDS.map((b) => (
+                <button
+                  key={b.name}
+                  className={`filter-chip${bandFilter === b.name ? " active" : ""}`}
+                  style={{ "--tier": b.color }}
+                  onClick={() => setBandFilter(b.name)}
+                >
+                  {b.name}
+                </button>
+              ))}
+            </div>
+            <div className="filter-chips">
+              <button className={`filter-chip${colorFilter === "all" ? " active" : ""}`} onClick={() => setColorFilter("all")}>
+                Toda cor
+              </button>
+              {Object.keys(PART_HEX).map((color) => (
+                <button
+                  key={color}
+                  className={`filter-chip color-chip${colorFilter === color ? " active" : ""}`}
+                  style={{ "--tier": PART_HEX[color] }}
+                  title={PT.color[color]}
+                  onClick={() => setColorFilter(color)}
+                >
+                  <span className="dot-color" style={{ background: PART_HEX[color] }} />
+                </button>
+              ))}
+            </div>
+            <label className="filter-toggle">
+              <input type="checkbox" checked={onlyBred} onChange={(e) => setOnlyBred(e.target.checked)} />
+              Só filhotes 🐣
+            </label>
+          </div>
+          {visibleCandidates.length === 0 ? (
+            <p className="hint">Nenhum peixe corresponde a esse filtro.</p>
+          ) : (
           <div className="grid" style={{ paddingBottom: bothPicked ? 70 : 0 }}>
-            {candidates.map((c) => {
+            {visibleCandidates.map((c) => {
               const picked = pickA?.id === c.id || pickB?.id === c.id;
               return (
                 <div
@@ -252,6 +320,7 @@ export function BreedingView({ tank, refreshTank, notify }) {
               );
             })}
           </div>
+          )}
         </>
       )}
 
