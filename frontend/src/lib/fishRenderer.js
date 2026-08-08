@@ -865,6 +865,15 @@ export function drawTankBackground(ctx, W, H, time, quality = 100, theme = "defa
       drawPlantClump(ctx, clump.x * W, H - 30, clump, time, 0.5, 42, 24);
     drawRockCluster(ctx, W, H, murk);
   }
+  // Espinhas de rocha do Master: são só pedra (sem contexto narrativo como o
+  // navio/baú), então ficam no BACKGROUND — sempre atrás de todo peixe.
+  // Diferente do navio/baú (decoração de verdade, continuam no foreground pra
+  // dar a sensação de profundidade) — uma pedra genérica "flutuando" na frente
+  // do peixe lia estranho, sem motivo pra estar por cima.
+  if (decorTier >= 2) {
+    drawObstacleSpire(ctx, W * 0.42, H, 92, murk);
+    drawObstacleSpire(ctx, W * 0.90, H, 70, murk);
+  }
 
   // 5. Substrato (areia/cascalho escuro) — grão com profundidade (luz/sombra
   // própria) e leve ondulação, como se a correnteza do filtro moldasse a areia.
@@ -950,10 +959,11 @@ export function drawTankForeground(ctx, W, H, time, quality = 100, theme = "defa
     for (const clump of PLANTS_FRONT_TIER1)
       drawPlantClump(ctx, clump.x * W, H - 26, clump, time, 0.62, 46, 32);
   if (decorTier >= 2) {
+    // Espinhas de rocha saíram daqui (viraram background, sempre atrás dos
+    // peixes — ver drawTankBackground) — navio e baú são decoração de verdade
+    // e continuam no foreground, dando a sensação de profundidade.
     drawSunkenShip(ctx, W, H, time, murk);
-    drawObstacleSpire(ctx, W * 0.42, H, 92, murk);
     drawTreasureChest(ctx, W, H, time, murk);
-    drawObstacleSpire(ctx, W * 0.90, H, 70, murk);
   }
 
   // Algas/sujeira flutuando (mais e mais verdes conforme a água piora)
