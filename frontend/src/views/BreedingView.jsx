@@ -7,7 +7,7 @@ import { FishCanvas } from "../components/FishCanvas.jsx";
 import { Modal } from "../components/Modal.jsx";
 import { Coin } from "../components/Coin.jsx";
 import { CollectCelebration } from "../components/CollectCelebration.jsx";
-import { PeekAnchor } from "../components/PeekPanel.jsx";
+import { PeekPanel } from "../components/PeekPanel.jsx";
 import { bandOf, PT } from "../lib/fishRenderer.js";
 import { breedingPreview } from "../lib/generator.js";
 import { PART_PT, partSummary } from "../lib/format.js";
@@ -72,7 +72,7 @@ export function BreedingView({ tank, refreshTank, notify }) {
   const [quote, setQuote] = useState(null); // null = fechado, "loading" = carregando, objeto = pronto
   const [safety, setSafety] = useState("none"); // "none" | "stabilizer" | "insurance" — proteção do casal
   const [celebrate, setCelebrate] = useState(null); // { child, parentLosses }
-  const [peek, setPeek] = useState(null); // { x, y, creature } — janela flutuante ao pairar 1s
+  const [peekId, setPeekId] = useState(null); // id do peixe com o painel de detalhes aberto (pairar 1s)
   const peekTimer = useRef(null);
   const [, forceTick] = useState(0);
 
@@ -160,16 +160,13 @@ export function BreedingView({ tank, refreshTank, notify }) {
     await start();
   }
 
-  function schedulePeek(e, c) {
-    const rect = e.currentTarget.getBoundingClientRect();
+  function schedulePeek(c) {
     clearTimeout(peekTimer.current);
-    peekTimer.current = setTimeout(() => {
-      setPeek({ x: rect.left + rect.width / 2, y: rect.top, creature: c });
-    }, 1000);
+    peekTimer.current = setTimeout(() => setPeekId(c.id), 1000);
   }
   function cancelPeek() {
     clearTimeout(peekTimer.current);
-    setPeek(null);
+    setPeekId(null);
   }
 
   const candidates = [...tank.creatures, ...backpack.creatures];
@@ -239,13 +236,18 @@ export function BreedingView({ tank, refreshTank, notify }) {
                     "--tier": bandOf(Number(c.rarityScore)).color,
                     ...(picked ? { borderColor: "var(--tier)", boxShadow: "0 0 0 2px var(--tier)" } : {}),
                   }}
-                  onMouseEnter={(e) => schedulePeek(e, c)}
+                  onMouseEnter={() => schedulePeek(c)}
                   onMouseLeave={cancelPeek}
                 >
                   <button className="fish-stage as-button" onClick={() => togglePick(c)} title="Selecionar">
                     <FishCanvas seed={c.seed} isBred={c.isBred} parentASeed={c.parentASeed} parentBSeed={c.parentBSeed} />
                   </button>
                   <RarityBadge score={Number(c.rarityScore)} />
+                  {peekId === c.id && (
+                    <div className="peek-overlay">
+                      <PeekPanel creature={c} />
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -386,8 +388,6 @@ export function BreedingView({ tank, refreshTank, notify }) {
           onClose={() => setCelebrate(null)}
         />
       )}
-
-      {peek && <PeekAnchor x={peek.x} y={peek.y} creature={peek.creature} />}
     </>
   );
 }

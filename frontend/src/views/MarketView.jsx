@@ -34,7 +34,16 @@ export function MarketView({ userId, refreshTank, notify }) {
   }
 
   if (listings === null) return <p className="hint">Carregando mercado…</p>;
-  if (listings.length === 0) return <p className="hint">Nenhum peixe à venda no momento — seja o primeiro a listar.</p>;
+  if (listings.length === 0) return (
+    <div className="empty-state glass">
+      <span className="empty-state-icon">🐠</span>
+      <strong>O mercado está vazio</strong>
+      <p className="muted">
+        Ninguém está vendendo peixe agora — seja o primeiro. Vá até o <b>Tanque</b> ou a{" "}
+        <b>Mochila</b>, escolha um peixe e toque em "Vender".
+      </p>
+    </div>
+  );
 
   return (
     <>
