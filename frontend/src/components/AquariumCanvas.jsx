@@ -66,7 +66,7 @@ export const PIP_SUPPORTED = typeof window !== "undefined" && "documentPictureIn
 /** O aquário animado: peixes nadando, aura pra raros+, seleção por clique. */
 export const AquariumCanvas = forwardRef(function AquariumCanvas({
   creatures, selectedId, onSelect, interactive = true, ambient = false, quality = 100, theme = "default",
-  onPipChange,
+  decorTier = 0, onPipChange,
 }, ref) {
   const W = 960;
   const H = 480;
@@ -79,6 +79,7 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
   const selectedRef = useRef(null);
   const qualityRef = useRef(100);
   const themeRef = useRef("default");
+  const decorTierRef = useRef(0);
   const [hover, setHover] = useState(null);
   const [pipActive, setPipActive] = useState(false);
   const resScaleRef = useRef(1);
@@ -93,6 +94,7 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
   selectedRef.current = selectedId;
   qualityRef.current = quality;
   themeRef.current = theme;
+  decorTierRef.current = decorTier;
 
   // Resolução do canvas (backing store) acompanha o tamanho exibido × DPR, senão
   // ele fica com resolução fixa 960×480 esticada — nítido no card, borrado em tela cheia.
@@ -131,8 +133,9 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
       const speedFactor = 0.5 + 0.5 * (q / 100); // água suja → peixes mais lentos
 
       const th = themeRef.current;
+      const decor = decorTierRef.current;
       ctx.setTransform(resScaleRef.current, 0, 0, resScaleRef.current, 0, 0);
-      drawTankBackground(ctx, W, H, time, q, th);
+      drawTankBackground(ctx, W, H, time, q, th, decor);
 
       for (const c of creaturesRef.current) {
         let s = statesRef.current.get(c.id);
@@ -172,7 +175,7 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
         ctx.restore();
       }
 
-      drawTankForeground(ctx, W, H, time, q, th);
+      drawTankForeground(ctx, W, H, time, q, th, decor);
 
       if (!reducedMotion) raf = requestAnimationFrame(frame);
     }

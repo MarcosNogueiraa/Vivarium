@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.js";
-import { bandOf, PART_HEX, PT } from "../lib/fishRenderer.js";
+import { bandOf, decorTierOf, PART_HEX, PT } from "../lib/fishRenderer.js";
 import { FILTER_WARN_THRESHOLD, nextFishEta, tankFishSorted, tankPotential, tankSynergy } from "../lib/tankMath.js";
 import { AquariumCanvas, PIP_SUPPORTED } from "../components/AquariumCanvas.jsx";
 import { FishCanvas } from "../components/FishCanvas.jsx";
@@ -139,7 +139,9 @@ export function TankView({ tank, refresh, notify }) {
             <span className={`status-pill ${tank.online ? "on" : "off"}`}>
               <span className="led" />{tank.online ? "Online" : "Offline"}
             </span>
-            <span className="capacity-chip" title={`Peixes ativos no tanque / capacidade — faixa: ${tank.capacityBandName || "Aquário"}`}>
+            <span className="capacity-chip"
+              style={{ "--band-accent": ["inherit", "var(--r-raro)", "var(--r-lendario)"][decorTierOf(tank.capacityBandName)] }}
+              title={`Peixes ativos no tanque / capacidade — faixa: ${tank.capacityBandName || "Aquário"}`}>
               🐟 {tank.creatures.length}/{tank.capacity} <small>{tank.capacityBandName}</small>
             </span>
             <button className="guide-btn" onClick={() => setShowGuide(true)} title="Como funciona a raridade">?</button>
@@ -175,6 +177,7 @@ export function TankView({ tank, refresh, notify }) {
           ref={aquariumRef}
           creatures={tank.creatures} selectedId={selectedId}
           onSelect={setSelectedId} quality={Number(tank.maintenanceLevel)}
+          decorTier={decorTierOf(tank.capacityBandName)}
           interactive={clickEnabled} onPipChange={setPipActive}
         />
 

@@ -37,6 +37,15 @@ export const BANDS = [
 ];
 export const bandOf = (score) => BANDS.find((b) => score < b.max);
 
+// Nomes das faixas de capacidade do tanque, na ordem (espelha CapacityBands.All
+// no backend, TickConfig.cs — só os nomes de exibição, não a tabela inteira).
+const CAPACITY_BAND_NAMES = ["Aquário", "Aquário Grande", "Aquário Master"];
+/** Nome da faixa (vindo de `tank.capacityBandName`) → tier de decoração 0/1/2. */
+export const decorTierOf = (capacityBandName) => {
+  const i = CAPACITY_BAND_NAMES.indexOf(capacityBandName);
+  return i < 0 ? 0 : i;
+};
+
 const bodyPath = new Path2D(
   "M 130 210 C 155 150 235 125 305 138 C 348 147 376 178 384 210 " +
   "C 376 242 348 273 305 282 C 235 295 155 270 130 210 Z");
@@ -390,6 +399,59 @@ const PLANTS_FRONT = [
   { x: 0.74, h: 160, blades: 6, hue: 164 },
 ];
 
+// Decoração extra por faixa de capacidade (decorTier 0/1/2 — CLAUDE.md §8.15/16): tanque
+// maior "parece" maior por causa da decoração mais rica, não por mudar a área de nado.
+// Tier 0 (Aquário) não desenha nada daqui — visual idêntico ao original.
+const PLANTS_BACK_TIER1 = [{ x: 0.46, h: 260, blades: 7, hue: 176 }];
+const PLANTS_FRONT_TIER1 = [{ x: 0.48, h: 150, blades: 5, hue: 168 }];
+const ROCKS_TIER1 = [
+  { x: 0.14, w: 46, h: 30 }, { x: 0.53, w: 60, h: 38 }, { x: 0.80, w: 40, h: 26 },
+];
+
+function drawRockCluster(ctx, W, H) {
+  for (const r of ROCKS_TIER1) {
+    const cx = r.x * W;
+    const cy = H - 34;
+    ctx.fillStyle = "rgba(40, 52, 50, 0.85)";
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, r.w, r.h, 0, Math.PI, 0);
+    ctx.fill();
+    ctx.fillStyle = "rgba(70, 88, 84, 0.5)";
+    ctx.beginPath();
+    ctx.ellipse(cx - r.w * 0.2, cy - r.h * 0.35, r.w * 0.4, r.h * 0.3, 0, Math.PI, 0);
+    ctx.fill();
+  }
+}
+
+/** Baú do tesouro (tier 2, Aquário Master) — centerpiece com brilho piscando. */
+function drawTreasureChest(ctx, W, H, time) {
+  const cx = W * 0.5, baseY = H - 34, w = 74, h = 40;
+  ctx.save();
+  // corpo do baú
+  ctx.fillStyle = "#5a3a1e";
+  ctx.fillRect(cx - w / 2, baseY - h, w, h);
+  ctx.fillStyle = "#7a5028";
+  ctx.beginPath();
+  ctx.ellipse(cx, baseY - h, w / 2, 14, 0, Math.PI, 0);
+  ctx.fill();
+  // fivela dourada
+  ctx.fillStyle = "#d9b24c";
+  ctx.fillRect(cx - 6, baseY - h - 4, 12, 18);
+  // brilho piscando
+  const sparkle = 0.4 + 0.35 * Math.max(0, Math.sin(time / 900));
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  const glow = ctx.createRadialGradient(cx, baseY - h * 0.7, 0, cx, baseY - h * 0.7, 60);
+  glow.addColorStop(0, `rgba(255, 224, 140, ${sparkle})`);
+  glow.addColorStop(1, "rgba(255, 224, 140, 0)");
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(cx, baseY - h * 0.7, 60, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.restore();
+}
+
 function drawPlantClump(ctx, baseX, baseY, clump, time, alpha, sat, light) {
   const { h, blades, hue } = clump;
   for (let b = 0; b < blades; b++) {
@@ -412,7 +474,7 @@ function drawPlantClump(ctx, baseX, baseY, clump, time, alpha, sat, light) {
 const romanticTint = (hex, theme) => (theme === "breeding" ? mixHex(hex, "#ff6e93", 0.14) : hex);
 
 /** Fundo: gradiente de água, raios de luz, plantas de trás, substrato. */
-export function drawTankBackground(ctx, W, H, time, quality = 100, theme = "default") {
+export function drawTankBackground(ctx, W, H, time, quality = 100, theme = "default", decorTier = 0) {
   const murk = murkOf(quality);
 
   // 1. Profundidade da água — limpa (teal escuro) → turva (verde-podre) conforme a sujeira
@@ -437,10 +499,11 @@ export function drawTankBackground(ctx, W, H, time, quality = 100, theme = "defa
   ctx.fillStyle = surf;
   ctx.fillRect(0, 0, W, 70);
 
-  // 3. Raios de luz cáustica (diagonais, oscilando) — água suja bloqueia a luz
+  // 3. Raios de luz cáustica (diagonais, oscilando) — água suja bloqueia a luz.
+  // Faixas maiores (decorTier ≥ 1) têm luz um pouco mais viva — tanque "mais nobre".
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
-  const clarity = 1 - murk * 0.8;
+  const clarity = (1 - murk * 0.8) * (decorTier >= 1 ? 1.25 : 1);
   const beams = 4;
   for (let i = 0; i < beams; i++) {
     const sway = Math.sin(time / 4200 + i * 1.4) * 34;
@@ -459,9 +522,15 @@ export function drawTankBackground(ctx, W, H, time, quality = 100, theme = "defa
   }
   ctx.restore();
 
-  // 4. Plantas de trás (silhueta escura, atrás dos peixes)
+  // 4. Plantas de trás (silhueta escura, atrás dos peixes) — faixas maiores ganham
+  // um clump extra e um agrupamento de rochas, reforçando a sensação de mais espaço.
   for (const clump of PLANTS_BACK)
     drawPlantClump(ctx, clump.x * W, H - 30, clump, time, 0.5, 42, 24);
+  if (decorTier >= 1) {
+    for (const clump of PLANTS_BACK_TIER1)
+      drawPlantClump(ctx, clump.x * W, H - 30, clump, time, 0.5, 42, 24);
+    drawRockCluster(ctx, W, H);
+  }
 
   // 5. Substrato (areia/cascalho escuro)
   const bandH = 52;
@@ -498,12 +567,18 @@ function drawHeart(ctx, x, y, size, alpha) {
 }
 
 /** Frente: plantas da frente, partículas suspensas, bolhas, sujeira, vinheta de vidro. */
-export function drawTankForeground(ctx, W, H, time, quality = 100, theme = "default") {
+export function drawTankForeground(ctx, W, H, time, quality = 100, theme = "default", decorTier = 0) {
   const murk = murkOf(quality);
 
-  // Plantas da frente (um pouco mais claras)
+  // Plantas da frente (um pouco mais claras) — faixas maiores ganham decoração extra:
+  // Grande soma mais um clump; Master soma o baú do tesouro (centerpiece, §8.15/16).
   for (const clump of PLANTS_FRONT)
     drawPlantClump(ctx, clump.x * W, H - 26, clump, time, 0.62, 46, 32);
+  if (decorTier >= 1)
+    for (const clump of PLANTS_FRONT_TIER1)
+      drawPlantClump(ctx, clump.x * W, H - 26, clump, time, 0.62, 46, 32);
+  if (decorTier >= 2)
+    drawTreasureChest(ctx, W, H, time);
 
   // Algas/sujeira flutuando (mais e mais verdes conforme a água piora)
   if (murk > 0.05) {
@@ -580,10 +655,11 @@ export function drawTankForeground(ctx, W, H, time, quality = 100, theme = "defa
     ctx.restore();
   }
 
-  // Vinheta + escurecimento das bordas (sensação de olhar pra dentro do vidro)
+  // Vinheta + escurecimento das bordas (sensação de olhar pra dentro do vidro).
+  // Master (decorTier 2) ganha um leve tom dourado na vinheta — tanque "mais nobre".
   const vg = ctx.createRadialGradient(W / 2, H * 0.46, H * 0.28, W / 2, H * 0.5, H * 0.92);
   vg.addColorStop(0, "rgba(0, 0, 0, 0)");
-  vg.addColorStop(1, "rgba(1, 12, 16, 0.6)");
+  vg.addColorStop(1, decorTier >= 2 ? "rgba(24, 16, 4, 0.6)" : "rgba(1, 12, 16, 0.6)");
   ctx.fillStyle = vg;
   ctx.fillRect(0, 0, W, H);
 
