@@ -57,7 +57,7 @@ export function GameView({ onLogout }) {
   const premium = Number(tank.wallet?.PREMIUM ?? 0);
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${tab === "tank" ? " cinema-mode" : ""}`}>
       <header className="topbar">
         <div className="brand"><span className="dot" />Vivarium <small>aquário vivo</small></div>
         <span className="spacer" />

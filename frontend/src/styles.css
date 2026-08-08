@@ -314,7 +314,53 @@ input:focus {
 .filter-toggle input { width: 16px; height: 16px; padding: 0; flex: 0 0 auto; accent-color: var(--glow); }
 
 /* ---------- Tank stage ---------- */
-.tank-layout { display: flex; flex-direction: column; gap: 22px; }
+.tank-layout {
+  display: flex; flex-direction: column; gap: 22px;
+  position: relative;
+  isolation: isolate;
+}
+/* Efeito "cinema" (08/08/2026, pedido do usuário — modelo: modo cinema/teatro
+   do YouTube). Duas partes: 1) esta vinheta escurece o fundo ao redor do
+   tank-stage; 2) `.cinema-dim` (abaixo) apaga o brilho/saturação de tudo que
+   NÃO é o aquário (topbar + cards da própria aba) — sem isso, sobrava cor viva
+   demais fora do tanque e a sensação de "holofote" não pegava (feedback do
+   usuário depois da 1ª tentativa, só com vinheta). -2 fica atrás de tudo
+   (isolation acima cria um contexto próprio, esse z-index negativo não vaza
+   pro resto da página). */
+.tank-layout::before {
+  content: ""; position: absolute; inset: -20px; z-index: -2; pointer-events: none;
+  background: radial-gradient(ellipse 65% 55% at 50% 14%, transparent 0%, rgba(1, 6, 9, 0.5) 55%, rgba(0, 2, 3, 0.8) 100%);
+}
+
+/* Auréola de luz atrás do aquário — bleeds pra fora do stage (por isso um
+   wrapper à parte: o tank-stage tem overflow:hidden pro canvas arredondado,
+   o que cortaria qualquer brilho tentando escapar dele). Cor padrão aqua;
+   Master ganha um tom dourado, reforçando a moldura premium (abaixo). */
+.tank-spotlight { position: relative; isolation: isolate; }
+.tank-spotlight::before {
+  content: ""; position: absolute; inset: -80px -50px; z-index: -1; pointer-events: none;
+  border-radius: 60px;
+  background: radial-gradient(closest-side, rgba(84, 230, 209, 0.32), rgba(84, 230, 209, 0.12) 45%, transparent 75%);
+  filter: blur(8px);
+}
+.tank-spotlight.tier-master::before {
+  background: radial-gradient(closest-side, rgba(240, 190, 90, 0.4), rgba(240, 190, 90, 0.15) 45%, transparent 75%);
+}
+
+/* Apaga cor/brilho de tudo que não é o próprio aquário — o "resto da tela"
+   que sobrava vivo demais na 1ª tentativa do efeito cinema. Some ao passar o
+   mouse (mesmo princípio do modo teatro do YouTube: os controles/página ao
+   redor voltam ao normal quando você precisa interagir com eles). */
+.cinema-dim {
+  filter: brightness(0.42) saturate(0.45);
+  transition: filter 0.25s ease;
+}
+.cinema-dim:hover, .cinema-dim:focus-within { filter: none; }
+.app-shell.cinema-mode .topbar {
+  filter: brightness(0.5) saturate(0.5);
+  transition: filter 0.25s ease;
+}
+.app-shell.cinema-mode .topbar:hover, .app-shell.cinema-mode .topbar:focus-within { filter: none; }
 
 .tank-stage {
   position: relative;
@@ -331,6 +377,19 @@ input:focus {
   content: ""; position: absolute; inset: 0; pointer-events: none;
   border-radius: 20px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 -40px 60px -34px rgba(0, 0, 0, 0.4);
+}
+/* Moldura premium do Aquário Master (08/08/2026) — a "premiumidade" saiu de
+   dentro d'água (brigava com a sujeira/murk, feedback do usuário: "lateral
+   parece suja") e virou uma moldura de verdade ao redor do vidro: bezel
+   escuro + friso dourado fino, como um aquário de exposição. */
+.tank-stage.tier-master {
+  border-color: #3a2a12;
+  box-shadow:
+    0 0 0 3px #1c130a,
+    0 0 0 4px rgba(240, 190, 90, 0.55),
+    0 32px 70px -34px rgba(0, 0, 0, 0.65),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    inset 0 0 30px rgba(240, 190, 90, 0.10);
 }
 .aquarium { display: block; width: 100%; height: auto; cursor: pointer; }
 .aquarium.ambient { cursor: default; }
