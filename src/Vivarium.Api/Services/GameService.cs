@@ -436,6 +436,7 @@ public class GameService(VivariumDbContext db)
             .ToDictionaryAsync(x => x.Code, x => x.Amount);
         var coinsPerHour = await CoinsPerHourAsync(habitat);
         bool isAdmin = await db.Users.Where(u => u.Id == userId).Select(u => u.IsAdmin).FirstAsync();
+        decimal filterCapacity = await FilterCapacityAsync(userId);
 
         return ServiceResult.Success(new TankResponse(
             HabitatTicker.IsOnline(habitat.LastHeartbeatAt, now, TickConfig.Default),
@@ -451,7 +452,8 @@ public class GameService(VivariumDbContext db)
             isAdmin,
             CapacityBands.BandFor(habitat.Capacity).Name,
             CapacityBands.MaxCapacity,
-            CapacityBands.BandFor(habitat.Capacity).DegradationBandFactor));
+            CapacityBands.BandFor(habitat.Capacity).DegradationBandFactor,
+            filterCapacity));
     }
 
     // Transferência direta entre contas (negociação externa é responsabilidade

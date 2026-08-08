@@ -424,6 +424,67 @@ function drawRockCluster(ctx, W, H) {
 }
 
 /**
+ * Navio afundado (tier 2, Aquário Master) — desenhado no FOREGROUND (depois dos
+ * peixes, CLAUDE.md §8.16), então qualquer peixe que passe por trás da silhueta
+ * fica coberto por ela — dá a sensação de profundidade/camadas que só decoração
+ * de fundo (sempre atrás de tudo) não consegue.
+ */
+function drawSunkenShip(ctx, W, H, time) {
+  const cx = W * 0.20, baseY = H - 30;
+  ctx.save();
+  ctx.translate(cx, baseY);
+  ctx.rotate(-0.10); // tombado de lado, meio enterrado no substrato
+
+  // Casco
+  ctx.fillStyle = "#2e2622";
+  ctx.beginPath();
+  ctx.moveTo(-95, 0);
+  ctx.quadraticCurveTo(-100, -34, -60, -42);
+  ctx.lineTo(70, -40);
+  ctx.quadraticCurveTo(100, -30, 88, 0);
+  ctx.closePath();
+  ctx.fill();
+  // Convés e casco superior, tom um pouco mais claro
+  ctx.fillStyle = "#3d332c";
+  ctx.beginPath();
+  ctx.moveTo(-55, -40);
+  ctx.lineTo(60, -38);
+  ctx.lineTo(50, -54);
+  ctx.lineTo(-40, -55);
+  ctx.closePath();
+  ctx.fill();
+  // Vigias (portholes)
+  ctx.fillStyle = "rgba(20, 60, 60, 0.7)";
+  for (const px of [-30, 0, 30]) {
+    ctx.beginPath();
+    ctx.arc(px, -20, 6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Algas cobrindo o casco
+  ctx.fillStyle = "rgba(60, 110, 60, 0.35)";
+  ctx.beginPath();
+  ctx.ellipse(-40, -10, 30, 14, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Mastro quebrado + farrapo de vela balançando
+  ctx.strokeStyle = "#3d332c";
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(20, -50);
+  ctx.lineTo(30, -120);
+  ctx.stroke();
+  const sway = Math.sin(time / 1600) * 8;
+  ctx.fillStyle = "rgba(150, 160, 150, 0.28)";
+  ctx.beginPath();
+  ctx.moveTo(30, -118);
+  ctx.quadraticCurveTo(46 + sway, -100, 34, -80);
+  ctx.quadraticCurveTo(30, -100, 30, -118);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+/**
  * Baú do tesouro (tier 2, Aquário Master) — decoração ambiente, não interativa.
  * Fora do centro (não compete com a área de clique dos peixes) e com um brilho
  * pequeno e lento (não pulsa como os botões reais do jogo, ex: recompensa diária —
@@ -461,6 +522,32 @@ function drawTreasureChest(ctx, W, H, time) {
     ctx.fill();
   }
   ctx.restore();
+  ctx.restore();
+}
+
+/**
+ * Espinha de rocha alta (tier 2, Aquário Master) — obstáculo vertical no FOREGROUND
+ * (fish passam por trás, mesma ideia do navio) pra quebrar o plano horizontal e
+ * reforçar a sensação de profundidade/camadas.
+ */
+function drawObstacleSpire(ctx, x, H, hgt) {
+  const baseY = H - 28;
+  ctx.save();
+  ctx.fillStyle = "rgba(46, 58, 56, 0.92)";
+  ctx.beginPath();
+  ctx.moveTo(x - 26, baseY);
+  ctx.quadraticCurveTo(x - 20, baseY - hgt * 0.55, x - 6, baseY - hgt);
+  ctx.quadraticCurveTo(x + 4, baseY - hgt * 0.6, x + 22, baseY);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "rgba(80, 98, 92, 0.45)";
+  ctx.beginPath();
+  ctx.moveTo(x - 14, baseY);
+  ctx.quadraticCurveTo(x - 10, baseY - hgt * 0.5, x - 4, baseY - hgt * 0.9);
+  ctx.lineTo(x + 2, baseY - hgt * 0.85);
+  ctx.quadraticCurveTo(x - 2, baseY - hgt * 0.4, x - 2, baseY);
+  ctx.closePath();
+  ctx.fill();
   ctx.restore();
 }
 
@@ -589,8 +676,12 @@ export function drawTankForeground(ctx, W, H, time, quality = 100, theme = "defa
   if (decorTier >= 1)
     for (const clump of PLANTS_FRONT_TIER1)
       drawPlantClump(ctx, clump.x * W, H - 26, clump, time, 0.62, 46, 32);
-  if (decorTier >= 2)
+  if (decorTier >= 2) {
+    drawSunkenShip(ctx, W, H, time);
+    drawObstacleSpire(ctx, W * 0.42, H, 92);
     drawTreasureChest(ctx, W, H, time);
+    drawObstacleSpire(ctx, W * 0.90, H, 70);
+  }
 
   // Algas/sujeira flutuando (mais e mais verdes conforme a água piora)
   if (murk > 0.05) {

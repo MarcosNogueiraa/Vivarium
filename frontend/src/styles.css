@@ -516,7 +516,9 @@ input:focus {
 .store-card { justify-content: space-between; min-height: 150px; }
 .store-card strong { font-family: var(--display); font-size: 1.15rem; font-weight: 600; }
 .store-card p { font-size: 0.86rem; line-height: 1.5; flex: 1; }
-.owned { color: var(--r-incomum); font-weight: 700; font-size: 0.85rem; }
+.owned { color: var(--muted); font-weight: 700; font-size: 0.85rem; }
+.owned-active { color: var(--r-incomum) !important; }
+.filter-status-card { background: rgba(84, 230, 209, 0.05); border-color: rgba(84, 230, 209, 0.25); }
 
 /* ---------- Badges ---------- */
 .badge {
