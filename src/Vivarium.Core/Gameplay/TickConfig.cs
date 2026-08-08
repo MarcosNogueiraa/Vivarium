@@ -143,18 +143,32 @@ public static class CapacityBands
     }
 
     /// <summary>
-    /// Preço de subir a capacidade em +1 a partir de <paramref name="currentCapacity"/>. Quando
-    /// essa compra cruza pro teto de uma faixa nova (capacidade atual já no teto da faixa
-    /// atual), cobra o <see cref="CapacityBand.TransitionCost"/> da faixa de destino — bem
-    /// acima da curva suave — em vez de continuá-la, pra exigir farm real de moedas na troca de
-    /// aquário (08/08/2026, pedido do usuário), não ser só mais um incremento.
+    /// Preço da curva suave de upgrade DENTRO da faixa atual (não considera transição —
+    /// ver <see cref="PriceForUpgrade"/> pra isso). Usado tanto pelo item genérico
+    /// "Upgrade de tanque" (§8.17) quanto internamente por <see cref="PriceForUpgrade"/>.
+    /// </summary>
+    public static decimal SmoothPrice(int currentCapacity)
+    {
+        var band = BandFor(currentCapacity);
+        return Math.Ceiling(band.PriceBase * (decimal)Math.Pow(band.PriceGrowth, currentCapacity - band.MinCapacity));
+    }
+
+    /// <summary>
+    /// Preço de subir a capacidade em +1 a partir de <paramref name="currentCapacity"/> — usado
+    /// pra modelar o "próximo passo" independente de qual item da loja cobre ele (simulador de
+    /// calibração, `Vivarium.Simulation`). Quando essa compra cruza pro teto de uma faixa nova
+    /// (capacidade atual já no teto da faixa atual), retorna o <see cref="CapacityBand.TransitionCost"/>
+    /// da faixa de destino — bem acima da curva suave — em vez de continuá-la, pra exigir farm
+    /// real de moedas na troca de aquário (08/08/2026, pedido do usuário), não ser só mais um
+    /// incremento. Na loja de verdade (`ItemService`), esses dois casos são produtos SEPARADOS
+    /// (§8.17) — esta função só serve pra simular "quanto custa o próximo peixe de capacidade".
     /// </summary>
     public static decimal PriceForUpgrade(int currentCapacity)
     {
         var band = BandFor(currentCapacity);
         if (currentCapacity >= band.MaxCapacity && currentCapacity < MaxCapacity)
             return BandFor(currentCapacity + 1).TransitionCost;
-        return Math.Ceiling(band.PriceBase * (decimal)Math.Pow(band.PriceGrowth, currentCapacity - band.MinCapacity));
+        return SmoothPrice(currentCapacity);
     }
 }
 

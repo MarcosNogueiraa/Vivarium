@@ -161,6 +161,24 @@ public class VivariumDbContext(DbContextOptions<VivariumDbContext> options) : Db
                     Id = 5, Key = "auto_filter_3", Name = "Filtro Automático III",
                     Category = ItemCategory.AutoFilter,
                     EffectJson = """{"filterCapacity":18}""", PriceSoft = 2500m,
+                },
+                new ItemDefinition
+                {
+                    // Produto SEPARADO do "tank_upgrade" (08/08/2026, §8.17) — trocar de
+                    // aquário é uma decisão/gasto distinto do upgrade suave dentro do mesmo
+                    // aquário. Preço fixo = CapacityBands.AquarioGrande.TransitionCost;
+                    // só comprável com capacidade exatamente 5 (ItemService.TankRelatedState).
+                    Id = 6, Key = "aquario_grande", Name = "Aquário Grande",
+                    Category = ItemCategory.HabitatUpgrade,
+                    EffectJson = """{"capacityDelta":1}""", PriceSoft = 4000m,
+                },
+                new ItemDefinition
+                {
+                    // Preço fixo = CapacityBands.AquarioMaster.TransitionCost; só comprável
+                    // com capacidade exatamente 10.
+                    Id = 7, Key = "aquario_master", Name = "Aquário Master",
+                    Category = ItemCategory.HabitatUpgrade,
+                    EffectJson = """{"capacityDelta":1}""", PriceSoft = 12000m,
                 });
         });
 

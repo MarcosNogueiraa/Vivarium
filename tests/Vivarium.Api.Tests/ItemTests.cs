@@ -12,18 +12,22 @@ public class ItemTests : IClassFixture<VivariumApiFactory>
     public ItemTests(VivariumApiFactory factory) => _factory = factory;
 
     [Fact]
-    public async Task Catalogo_ListaOsCincoItensDoMvp()
+    public async Task Catalogo_ListaOsSeteItensDoMvp()
     {
         var (client, _) = await _factory.RegisterAsync("lojista1");
 
         var items = await client.GetFromJsonAsync<List<ItemDto>>("/api/items/");
 
-        Assert.Equal(5, items!.Count);
+        Assert.Equal(7, items!.Count);
         Assert.Contains(items, i => i.Key == "filter_basic" && i.Price == 20m);
         Assert.Contains(items, i => i.Key == "auto_filter" && i.Price == 500m && !i.Owned);
         Assert.Contains(items, i => i.Key == "auto_filter_2" && i.Price == 1200m && !i.Owned);
         Assert.Contains(items, i => i.Key == "auto_filter_3" && i.Price == 2500m && !i.Owned);
-        Assert.Contains(items, i => i.Key == "tank_upgrade" && i.Price == 50m);
+        Assert.Contains(items, i => i.Key == "tank_upgrade" && i.Price == 50m && !i.Locked);
+        // Aquário Grande/Master: preço fixo (TransitionCost), bloqueados até a capacidade
+        // atual (3, recém-registrado) chegar no respectivo teto.
+        Assert.Contains(items, i => i.Key == "aquario_grande" && i.Price == 4000m && i.Locked && !i.Owned);
+        Assert.Contains(items, i => i.Key == "aquario_master" && i.Price == 12000m && i.Locked && !i.Owned);
     }
 
     [Fact]
@@ -61,23 +65,58 @@ public class ItemTests : IClassFixture<VivariumApiFactory>
     }
 
     [Fact]
-    public async Task ComprarUpgrade_NoTetoDaFaixa_CobraOCustoDeTransicao()
+    public async Task NoTetoDaFaixa_TankUpgradeFicaBloqueadoEAquarioGrandeVirouComprável()
     {
         var (client, userId) = await _factory.RegisterAsync("lojista9");
         await _factory.WithDbAsync(async db =>
         {
             var habitat = await db.Habitats.FirstAsync(h => h.UserId == userId && h.HabitatType!.Code == "Aquarium");
-            habitat.Capacity = 5; // teto do Aquário — próxima compra cruza pro Aquário Grande
+            habitat.Capacity = 5; // teto do Aquário
+        });
+
+        // "Upgrade de tanque" (curva suave) não serve mais pra cruzar de faixa — bloqueado.
+        var blocked = await client.PostAsync("/api/items/tank_upgrade/buy", null);
+        Assert.Equal(HttpStatusCode.BadRequest, blocked.StatusCode);
+
+        var items = await client.GetFromJsonAsync<List<ItemDto>>("/api/items/");
+        Assert.True(items!.First(i => i.Key == "tank_upgrade").Locked);
+        Assert.False(items!.First(i => i.Key == "aquario_grande").Locked);
+    }
+
+    [Fact]
+    public async Task ComprarAquarioGrande_ProdutoSeparado_CobraOCustoDeTransicao()
+    {
+        var (client, userId) = await _factory.RegisterAsync("lojista10");
+        await _factory.WithDbAsync(async db =>
+        {
+            var habitat = await db.Habitats.FirstAsync(h => h.UserId == userId && h.HabitatType!.Code == "Aquarium");
+            habitat.Capacity = 5; // teto do Aquário — só agora "Aquário Grande" fica comprável
             var wallet = await db.WalletBalances.FirstAsync(w => w.UserId == userId && w.CurrencyTypeId == 1);
             wallet.Amount = 10000m;
         });
 
-        var response = await client.PostAsync("/api/items/tank_upgrade/buy", null);
+        var response = await client.PostAsync("/api/items/aquario_grande/buy", null);
         response.EnsureSuccessStatusCode();
 
         var tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
         Assert.Equal(6, tank!.Capacity);
         Assert.Equal(10000m - CapacityBands.AquarioGrande.TransitionCost, tank.Wallet["SOFT"]);
+
+        // Depois de trocar, o item vira "owned" (não compra de novo) e "Upgrade de tanque"
+        // volta a valer, já dentro do Aquário Grande.
+        var items = await client.GetFromJsonAsync<List<ItemDto>>("/api/items/");
+        Assert.True(items!.First(i => i.Key == "aquario_grande").Owned);
+        Assert.False(items!.First(i => i.Key == "tank_upgrade").Locked);
+    }
+
+    [Fact]
+    public async Task ComprarAquarioGrande_AntesDoTeto_Retorna400()
+    {
+        var (client, _) = await _factory.RegisterAsync("lojista11");
+        // Capacidade inicial é 3, ainda longe do teto do Aquário (5) — "Aquário Grande"
+        // deveria estar bloqueado (Locked), não comprável.
+        var response = await client.PostAsync("/api/items/aquario_grande/buy", null);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
@@ -153,5 +192,7 @@ public class ItemTests : IClassFixture<VivariumApiFactory>
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    public record ItemDto(string Key, string Name, string Category, decimal Price, bool Owned);
+    public record ItemDto(
+        string Key, string Name, string Category, decimal Price, bool Owned,
+        bool Locked = false, string? LockedReason = null);
 }
