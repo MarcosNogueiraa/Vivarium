@@ -10,10 +10,11 @@ import { reducedMotion } from "../lib/motion.js";
 const FISH_CX = 290;
 const FISH_CY = 210;
 
-// Escala do peixe no aquário — 70% do tamanho original (pedido do usuário: com
-// 15 peixes o tanque ficava muito cheio). Única fonte pra escala/aura/hitbox
-// de clique, todos proporcionais a ela (evita dessincronizar de novo).
-const FISH_SCALE = 0.34 * 0.7;
+// Escala do peixe no aquário — 80% do tamanho original (era 70%: com 15 peixes
+// o tanque ficava muito cheio, mas depois de testar ficou pequeno demais —
+// meio-termo). Única fonte pra escala/aura/hitbox de clique, todos
+// proporcionais a ela (evita dessincronizar de novo).
+const FISH_SCALE = 0.34 * 0.8;
 
 // Aura que segue o CONTORNO do peixe: rasteriza a silhueta uma vez, tinge na cor
 // e aplica blur; desenhada atrás do peixe vira um brilho abraçando a forma.
@@ -190,8 +191,8 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
 
       // Distância mínima entre peixes (qualquer cor) — separação, pra nunca
       // ficarem sobrepostos mesmo quando a coesão de cardume os aproxima.
-      // Proporcional ao novo tamanho do peixe (70% do original).
-      const MIN_FISH_DIST = 95 * 0.7;
+      // Proporcional ao tamanho do peixe (FISH_SCALE).
+      const MIN_FISH_DIST = 95 * (FISH_SCALE / 0.34);
       const fishList = creaturesRef.current;
       for (let i = 0; i < fishList.length; i++) {
         const si = statesRef.current.get(fishList[i].id);
@@ -221,10 +222,18 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
           // próprios por cima disso — é isso que dá a sensação de "tenta
           // acompanhar, mas não de forma seca". Piso de velocidade evita travar
           // perto do líder (mesma proteção de antes).
+          // Coeficientes reduzidos (08/08/2026, feedback: cardume "se movimentando
+          // pouco") — os valores originais (0.5/0.35/0.5) prendiam o seguidor tão
+          // perto da trajetória do líder que a própria virada independente dele
+          // (nextTurnAt) era anulada quase instantaneamente pelo blend de vx,
+          // deixando o grupo parecer um bloco rígido em vez de peixes nadando.
+          // Mais fraco = mais tempo pra virada/vx próprios aparecerem visualmente
+          // antes de serem puxados de volta — ainda convergem, só que devagar o
+          // bastante pra dar vida ao cardume.
           const ls = leader.s;
-          s.x += (ls.x - s.x) * 0.5 * dt;
-          s.y += (ls.y - s.y) * 0.35 * dt;
-          s.vx += (ls.vx - s.vx) * 0.5 * dt;
+          s.x += (ls.x - s.x) * 0.3 * dt;
+          s.y += (ls.y - s.y) * 0.22 * dt;
+          s.vx += (ls.vx - s.vx) * 0.18 * dt;
           const minSpeed = s.baseSpeed * 0.6;
           if (Math.abs(s.vx) < minSpeed) s.vx = Math.sign(s.vx || 1) * minSpeed;
         } else if (leader && leader.id === c.id) {

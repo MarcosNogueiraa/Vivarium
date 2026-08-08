@@ -810,19 +810,23 @@ export const SUBSTRATE_BAND_H = 52;
 /** Fundo: gradiente de água, raios de luz, plantas de trás, substrato. */
 export function drawTankBackground(ctx, W, H, time, quality = 100, theme = "default", decorTier = 0) {
   const murk = murkOf(quality);
+  // Master (decorTier 2) tem a filtragem mais forte do jogo (CLAUDE.md 8.15) —
+  // a água suja pesa menos na leitura visual, pra não competir com o "premium"
+  // do resto da decoração (pedido do usuário: laterais ficavam parecendo sujas).
+  const waterMurk = decorTier >= 2 ? murk * 0.45 : murk;
 
   // 1. Profundidade da água — limpa (teal escuro) → turva (verde-podre) conforme a sujeira
   const water = ctx.createLinearGradient(0, 0, 0, H);
-  water.addColorStop(0, romanticTint(mixHex("#0e4d5b", "#2f4420", murk), theme));
-  water.addColorStop(0.35, romanticTint(mixHex("#0a3543", "#243714", murk), theme));
-  water.addColorStop(0.72, romanticTint(mixHex("#072530", "#182611", murk), theme));
-  water.addColorStop(1, romanticTint(mixHex("#03151c", "#0d160a", murk), theme));
+  water.addColorStop(0, romanticTint(mixHex("#0e4d5b", "#2f4420", waterMurk), theme));
+  water.addColorStop(0.35, romanticTint(mixHex("#0a3543", "#243714", waterMurk), theme));
+  water.addColorStop(0.72, romanticTint(mixHex("#072530", "#182611", waterMurk), theme));
+  water.addColorStop(1, romanticTint(mixHex("#03151c", "#0d160a", waterMurk), theme));
   ctx.fillStyle = water;
   ctx.fillRect(0, 0, W, H);
 
   // Névoa verde (aumenta com a sujeira)
-  if (murk > 0.02) {
-    ctx.fillStyle = `rgba(90, 130, 45, ${0.28 * murk})`;
+  if (waterMurk > 0.02) {
+    ctx.fillStyle = `rgba(90, 130, 45, ${0.28 * waterMurk})`;
     ctx.fillRect(0, 0, W, H);
   }
 
@@ -950,6 +954,9 @@ function drawHeart(ctx, x, y, size, alpha) {
 /** Frente: plantas da frente, partículas suspensas, bolhas, sujeira, vinheta de vidro. */
 export function drawTankForeground(ctx, W, H, time, quality = 100, theme = "default", decorTier = 0) {
   const murk = murkOf(quality);
+  // Mesma redução do Master aplicada no background (filtragem mais forte, 8.15)
+  // — algas flutuantes e película verde nas bordas do vidro pesam menos aqui.
+  const edgeMurk = decorTier >= 2 ? murk * 0.45 : murk;
 
   // Plantas da frente (um pouco mais claras) — faixas maiores ganham decoração extra:
   // Grande soma mais um clump; Master soma o baú do tesouro (centerpiece, §8.15/16).
@@ -967,16 +974,16 @@ export function drawTankForeground(ctx, W, H, time, quality = 100, theme = "defa
   }
 
   // Algas/sujeira flutuando (mais e mais verdes conforme a água piora)
-  if (murk > 0.05) {
+  if (edgeMurk > 0.05) {
     ctx.save();
-    const flakes = Math.round(murk * 60);
+    const flakes = Math.round(edgeMurk * 60);
     for (let i = 0; i < flakes; i++) {
       const drift = Math.sin(time / 2000 + i * 1.3) * 24;
       const px = (hash01(i * 1.7) * W + drift + W) % W;
       const py = (hash01(i * 2.3) * H + (time / 1000) * (3 + hash01(i) * 6)) % H;
       const r = 1 + hash01(i * 3.1) * 3.5;
-      ctx.globalAlpha = 0.18 + hash01(i * 4.4) * 0.34 * murk;
-      ctx.fillStyle = `hsl(${80 + hash01(i) * 40}, ${40 + murk * 30}%, ${28 + hash01(i * 2) * 16}%)`;
+      ctx.globalAlpha = 0.18 + hash01(i * 4.4) * 0.34 * edgeMurk;
+      ctx.fillStyle = `hsl(${80 + hash01(i) * 40}, ${40 + edgeMurk * 30}%, ${28 + hash01(i * 2) * 16}%)`;
       ctx.beginPath();
       ctx.arc(px, py, r, 0, Math.PI * 2);
       ctx.fill();
@@ -985,10 +992,10 @@ export function drawTankForeground(ctx, W, H, time, quality = 100, theme = "defa
 
     // Película de algas nas bordas do vidro
     const edge = ctx.createLinearGradient(0, 0, 0, H);
-    edge.addColorStop(0, `rgba(70, 110, 40, ${0.22 * murk})`);
+    edge.addColorStop(0, `rgba(70, 110, 40, ${0.22 * edgeMurk})`);
     edge.addColorStop(0.15, "rgba(70, 110, 40, 0)");
     edge.addColorStop(0.85, "rgba(60, 95, 35, 0)");
-    edge.addColorStop(1, `rgba(50, 85, 30, ${0.3 * murk})`);
+    edge.addColorStop(1, `rgba(50, 85, 30, ${0.3 * edgeMurk})`);
     ctx.fillStyle = edge;
     ctx.fillRect(0, 0, W, H);
   }
@@ -1050,12 +1057,39 @@ export function drawTankForeground(ctx, W, H, time, quality = 100, theme = "defa
   }
 
   // Vinheta + escurecimento das bordas (sensação de olhar pra dentro do vidro).
-  // Master (decorTier 2) ganha um leve tom dourado na vinheta — tanque "mais nobre".
+  // Master (decorTier 2, 08/08/2026 revisado): a vinheta antiga era um marrom
+  // escuro (rgba(24,16,4)) que, por cima da névoa verde da água, lia como
+  // "sujo" em vez de "nobre" (feedback do usuário). Trocado por um tom neutro
+  // mais escuro (sem componente verde) — o dourado de verdade vem do rim de luz
+  // abaixo, não da própria vinheta.
   const vg = ctx.createRadialGradient(W / 2, H * 0.46, H * 0.28, W / 2, H * 0.5, H * 0.92);
   vg.addColorStop(0, "rgba(0, 0, 0, 0)");
-  vg.addColorStop(1, decorTier >= 2 ? "rgba(24, 16, 4, 0.6)" : "rgba(1, 12, 16, 0.6)");
+  vg.addColorStop(1, decorTier >= 2 ? "rgba(8, 6, 2, 0.62)" : "rgba(1, 12, 16, 0.6)");
   ctx.fillStyle = vg;
   ctx.fillRect(0, 0, W, H);
+
+  // Rim de luz dourada nas bordas laterais — só o Master (decorTier 2). Em vez
+  // de escurecer com um tom marrom (lia como sujeira misturado à névoa verde),
+  // um brilho quente aditivo ("lighter") ao longo das duas laterais, que "corta"
+  // por cima da água suja em vez de se misturar a ela — leitura de moldura de
+  // vidro premium, não de vinheta suja.
+  if (decorTier >= 2) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const rimW = W * 0.16;
+    const pulse = 0.75 + 0.25 * Math.sin(time / 2600);
+    const left = ctx.createLinearGradient(0, 0, rimW, 0);
+    left.addColorStop(0, `rgba(240, 190, 90, ${0.16 * pulse})`);
+    left.addColorStop(1, "rgba(240, 190, 90, 0)");
+    ctx.fillStyle = left;
+    ctx.fillRect(0, 0, rimW, H);
+    const right = ctx.createLinearGradient(W, 0, W - rimW, 0);
+    right.addColorStop(0, `rgba(240, 190, 90, ${0.16 * pulse})`);
+    right.addColorStop(1, "rgba(240, 190, 90, 0)");
+    ctx.fillStyle = right;
+    ctx.fillRect(W - rimW, 0, rimW, H);
+    ctx.restore();
+  }
 
   // Reflexo de vidro no topo (leve faixa clara)
   const glass = ctx.createLinearGradient(0, 0, W * 0.4, H * 0.35);
