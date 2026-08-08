@@ -24,9 +24,24 @@ export function BackpackView({ refreshTank, notify }) {
   const [sortBy, setSortBy] = useState("rarity-desc");
   const [bandFilter, setBandFilter] = useState("all");
   const [onlyBred, setOnlyBred] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState(() => new Set());
+  const [bulkConfirm, setBulkConfirm] = useState(false);
 
   const refresh = useCallback(async () => { setData(await api.backpack()); }, []);
   useEffect(() => { refresh().catch((e) => notify(e.message)); }, [refresh, notify]);
+
+  function toggleSelectMode() {
+    setSelectMode((v) => !v);
+    setSelected(new Set());
+  }
+  function toggleSelected(c) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(c.id)) next.delete(c.id); else next.add(c.id);
+      return next;
+    });
+  }
 
   async function deploy(c) {
     try {
@@ -67,6 +82,39 @@ export function BackpackView({ refreshTank, notify }) {
       .sort(SORTS[sortBy].cmp);
   }, [data, sortBy, bandFilter, onlyBred]);
 
+  const selectedCreatures = visible.filter((c) => selected.has(c.id));
+  const selectedTotal = selectedCreatures.reduce((sum, c) => sum + vendorPriceOf(Number(c.rarityScore)), 0);
+
+  function selectAllVisible() { setSelected(new Set(visible.map((c) => c.id))); }
+  function clearSelection() { setSelected(new Set()); }
+
+  async function confirmBulkSellVendor() {
+    const ids = [...selected];
+    // Sequencial, não Promise.all: o Habitat usa concorrência otimista (xmin,
+    // CLAUDE.md 12.1) — vários pedidos em paralelo tentando atualizar a mesma
+    // linha (o tick roda antes de cada venda) colidem e voltam 409 na maioria.
+    // Um de cada vez evita a corrida.
+    let okCount = 0;
+    let total = 0;
+    for (const id of ids) {
+      try {
+        const { price } = await api.sellToVendor(id);
+        okCount++;
+        total += Number(price);
+      } catch { /* segue pro próximo; contabilizado como falha abaixo */ }
+    }
+    const failCount = ids.length - okCount;
+    setBulkConfirm(false);
+    setSelectMode(false);
+    setSelected(new Set());
+    notify(
+      failCount === 0
+        ? `${okCount} peixe(s) vendido(s) por ${total.toFixed(0)} moedas.`
+        : `${okCount} vendido(s) por ${total.toFixed(0)} moedas — ${failCount} falharam (tente de novo).`
+    );
+    await Promise.all([refresh(), refreshTank()]);
+  }
+
   if (data === null) return <p className="hint">Carregando mochila…</p>;
 
   return (
@@ -104,31 +152,65 @@ export function BackpackView({ refreshTank, notify }) {
               <input type="checkbox" checked={onlyBred} onChange={(e) => setOnlyBred(e.target.checked)} />
               Só filhotes 🐣
             </label>
+            <span className="spacer" />
+            <button className={`select-mode-btn${selectMode ? " active" : ""}`} onClick={toggleSelectMode}
+              title={selectMode ? "Sair da seleção" : "Selecionar vários peixes (ex: vender ao NPC de uma vez)"}>
+              {selectMode ? "✕ Cancelar seleção" : "☑️ Selecionar"}
+            </button>
           </div>
+          {selectMode && (
+            <div className="select-toolbar">
+              <span className="muted">{selected.size} selecionado(s)</span>
+              <button onClick={selectAllVisible}>Selecionar todos ({visible.length})</button>
+              {selected.size > 0 && <button onClick={clearSelection}>Limpar</button>}
+            </div>
+          )}
           {visible.length === 0 ? (
             <p className="hint">Nenhum peixe corresponde a esse filtro.</p>
           ) : (
-            <div className="grid">
-              {visible.map((c) => (
-                <div key={c.id} className="card" style={{ "--tier": bandOf(Number(c.rarityScore)).color }}>
-                  <button className="fish-stage as-button" onClick={() => setDetail(c)} title="Ver detalhes">
+            <div className="grid" style={{ paddingBottom: selectMode && selected.size > 0 ? 70 : 0 }}>
+              {visible.map((c) => {
+                const isSelected = selected.has(c.id);
+                return (
+                <div key={c.id} className="card" style={{
+                  "--tier": bandOf(Number(c.rarityScore)).color,
+                  ...(selectMode && isSelected ? { borderColor: "var(--tier)", boxShadow: "0 0 0 2px var(--tier)" } : {}),
+                }}>
+                  <button
+                    className="fish-stage as-button"
+                    onClick={() => selectMode ? toggleSelected(c) : setDetail(c)}
+                    title={selectMode ? "Selecionar" : "Ver detalhes"}
+                  >
                     <FishCanvas seed={c.seed} isBred={c.isBred} parentASeed={c.parentASeed} parentBSeed={c.parentBSeed} />
+                    {selectMode && <span className={`select-check${isSelected ? " checked" : ""}`}>{isSelected ? "✓" : ""}</span>}
                   </button>
                   <div className="card-row">
                     <RarityBadge score={Number(c.rarityScore)} />
                     <span className="produces mono">~{coinsPerHourOf(Number(c.rarityScore)).toFixed(1)}/h</span>
                   </div>
                   {c.isBred && <span className="bred-tag">🐣 Filhote</span>}
-                  <div className="card-row">
-                    <button className="btn-primary" onClick={() => deploy(c)}>Pro tanque</button>
-                    <button onClick={() => sell(c)}>Vender</button>
-                    <button onClick={() => transfer(c)}>Transferir</button>
-                    <button onClick={() => sellVendor(c)} title={`Venda instantânea ao NPC por ${vendorPriceOf(Number(c.rarityScore))} soft`}>
-                      NPC · {vendorPriceOf(Number(c.rarityScore))}
-                    </button>
-                  </div>
+                  {!selectMode && (
+                    <div className="card-row">
+                      <button className="btn-primary" onClick={() => deploy(c)}>Pro tanque</button>
+                      <button onClick={() => sell(c)}>Vender</button>
+                      <button onClick={() => transfer(c)}>Transferir</button>
+                      <button onClick={() => sellVendor(c)} title={`Venda instantânea ao NPC por ${vendorPriceOf(Number(c.rarityScore))} soft`}>
+                        NPC · {vendorPriceOf(Number(c.rarityScore))}
+                      </button>
+                    </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
+            </div>
+          )}
+          {selectMode && selected.size > 0 && (
+            <div className="sticky-bar">
+              <span className="hint" style={{ padding: 0 }}>
+                {selected.size} peixe(s) selecionado(s) — NPC paga <b>{selectedTotal.toFixed(0)}</b> no total
+              </span>
+              <button onClick={clearSelection}>Desselecionar</button>
+              <button className="btn-primary" onClick={() => setBulkConfirm(true)}>Vender ao NPC</button>
             </div>
           )}
         </>
@@ -161,6 +243,14 @@ export function BackpackView({ refreshTank, notify }) {
           message={`Venda instantânea por ${vendorPriceOf(Number(prompt.creature.rarityScore))} moedas soft — bem abaixo do mercado, mas na hora. Essa ação não pode ser desfeita.`}
           confirmLabel="Vender agora" danger
           onConfirm={confirmSellVendor} onClose={() => setPrompt(null)}
+        />
+      )}
+      {bulkConfirm && (
+        <ConfirmModal
+          title="Vender ao NPC"
+          message={`Venda instantânea de ${selected.size} peixe(s) por ${selectedTotal.toFixed(0)} moedas soft no total — bem abaixo do mercado, mas na hora. Essa ação não pode ser desfeita.`}
+          confirmLabel="Vender agora" danger
+          onConfirm={confirmBulkSellVendor} onClose={() => setBulkConfirm(false)}
         />
       )}
     </>
