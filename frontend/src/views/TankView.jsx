@@ -23,6 +23,8 @@ export function TankView({ tank, refresh, notify }) {
   const toggleList = () => setListOpen((v) => { localStorage.setItem("tankListOpen", String(!v)); return !v; });
   const selected = tank.creatures.find((c) => c.id === selectedId) ?? null;
   const lowWater = Number(tank.maintenanceLevel) < 40;
+  const decorTier = decorTierOf(tank.capacityBandName);
+  const tierClass = decorTier >= 2 ? " tier-master" : decorTier >= 1 ? " tier-grande" : "";
 
   // ---- Modo "enfeite de monitor": clique, tela cheia, modo aquário e pop-up ----
   const [clickEnabled, setClickEnabled] = useState(() => localStorage.getItem("tankClicks") !== "false");
@@ -133,14 +135,15 @@ export function TankView({ tank, refresh, notify }) {
           <button className="btn-primary" onClick={dismissOnboard}>Entendi</button>
         </div>
       )}
-      <div className={`tank-stage${isFullscreen ? " is-fullscreen" : ""}${aquariumMode ? " aquarium-mode" : ""}`} ref={stageRef}>
+      <div className={`tank-spotlight${tierClass}`}>
+      <div className={`tank-stage${tierClass}${isFullscreen ? " is-fullscreen" : ""}${aquariumMode ? " aquarium-mode" : ""}`} ref={stageRef}>
         {!aquariumMode && (
           <div className="tank-hud">
             <span className={`status-pill ${tank.online ? "on" : "off"}`}>
               <span className="led" />{tank.online ? "Online" : "Offline"}
             </span>
             <span className="capacity-chip"
-              style={{ "--band-accent": ["inherit", "var(--r-raro)", "var(--r-lendario)"][decorTierOf(tank.capacityBandName)] }}
+              style={{ "--band-accent": ["inherit", "var(--r-raro)", "var(--r-lendario)"][decorTier] }}
               title={`Peixes ativos no tanque / capacidade — faixa: ${tank.capacityBandName || "Aquário"}`}>
               🐟 {tank.creatures.length}/{tank.capacity} <small>{tank.capacityBandName}</small>
             </span>
@@ -177,7 +180,7 @@ export function TankView({ tank, refresh, notify }) {
           ref={aquariumRef}
           creatures={tank.creatures} selectedId={selectedId}
           onSelect={setSelectedId} quality={Number(tank.maintenanceLevel)}
-          decorTier={decorTierOf(tank.capacityBandName)}
+          decorTier={decorTier}
           interactive={clickEnabled} onPipChange={setPipActive}
         />
 
@@ -209,9 +212,10 @@ export function TankView({ tank, refresh, notify }) {
           </div>
         )}
       </div>
+      </div>
 
       {!aquariumMode && synergy.length > 0 && (
-        <div className="synergy-bar glass">
+        <div className="synergy-bar glass cinema-dim">
           <span className="eyebrow">Sinergia de cor</span>
           {synergy.map((g) => (
             <span key={g.color} className="synergy-chip" style={{ "--tier": PART_HEX[g.color] }}>
@@ -221,7 +225,7 @@ export function TankView({ tank, refresh, notify }) {
         </div>
       )}
       {!aquariumMode && tank.creatures.length > 0 && !selected && (
-        <p className="hint">Clique num peixe para ver os detalhes, guardar, vender ou transferir.</p>
+        <p className="hint cinema-dim">Clique num peixe para ver os detalhes, guardar, vender ou transferir.</p>
       )}
       {selected && (
         <FishDetail creature={selected} onClose={() => setSelectedId(null)} inTank
@@ -266,7 +270,7 @@ export function TankView({ tank, refresh, notify }) {
       {celebrate && <CollectCelebration creature={celebrate} onClose={() => setCelebrate(null)} />}
 
       {!aquariumMode && tank.creatures.length > 0 && (
-        <section>
+        <section className="cinema-dim">
           <div className="section-head">
             <button className="collapse-btn" onClick={toggleList} aria-expanded={listOpen}
               title={listOpen ? "Recolher lista" : "Expandir lista"}>
@@ -307,7 +311,7 @@ export function TankView({ tank, refresh, notify }) {
       )}
 
       {!aquariumMode && (
-      <section>
+      <section className="cinema-dim">
         <div className="section-head">
           <span className="eyebrow">Fila de criação</span>
           <span className="count">{tank.queue.length}/{tank.queueCap}</span>

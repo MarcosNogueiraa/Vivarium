@@ -1057,39 +1057,17 @@ export function drawTankForeground(ctx, W, H, time, quality = 100, theme = "defa
   }
 
   // Vinheta + escurecimento das bordas (sensação de olhar pra dentro do vidro).
-  // Master (decorTier 2, 08/08/2026 revisado): a vinheta antiga era um marrom
-  // escuro (rgba(24,16,4)) que, por cima da névoa verde da água, lia como
-  // "sujo" em vez de "nobre" (feedback do usuário). Trocado por um tom neutro
-  // mais escuro (sem componente verde) — o dourado de verdade vem do rim de luz
-  // abaixo, não da própria vinheta.
+  // Master (decorTier 2): tom neutro mais escuro (sem componente verde/marrom
+  // que lia como "sujo" nas duas tentativas anteriores — CLAUDE.md 8.15/16).
+  // A partir de 08/08/2026 a "premiumidade" do Master deixou de ser tentada
+  // AQUI dentro d'água (onde sempre briga com o murk) e virou moldura de
+  // verdade em CSS ao redor do canvas (`.tank-stage.tier-master`, styles.css)
+  // + o efeito "cinema" (spotlight/fundo escuro) na página — ver TankView.jsx.
   const vg = ctx.createRadialGradient(W / 2, H * 0.46, H * 0.28, W / 2, H * 0.5, H * 0.92);
   vg.addColorStop(0, "rgba(0, 0, 0, 0)");
-  vg.addColorStop(1, decorTier >= 2 ? "rgba(8, 6, 2, 0.62)" : "rgba(1, 12, 16, 0.6)");
+  vg.addColorStop(1, decorTier >= 2 ? "rgba(8, 6, 2, 0.55)" : "rgba(1, 12, 16, 0.6)");
   ctx.fillStyle = vg;
   ctx.fillRect(0, 0, W, H);
-
-  // Rim de luz dourada nas bordas laterais — só o Master (decorTier 2). Em vez
-  // de escurecer com um tom marrom (lia como sujeira misturado à névoa verde),
-  // um brilho quente aditivo ("lighter") ao longo das duas laterais, que "corta"
-  // por cima da água suja em vez de se misturar a ela — leitura de moldura de
-  // vidro premium, não de vinheta suja.
-  if (decorTier >= 2) {
-    ctx.save();
-    ctx.globalCompositeOperation = "lighter";
-    const rimW = W * 0.16;
-    const pulse = 0.75 + 0.25 * Math.sin(time / 2600);
-    const left = ctx.createLinearGradient(0, 0, rimW, 0);
-    left.addColorStop(0, `rgba(240, 190, 90, ${0.16 * pulse})`);
-    left.addColorStop(1, "rgba(240, 190, 90, 0)");
-    ctx.fillStyle = left;
-    ctx.fillRect(0, 0, rimW, H);
-    const right = ctx.createLinearGradient(W, 0, W - rimW, 0);
-    right.addColorStop(0, `rgba(240, 190, 90, ${0.16 * pulse})`);
-    right.addColorStop(1, "rgba(240, 190, 90, 0)");
-    ctx.fillStyle = right;
-    ctx.fillRect(W - rimW, 0, rimW, H);
-    ctx.restore();
-  }
 
   // Reflexo de vidro no topo (leve faixa clara)
   const glass = ctx.createLinearGradient(0, 0, W * 0.4, H * 0.35);
