@@ -398,12 +398,20 @@ function drawShimmer(ctx, traits, time) {
   ctx.restore();
 }
 
+// Camadas padrão (tudo visível) — usado por todo desenho normal de peixe.
+// `layers` permite montar o peixe parte a parte (revelação suspense da
+// celebração de coleta, CollectCelebration.jsx): corpo/olho/guelra ficam
+// sempre visíveis (é a "base" onde as partes entram), só brilho/cauda/
+// dorsal/peitoral podem ser escondidos individualmente.
+export const FULL_FISH_LAYERS = { shimmer: true, tail: true, dorsal: true, pectoral: true };
+
 /**
  * Desenha o peixe inteiro. `seed` (BigInt) só é usado pra manchas determinísticas;
  * `time` anima cauda/peitoral e o shimmer iridescente; `phase` dessincroniza
- * o nado quando há vários peixes na tela.
+ * o nado quando há vários peixes na tela. `layers` (opcional) controla quais
+ * partes aparecem — ver `FULL_FISH_LAYERS`.
  */
-export function drawFish(ctx, seed, traits, time = 0, phase = 0) {
+export function drawFish(ctx, seed, traits, time = 0, phase = 0, layers = FULL_FISH_LAYERS) {
   const m = traits.movement;
   const tailPeriod = periodOf(m.tailSpeed, MOVEMENT_TUNING.tailPeriodMax, MOVEMENT_TUNING.tailPeriodMin);
   const finPeriod = periodOf(m.finSpeed, MOVEMENT_TUNING.finPeriodMax, MOVEMENT_TUNING.finPeriodMin);
@@ -412,12 +420,12 @@ export function drawFish(ctx, seed, traits, time = 0, phase = 0) {
   ctx.imageSmoothingEnabled = true;
 
   // Cauda: onda viajante (a estrela do efeito), fase e período do tailSpeed
-  wavyBlit(ctx, getPartSprite(seed, "tail", traits.tail, tailPath, TAIL_BBOX),
+  if (layers.tail) wavyBlit(ctx, getPartSprite(seed, "tail", traits.tail, tailPath, TAIL_BBOX),
     MOVEMENT_TUNING.tailWave, MOVEMENT_TUNING.tailWave.ampBase * m.tailAmplitude,
     tailPeriod, time, phase);
 
   // Dorsal: flutter sutil ondulando junto com o corpo (fase da cauda)
-  wavyBlit(ctx, getPartSprite(seed, "dorsal", traits.dorsal, dorsalPath, DORSAL_BBOX),
+  if (layers.dorsal) wavyBlit(ctx, getPartSprite(seed, "dorsal", traits.dorsal, dorsalPath, DORSAL_BBOX),
     MOVEMENT_TUNING.dorsalWave, MOVEMENT_TUNING.dorsalWave.ampBase * m.tailAmplitude,
     tailPeriod, time, phase);
 
@@ -429,7 +437,7 @@ export function drawFish(ctx, seed, traits, time = 0, phase = 0) {
   const body = getBodySprite();
   ctx.drawImage(body.canvas, body.ox, body.oy);
 
-  drawShimmer(ctx, traits, time);
+  if (layers.shimmer) drawShimmer(ctx, traits, time);
 
   ctx.fillStyle = "#f2f5f7";
   ctx.beginPath(); ctx.arc(184, 198, 9, 0, Math.PI * 2); ctx.fill();
@@ -475,7 +483,7 @@ export function drawFish(ctx, seed, traits, time = 0, phase = 0) {
   }
 
   // Peitoral: flutter sutil, período e fase próprios do finSpeed
-  wavyBlit(ctx, getPartSprite(seed, "pectoral", traits.pectoral, pectoralPath, PECTORAL_BBOX),
+  if (layers.pectoral) wavyBlit(ctx, getPartSprite(seed, "pectoral", traits.pectoral, pectoralPath, PECTORAL_BBOX),
     MOVEMENT_TUNING.pectoralWave, MOVEMENT_TUNING.pectoralWave.ampBase * m.finAmplitude,
     finPeriod, time, phase * 1.7);
 
