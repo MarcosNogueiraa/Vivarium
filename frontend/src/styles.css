@@ -306,8 +306,17 @@ input:focus {
   width: auto; padding: 8px 12px; font-size: 16px; /* mesmo motivo do input (zoom no iOS) */
   background: rgba(255, 255, 255, 0.06); color: var(--ink);
   border: 1px solid var(--line); border-radius: var(--radius-sm);
+  /* Sem isso, o navegador abre a lista com o popup CLARO padrão do SO, mas
+     o texto herda var(--ink) (quase branco) — branco em branco, ilegível
+     (feedback do usuário). color-scheme força o popup nativo pro tema
+     escuro; o fallback em option cobre navegadores que ignoram a dica. */
+  color-scheme: dark;
 }
+.sort-select option { background: #0a2630; color: var(--ink); }
 .filter-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.color-chip { padding: 6px 9px; }
+.color-chip .dot-color { width: 13px; height: 13px; border-radius: 50%; display: block; border: 1px solid rgba(255, 255, 255, 0.25); }
+.color-chip.active { box-shadow: inset 0 0 0 2px var(--tier); background: color-mix(in srgb, var(--tier) 18%, transparent); }
 .filter-chip {
   padding: 6px 13px; font-size: 0.8rem; border-radius: 999px;
   background: rgba(255, 255, 255, 0.04); color: var(--muted);
