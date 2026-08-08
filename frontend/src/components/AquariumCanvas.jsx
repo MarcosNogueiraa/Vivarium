@@ -10,9 +10,14 @@ import { reducedMotion } from "../lib/motion.js";
 const FISH_CX = 290;
 const FISH_CY = 210;
 
+// Escala do peixe no aquário — 70% do tamanho original (pedido do usuário: com
+// 15 peixes o tanque ficava muito cheio). Única fonte pra escala/aura/hitbox
+// de clique, todos proporcionais a ela (evita dessincronizar de novo).
+const FISH_SCALE = 0.34 * 0.7;
+
 // Aura que segue o CONTORNO do peixe: rasteriza a silhueta uma vez, tinge na cor
 // e aplica blur; desenhada atrás do peixe vira um brilho abraçando a forma.
-const AURA_SCALE = 0.34;
+const AURA_SCALE = FISH_SCALE;
 const AURA_PAD = 36;
 const AURA_BLUR = 11;
 const AURA_CX = AURA_PAD + FISH_CX * AURA_SCALE;
@@ -71,7 +76,7 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
 }, ref) {
   const W = 960;
   const H = 480;
-  const SCALE = 0.34;
+  const SCALE = FISH_SCALE;
   const wrapRef = useRef(null);
   const canvasRef = useRef(null);
   const pipWindowRef = useRef(null);
@@ -157,9 +162,16 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
             phase: roll01(c.bigSeed, "phase") * Math.PI * 2,
             nextTurnAt: time + 8000 + roll01(c.bigSeed, "turn0") * 12000,
             waiting: false,
+            facing: 1,
           };
           statesRef.current.set(c.id, s);
         }
+        // Guarda a posição ANTES de qualquer força deste frame (separação,
+        // cardume, nado próprio) — usada depois pra virar o peixe conforme o
+        // deslocamento REAL, não a intenção (`vx`). Sem isso, quando separação/
+        // cardume empurravam a posição num sentido diferente do `vx`, o peixe
+        // parecia "nadar de costas" (sprite virado pra um lado, indo pro outro).
+        s.prevX = s.x;
         const color = c.traits.tail.color;
         const arr = schoolGroups.get(color) ?? [];
         arr.push({ c, s });
@@ -178,7 +190,8 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
 
       // Distância mínima entre peixes (qualquer cor) — separação, pra nunca
       // ficarem sobrepostos mesmo quando a coesão de cardume os aproxima.
-      const MIN_FISH_DIST = 95;
+      // Proporcional ao novo tamanho do peixe (70% do original).
+      const MIN_FISH_DIST = 95 * 0.7;
       const fishList = creaturesRef.current;
       for (let i = 0; i < fishList.length; i++) {
         const si = statesRef.current.get(fishList[i].id);
@@ -242,6 +255,15 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
         if (s.y < 100) s.y = 100;
         if (s.y > H - 100) s.y = H - 100;
 
+        // Vira o sprite conforme o deslocamento REAL neste frame (não a
+        // intenção em `vx`) — separação e "seguir o líder" empurram a posição
+        // direto, então em frames onde essas forças dominam, o peixe podia
+        // acabar indo pro lado oposto de onde `vx` "dizia" que ele ia, e
+        // ficava com cara de nadando de costas. Deslocamento pequeno demais
+        // (força quase nula) mantém a direção anterior, evita flip por ruído.
+        const netDx = s.x - s.prevX;
+        if (Math.abs(netDx) > 0.05) s.facing = netDx > 0 ? 1 : -1;
+
         // Vira sozinho de vez em quando no meio do tanque também (não só nas
         // paredes) — evita o ping-pong mecânico. Próximo giro reagendado sempre
         // que acontece um (seeded pelo instante atual, continua determinístico).
@@ -261,16 +283,16 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
         if (rscore >= 7.5) {
           const legendary = rscore >= 14.0;
           const pulse = legendary ? 0.82 + 0.18 * Math.sin(time / 650 + s.phase) : 1;
-          drawAura(ctx, getAuraSprite(c, bandOf(rscore).color), s.x, y, s.vx > 0, (legendary ? 0.55 : 0.36) * pulse);
+          drawAura(ctx, getAuraSprite(c, bandOf(rscore).color), s.x, y, s.facing > 0, (legendary ? 0.55 : 0.36) * pulse);
         }
         // Aura de seleção (aqua, seguindo o contorno)
         if (c.id === selectedRef.current) {
-          drawAura(ctx, getAuraSprite(c, "#54e6d1"), s.x, y, s.vx > 0, 0.5);
+          drawAura(ctx, getAuraSprite(c, "#54e6d1"), s.x, y, s.facing > 0, 0.5);
         }
 
         ctx.save();
         ctx.translate(s.x, y);
-        ctx.scale(s.vx > 0 ? -SCALE : SCALE, SCALE);
+        ctx.scale(s.facing > 0 ? -SCALE : SCALE, SCALE);
         ctx.translate(-FISH_CX, -FISH_CY);
         drawFish(ctx, c.bigSeed, c.traits, time, s.phase);
         ctx.restore();
@@ -347,7 +369,8 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
     const py = (e.clientY - rect.top) * (H / rect.height);
     const hit = creaturesRef.current.find((c) => {
       const s = statesRef.current.get(c.id);
-      return s && Math.abs(px - s.x) < 70 && Math.abs(py - s.y) < 55;
+      // Hitbox proporcional ao novo tamanho do peixe (70% do original).
+      return s && Math.abs(px - s.x) < 70 * 0.7 && Math.abs(py - s.y) < 55 * 0.7;
     });
     return { rect, hit };
   }
