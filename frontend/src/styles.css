@@ -302,21 +302,44 @@ input:focus {
   border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.03); box-shadow: inset 0 0 0 1px var(--line);
 }
-.sort-select {
-  width: auto; padding: 8px 12px; font-size: 16px; /* mesmo motivo do input (zoom no iOS) */
+/* Dropdown customizado (substitui <select> nativo) — o popup nativo do
+   navegador ignora boa parte do CSS em vários engines (mesmo com
+   color-scheme/option{} o texto ficava ilegível pra alguns usuários),
+   então construímos a lista nós mesmos pra garantir o mesmo visual escuro
+   sempre. Ver components/Select.jsx. */
+.custom-select { position: relative; }
+.custom-select-btn {
+  width: auto; padding: 8px 12px; font-size: 0.85rem;
   background: rgba(255, 255, 255, 0.06); color: var(--ink);
   border: 1px solid var(--line); border-radius: var(--radius-sm);
-  /* Sem isso, o navegador abre a lista com o popup CLARO padrão do SO, mas
-     o texto herda var(--ink) (quase branco) — branco em branco, ilegível
-     (feedback do usuário). color-scheme força o popup nativo pro tema
-     escuro; o fallback em option cobre navegadores que ignoram a dica. */
-  color-scheme: dark;
+  display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
 }
-.sort-select option { background: #0a2630; color: var(--ink); }
+.custom-select-caret { font-size: 0.65rem; color: var(--muted); }
+.custom-select-list {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 20;
+  min-width: 100%; max-height: 280px; overflow-y: auto;
+  background: #0a2630; border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow); padding: 4px; margin: 0; list-style: none;
+  animation: fade-in 0.12s ease;
+}
+.custom-select-option {
+  padding: 8px 10px; font-size: 0.85rem; color: var(--ink); border-radius: 8px;
+  cursor: pointer; white-space: nowrap;
+}
+.custom-select-option:hover { background: rgba(255, 255, 255, 0.08); }
+.custom-select-option.selected { color: var(--glow); font-weight: 700; background: rgba(84, 230, 209, 0.14); }
+
 .filter-chips { display: flex; gap: 6px; flex-wrap: wrap; }
-.color-chip { padding: 6px 9px; }
-.color-chip .dot-color { width: 13px; height: 13px; border-radius: 50%; display: block; border: 1px solid rgba(255, 255, 255, 0.25); }
-.color-chip.active { box-shadow: inset 0 0 0 2px var(--tier); background: color-mix(in srgb, var(--tier) 18%, transparent); }
+/* Chip de cor: o fundo já vem tingido na cor (não só um pontinho pequeno)
+   pra dar pra distinguir todas de relance, sem precisar clicar primeiro
+   (feedback do usuário: "as cores estão todas iguais antes de clicar"). */
+.color-chip {
+  padding: 5px 9px;
+  background: color-mix(in srgb, var(--tier) 30%, rgba(255, 255, 255, 0.04));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tier) 55%, var(--line));
+}
+.color-chip .dot-color { width: 14px; height: 14px; border-radius: 50%; display: block; border: 1px solid rgba(255, 255, 255, 0.35); }
+.color-chip.active { box-shadow: inset 0 0 0 2px var(--tier); background: color-mix(in srgb, var(--tier) 45%, rgba(255, 255, 255, 0.04)); }
 .filter-chip {
   padding: 6px 13px; font-size: 0.8rem; border-radius: 999px;
   background: rgba(255, 255, 255, 0.04); color: var(--muted);

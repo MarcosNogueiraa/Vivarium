@@ -4,6 +4,7 @@ import { coinsPerHourOf, traitsOf, vendorPriceOf } from "../lib/generator.js";
 import { bandOf, BANDS, PART_HEX, PT } from "../lib/fishRenderer.js";
 import { RarityBadge } from "../components/RarityBadge.jsx";
 import { FishCanvas } from "../components/FishCanvas.jsx";
+import { Select } from "../components/Select.jsx";
 import { PromptModal } from "../components/PromptModal.jsx";
 import { ConfirmModal } from "../components/ConfirmModal.jsx";
 import { FishDetail } from "./FishDetail.jsx";
@@ -131,11 +132,10 @@ export function BackpackView({ refreshTank, notify }) {
       ) : (
         <>
           <div className="backpack-toolbar">
-            <select className="sort-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-              {Object.entries(SORTS).map(([key, { label }]) => (
-                <option key={key} value={key}>{label}</option>
-              ))}
-            </select>
+            <Select
+              value={sortBy} onChange={setSortBy}
+              options={Object.entries(SORTS).map(([key, { label }]) => ({ value: key, label }))}
+            />
             <div className="filter-chips">
               <button className={`filter-chip${bandFilter === "all" ? " active" : ""}`} onClick={() => setBandFilter("all")}>
                 Todos
