@@ -16,6 +16,22 @@ const FISH_CY = 210;
 // proporcionais a ela (evita dessincronizar de novo).
 const FISH_SCALE = 0.34 * 0.8;
 
+// Tuning do comportamento de cardume (líder-seguidor, agrupado por cor de
+// cauda). Calibrado pra: (1) o seguidor nunca "ultrapassar" visivelmente seu
+// próprio baseSpeed além de uma folga pequena e explícita, mesmo bem atrás do
+// líder; (2) o líder nunca ficar visivelmente mais lento que o grupo que está
+// liderando, mesmo esperando os retardatários.
+const SCHOOL_TUNING = {
+  FOLLOWER_MIN_SPEED_MULT: 0.6, // piso — mantido do comportamento anterior
+  FOLLOWER_MAX_SPEED_MULT: 1.15, // teto — folga de alcance, sem parecer "elástico"
+  FOLLOWER_CATCHUP_SATURATE_DIST: 260, // mesma distância em que o líder passa a esperar
+  FOLLOWER_CATCHUP_PUSH: 300, // px/s² de empurrão extra rumo ao líder, satura no clamp acima
+  LEADER_WAIT_ENTER_DIST: 260,
+  LEADER_WAIT_EXIT_DIST: 130,
+  LEADER_WAIT_MOVE_FACTOR_FLOOR: 0.55, // era 0.2 — líder continua claramente o mais rápido do grupo
+  LEADER_MOVE_FACTOR_SMOOTH_RATE: 3, // 1/s — converge a ~95% em ~1s (3 constantes de tempo), sem trava seca
+};
+
 // Aura que segue o CONTORNO do peixe: rasteriza a silhueta uma vez, tinge na cor
 // e aplica blur; desenhada atrás do peixe vira um brilho abraçando a forma.
 const AURA_SCALE = FISH_SCALE;
@@ -162,7 +178,7 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
             baseSpeed,
             phase: roll01(c.bigSeed, "phase") * Math.PI * 2,
             nextTurnAt: time + 8000 + roll01(c.bigSeed, "turn0") * 12000,
-            waiting: false,
+            moveFactor: 1, // só usado quando o peixe é líder de cardume (throttle suave)
             facing: 1,
           };
           statesRef.current.set(c.id, s);
@@ -220,8 +236,7 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
           // do grupo) — alvo único e estável, dá pra puxar com mais confiança
           // sem ficar "elástico". Continua com vx/parede/timer de virada
           // próprios por cima disso — é isso que dá a sensação de "tenta
-          // acompanhar, mas não de forma seca". Piso de velocidade evita travar
-          // perto do líder (mesma proteção de antes).
+          // acompanhar, mas não de forma seca".
           // Coeficientes reduzidos (08/08/2026, feedback: cardume "se movimentando
           // pouco") — os valores originais (0.5/0.35/0.5) prendiam o seguidor tão
           // perto da trajetória do líder que a própria virada independente dele
@@ -231,26 +246,57 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
           // antes de serem puxados de volta — ainda convergem, só que devagar o
           // bastante pra dar vida ao cardume.
           const ls = leader.s;
-          s.x += (ls.x - s.x) * 0.3 * dt;
           s.y += (ls.y - s.y) * 0.22 * dt;
           s.vx += (ls.vx - s.vx) * 0.18 * dt;
-          const minSpeed = s.baseSpeed * 0.6;
-          if (Math.abs(s.vx) < minSpeed) s.vx = Math.sign(s.vx || 1) * minSpeed;
+
+          // Puxão de "alcançar o líder" (09/08/2026, fix: seguidor "acelerando"
+          // acima da própria velocidade ao se distanciar) — antes isso era um
+          // nudge de POSIÇÃO em paralelo à integração final (`s.x += vx*dt...`
+          // abaixo), sem teto: quanto mais longe, maior o salto por frame,
+          // somado por cima do deslocamento normal. Agora vira só mais um termo
+          // de `vx` (cresce com a distância, satura na mesma distância em que o
+          // líder passa a esperar) e o clamp abaixo garante que a velocidade
+          // efetiva do seguidor nunca passe do próprio teto — sem dupla
+          // contagem de deslocamento.
+          const dx = ls.x - s.x;
+          const lagFactor = Math.min(Math.abs(dx) / SCHOOL_TUNING.FOLLOWER_CATCHUP_SATURATE_DIST, 1);
+          s.vx += Math.sign(dx || 1) * lagFactor * SCHOOL_TUNING.FOLLOWER_CATCHUP_PUSH * dt;
+
+          // Clamp único: fonte de verdade da velocidade efetiva do seguidor
+          // neste frame — piso evita travar perto do líder (mesma proteção de
+          // antes), teto evita "disparar" além do próprio baseSpeed.
+          const maxSpeed = s.baseSpeed * SCHOOL_TUNING.FOLLOWER_MAX_SPEED_MULT;
+          const minSpeed = s.baseSpeed * SCHOOL_TUNING.FOLLOWER_MIN_SPEED_MULT;
+          const mag = Math.abs(s.vx);
+          if (mag > maxSpeed) s.vx = Math.sign(s.vx) * maxSpeed;
+          else if (mag < minSpeed) s.vx = Math.sign(s.vx || 1) * minSpeed;
         } else if (leader && leader.id === c.id) {
           // Líder: nada o puxa: só desacelera (não pára — "espera nadando
           // devagar") quando os seguidores ficam muito pra trás, até
           // reagruparem. Histerese entre os dois limiares evita ligar/desligar
           // toda hora perto da borda.
+          // Fix 09/08/2026 (líder, sendo o peixe mais rápido do grupo, ficava
+          // visualmente travado): distância MÉDIA em vez de MÁXIMA (um único
+          // retardatário não derruba a velocidade do grupo inteiro), piso de
+          // moveFactor subiu de 0.2 pra 0.55 (líder nunca fica mais lento que
+          // quem ele lidera), e a transição agora é suavizada por um filtro
+          // exponencial em vez de um snap binário liga/desliga.
           const members = schoolGroups.get(c.traits.tail.color);
-          let maxDist = 0;
+          let sumDist = 0, n = 0;
           for (const m of members) {
             if (m.c.id === c.id) continue;
-            const d = Math.hypot(m.s.x - s.x, m.s.y - s.y);
-            if (d > maxDist) maxDist = d;
+            sumDist += Math.hypot(m.s.x - s.x, m.s.y - s.y);
+            n++;
           }
-          if (maxDist > 260) s.waiting = true;
-          else if (maxDist < 130) s.waiting = false;
-          moveFactor = s.waiting ? 0.2 : 1;
+          const avgDist = n ? sumDist / n : 0;
+
+          if (avgDist > SCHOOL_TUNING.LEADER_WAIT_ENTER_DIST) s.waitingTarget = SCHOOL_TUNING.LEADER_WAIT_MOVE_FACTOR_FLOOR;
+          else if (avgDist < SCHOOL_TUNING.LEADER_WAIT_EXIT_DIST) s.waitingTarget = 1;
+          // entre os dois limiares, mantém o alvo anterior (histerese, igual antes)
+
+          const target = s.waitingTarget ?? 1;
+          s.moveFactor = (s.moveFactor ?? 1) + (target - (s.moveFactor ?? 1)) * SCHOOL_TUNING.LEADER_MOVE_FACTOR_SMOOTH_RATE * dt;
+          moveFactor = s.moveFactor;
         }
 
         s.x += s.vx * dt * speedFactor * moveFactor;
