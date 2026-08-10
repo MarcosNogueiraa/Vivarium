@@ -592,6 +592,11 @@ input:focus {
   color: var(--r-epico);
 }
 .rush-btn:hover { background: rgba(168, 108, 228, 0.22); }
+.rush-btn-premium {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 2px 8px; border-radius: 999px;
+  background: rgba(224, 144, 15, 0.18); color: var(--gold);
+}
 
 .premium-chip {
   display: inline-flex; align-items: center; gap: 6px;

@@ -5,6 +5,7 @@ import { AquariumCanvas } from "../components/AquariumCanvas.jsx";
 import { RarityBadge } from "../components/RarityBadge.jsx";
 import { FishCanvas } from "../components/FishCanvas.jsx";
 import { Modal } from "../components/Modal.jsx";
+import { ConfirmModal } from "../components/ConfirmModal.jsx";
 import { Coin } from "../components/Coin.jsx";
 import { Select } from "../components/Select.jsx";
 import { CollectCelebration } from "../components/CollectCelebration.jsx";
@@ -81,6 +82,7 @@ export function BreedingView({ tank, refreshTank, notify }) {
   const [safety, setSafety] = useState("none"); // "none" | "stabilizer" | "insurance" — proteção do casal
   const [celebrate, setCelebrate] = useState(null); // { child, parentLosses }
   const [peekId, setPeekId] = useState(null); // id do peixe com o painel de detalhes aberto (pairar 1s)
+  const [confirmRush, setConfirmRush] = useState(false); // pede confirmação antes de gastar premium
   const peekTimer = useRef(null);
   const [, forceTick] = useState(0);
   const [sortBy, setSortBy] = useState("rarity-desc");
@@ -155,12 +157,13 @@ export function BreedingView({ tank, refreshTank, notify }) {
     } catch (e) { notify(e.message); }
   }
 
-  async function rush() {
-    try {
-      await api.rushBreeding();
-      notify("Gestação acelerada!");
-      await Promise.all([refresh(), refreshTank()]);
-    } catch (e) { notify(e.message); }
+  // Sem try/catch aqui de propósito — o ConfirmModal que chama isso já captura o erro
+  // e mostra inline, sem fechar sozinho (mesmo padrão de outras ações destrutivas/pagas).
+  async function confirmRushAction() {
+    await api.rushBreeding();
+    setConfirmRush(false);
+    notify("Gestação acelerada!");
+    await Promise.all([refresh(), refreshTank()]);
   }
 
   function togglePick(c) {
@@ -226,8 +229,11 @@ export function BreedingView({ tank, refreshTank, notify }) {
           {status.slot.isReady ? "Coletar filhote" : "Aguardando…"}
         </button>
         {!status.slot.isReady && (
-          <button className="rush-btn" onClick={rush} title="Pula a espera pagando moeda premium — a única forma de acelerar">
-            ⚡ {Number(status.slot.rushCostPremium).toFixed(0)}
+          <button
+            className="rush-btn" onClick={() => setConfirmRush(true)}
+            title="Gasta moeda premium pra pular o tempo restante de gestação"
+          >
+            ⚡ Acelerar com <span className="rush-btn-premium">💎 {Number(status.slot.rushCostPremium).toFixed(0)}</span>
           </button>
         )}
         {import.meta.env.DEV && !status.slot.isReady && (
@@ -455,6 +461,17 @@ export function BreedingView({ tank, refreshTank, notify }) {
           parentB={celebrate.parentB}
           deadParents={celebrate.deadParents}
           onClose={() => setCelebrate(null)}
+        />
+      )}
+
+      {confirmRush && status.active && (
+        <ConfirmModal
+          title="Acelerar cruzamento"
+          message={`Isso vai gastar 💎 ${Number(status.slot.rushCostPremium).toFixed(0)} premium pra pular o tempo restante (${timeLeft(status.slot.readyAt)}) e liberar o filhote agora. Essa moeda não volta — confirma?`}
+          confirmLabel="Gastar premium e acelerar"
+          danger
+          onConfirm={confirmRushAction}
+          onClose={() => setConfirmRush(false)}
         />
       )}
     </>
