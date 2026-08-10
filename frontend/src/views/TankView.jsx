@@ -288,7 +288,11 @@ export function TankView({ tank, refresh, notify }) {
               return (
                 <button key={c.id} className="fish-row" onClick={() => setSelectedId(c.id)} style={{ "--tier": band.color }}>
                   <span className="fr-thumb">
-                    <FishCanvas seed={c.seed} width={72} isBred={c.isBred} parentASeed={c.parentASeed} parentBSeed={c.parentBSeed} />
+                    <FishCanvas
+                      seed={c.seed} width={72} isBred={c.isBred} parentASeed={c.parentASeed} parentBSeed={c.parentBSeed}
+                      parentAGrandparentASeed={c.parentAGrandparentASeed} parentAGrandparentBSeed={c.parentAGrandparentBSeed}
+                      parentBGrandparentASeed={c.parentBGrandparentASeed} parentBGrandparentBSeed={c.parentBGrandparentBSeed}
+                    />
                   </span>
                   <span className="fr-body">
                     <span className="fr-line1">

@@ -6,4 +6,6 @@ public record CreateListingRequest(long CreatureInstanceId, decimal PriceSoft);
 public record ListingDto(
     long Id, decimal PriceSoft, long SellerId, string SellerName,
     long CreatureId, int SpeciesId, string Seed, int TraitConfigVersion, decimal RarityScore, bool IsBred,
-    string? ParentASeed, string? ParentBSeed);
+    string? ParentASeed, string? ParentBSeed,
+    string? ParentAGrandparentASeed, string? ParentAGrandparentBSeed,
+    string? ParentBGrandparentASeed, string? ParentBGrandparentBSeed);

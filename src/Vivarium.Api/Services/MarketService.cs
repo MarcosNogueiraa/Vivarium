@@ -28,13 +28,17 @@ public class MarketService(VivariumDbContext db, GameService game)
                 m.CreatureInstance.Seed, m.CreatureInstance.TraitConfigVersion,
                 m.CreatureInstance.RarityScore, m.CreatureInstance.ParentAId,
                 m.CreatureInstance.ParentASeed, m.CreatureInstance.ParentBSeed,
+                m.CreatureInstance.ParentAGrandparentASeed, m.CreatureInstance.ParentAGrandparentBSeed,
+                m.CreatureInstance.ParentBGrandparentASeed, m.CreatureInstance.ParentBGrandparentBSeed,
             })
             .ToListAsync())
             .Select(m => new ListingDto(
                 m.Id, m.PriceSoft, m.SellerId, m.SellerName,
                 m.CreatureId, m.SpeciesId, m.Seed.ToString(),
                 m.TraitConfigVersion, m.RarityScore, m.ParentAId.HasValue,
-                m.ParentASeed?.ToString(), m.ParentBSeed?.ToString()))
+                m.ParentASeed?.ToString(), m.ParentBSeed?.ToString(),
+                m.ParentAGrandparentASeed?.ToString(), m.ParentAGrandparentBSeed?.ToString(),
+                m.ParentBGrandparentASeed?.ToString(), m.ParentBGrandparentBSeed?.ToString()))
             .ToList();
     }
 

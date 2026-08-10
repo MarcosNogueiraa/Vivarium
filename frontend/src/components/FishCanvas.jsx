@@ -18,18 +18,36 @@ function layersForStep(step) {
 /**
  * Um peixe isolado (thumbnail/detalhe), animado a partir do seed. Se for um
  * filhote (`isBred`), passe `parentASeed`/`parentBSeed` — os traits reais vêm
- * da herança (BreedTraits), não do seed do filhote sozinho. `revealStep`
+ * da herança (BreedTraits), não do seed do filhote sozinho. Se o PAI (A ou B)
+ * também for filhote, passe também `parentAGrandparentASeed`/`BSeed` e
+ * `parentBGrandparentASeed`/`BSeed` — sem eles, o cálculo de herança trata
+ * silenciosamente esse pai como se não tivesse ancestralidade própria (cai pra
+ * `generateTraits(seed)` puro em vez de `breedTraits`), o que pode produzir um
+ * peixe visualmente diferente do que realmente é (bug real 10/08/2026: nenhum
+ * chamador passava esses 4 campos, então todo FishCanvas de filhote com avós
+ * renderizava errado — só o texto do "por que é raro", que usa `traitsOf`
+ * direto com a criatura completa, mostrava os traits certos). `revealStep`
  * (opcional, 0–4): monta o peixe parte a parte em vez de tudo de uma vez —
  * ver `REVEAL_ORDER`/`CollectCelebration.jsx`. Omitido = peixe completo (uso
  * normal em toda lista/detalhe do jogo).
  */
-export function FishCanvas({ seed, width = 220, isBred = false, parentASeed = null, parentBSeed = null, revealStep = null }) {
+export function FishCanvas({
+  seed, width = 220, isBred = false, parentASeed = null, parentBSeed = null,
+  parentAGrandparentASeed = null, parentAGrandparentBSeed = null,
+  parentBGrandparentASeed = null, parentBGrandparentBSeed = null,
+  revealStep = null,
+}) {
   const canvasRef = useRef(null);
   const height = Math.round(width * (VIEW_H / VIEW_W));
   const bigSeed = useMemo(() => BigInt(seed), [seed]);
   const traits = useMemo(
-    () => traitsOf({ seed, isBred, parentASeed, parentBSeed }),
-    [seed, isBred, parentASeed, parentBSeed],
+    () => traitsOf({
+      seed, isBred, parentASeed, parentBSeed,
+      parentAGrandparentASeed, parentAGrandparentBSeed,
+      parentBGrandparentASeed, parentBGrandparentBSeed,
+    }),
+    [seed, isBred, parentASeed, parentBSeed,
+      parentAGrandparentASeed, parentAGrandparentBSeed, parentBGrandparentASeed, parentBGrandparentBSeed],
   );
   const layers = useMemo(() => layersForStep(revealStep), [revealStep]);
 
