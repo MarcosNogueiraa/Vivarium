@@ -55,15 +55,28 @@ public class LeaderboardTests : IClassFixture<VivariumApiFactory>
                     QueueCap = 5, GenerationIntervalMinutes = 10, OnlineGenerationRate = 1, OfflineGenerationRate = 0.45m,
                     LastTickAt = DateTime.UtcNow, CreatedAt = DateTime.UtcNow,
                 };
+                // startingRarity + fração pequena (nunca soma ao ponto de passar do máximo real
+                // do jogo, ~19 — CLAUDE.md §5) — usar um score irreal (ex: centenas) estoura
+                // Decimal na fórmula exponencial de renda (IncomeCalculator.CoinsPerHour).
                 db.CreatureInstances.Add(new CreatureInstance
                 {
                     SpeciesId = 1, Owner = user, Habitat = habitat,
-                    Seed = 5_000_000 + i, TraitConfigVersion = 1, RarityScore = startingRarity + i, CreatedAt = DateTime.UtcNow,
+                    Seed = 5_000_000 + i, TraitConfigVersion = 1, RarityScore = startingRarity + i * 0.01m, CreatedAt = DateTime.UtcNow,
                 });
             }
             await db.SaveChangesAsync();
         });
     }
+
+    /// <summary>
+    /// A própria posição de quem pediu — a API sempre garante isso, esteja no top 100
+    /// (Entries, isSelf=true) ou fora dele (SelfOutsideTop). Usar isso em vez de procurar
+    /// por username nos Entries deixa os testes de ordenação independentes de quantos
+    /// outros usuários (de outros testes na mesma classe, mesmo banco compartilhado)
+    /// já estão acima na base — sem depender de estar no top 100.
+    /// </summary>
+    private static LeaderboardEntryRow OwnRank(LeaderboardResponseRow response)
+        => response.Entries.SingleOrDefault(e => e.IsSelf) ?? response.SelfOutsideTop!;
 
     [Fact]
     public async Task Rarity_OrdenaPelaSomaDeRarityScoreDoTanque()
@@ -73,15 +86,14 @@ public class LeaderboardTests : IClassFixture<VivariumApiFactory>
         await AddCreature(await HabitatIdOf(userIdA), userIdA, rarityScore: 5m, seed: 111);
         await AddCreature(await HabitatIdOf(userIdB), userIdB, rarityScore: 12m, seed: 222);
 
-        var response = await clientA.GetFromJsonAsync<LeaderboardResponseRow>("/api/leaderboard/rarity");
+        var entryA = OwnRank((await clientA.GetFromJsonAsync<LeaderboardResponseRow>("/api/leaderboard/rarity"))!);
+        var entryB = OwnRank((await clientB.GetFromJsonAsync<LeaderboardResponseRow>("/api/leaderboard/rarity"))!);
 
-        var entryA = response!.Entries.Single(e => e.Username == "rankA");
-        var entryB = response.Entries.Single(e => e.Username == "rankB");
         Assert.True(entryB.Rank < entryA.Rank);
         Assert.Equal(12m, entryB.Value);
         Assert.Equal(5m, entryA.Value);
         Assert.True(entryA.IsSelf);
-        Assert.False(entryB.IsSelf);
+        Assert.True(entryB.IsSelf);
     }
 
     [Fact]
@@ -94,13 +106,10 @@ public class LeaderboardTests : IClassFixture<VivariumApiFactory>
         await AddCreature(await HabitatIdOf(userIdC), userIdC, rarityScore: 20m, seed: 333);
         await AddCreature(await HabitatIdOf(userIdD), userIdD, rarityScore: 1m, seed: 444);
 
-        var byRarity = await clientC.GetFromJsonAsync<LeaderboardResponseRow>("/api/leaderboard/rarity");
-        var byIncome = await clientC.GetFromJsonAsync<LeaderboardResponseRow>("/api/leaderboard/income");
-
-        var rarityC = byRarity!.Entries.Single(e => e.Username == "rankC").Rank;
-        var rarityD = byRarity.Entries.Single(e => e.Username == "rankD").Rank;
-        var incomeC = byIncome!.Entries.Single(e => e.Username == "rankC").Rank;
-        var incomeD = byIncome.Entries.Single(e => e.Username == "rankD").Rank;
+        var rarityC = OwnRank((await clientC.GetFromJsonAsync<LeaderboardResponseRow>("/api/leaderboard/rarity"))!).Rank;
+        var rarityD = OwnRank((await clientD.GetFromJsonAsync<LeaderboardResponseRow>("/api/leaderboard/rarity"))!).Rank;
+        var incomeC = OwnRank((await clientC.GetFromJsonAsync<LeaderboardResponseRow>("/api/leaderboard/income"))!).Rank;
+        var incomeD = OwnRank((await clientD.GetFromJsonAsync<LeaderboardResponseRow>("/api/leaderboard/income"))!).Rank;
         // Ordem relativa consistente entre as duas métricas nesse caso simples (sem sinergia
         // envolvida) — o que importa aqui é confirmar que /income é uma rota/cálculo
         // independente de /rarity, não que produza uma ordem diferente sempre.
@@ -124,7 +133,7 @@ public class LeaderboardTests : IClassFixture<VivariumApiFactory>
         var (client, _) = await _factory.RegisterAsync("baixinho1");
         // Tanque do "baixinho1" fica vazio (RarityTotal=0, o mesmo de qualquer conta recém-criada) —
         // 100 fantasmas com raridade bem maior garantem que ele fique fora do top 100.
-        await SeedFakeUsersAsync(100, startingRarity: 900m);
+        await SeedFakeUsersAsync(100, startingRarity: 17m);
 
         var response = await client.GetFromJsonAsync<LeaderboardResponseRow>("/api/leaderboard/rarity");
 
