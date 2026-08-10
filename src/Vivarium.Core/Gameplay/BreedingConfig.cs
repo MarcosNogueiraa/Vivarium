@@ -17,13 +17,22 @@ public static class BreedingDefaults
     /// seguro). Por isso o corte é assimétrico: Base baixo deixa o comum quase imediato (6h),
     /// mas o Growth mais alto compensa e mantém o topo perto do valor anterior (lendário
     /// ~208h→~167h, ainda ~7 dias; épico típico ~80h, ~3-4 dias). Ver CLAUDE.md 8.8.
+    ///
+    /// TEMPORÁRIO (10/08/2026): Base/Min/Max ÷10 (6→0,6h / 6→0,6h / 240→24h) só pra fase de
+    /// testes com jogadores reais — mesmo espírito e mesmo motivo do `GenerationIntervalMinutes`
+    /// 60→10 em `TickConfig.cs` (mais volume de cruzamento pros beta testers sem esperar dias).
+    /// `GestationGrowth`/`GestationRefScore` NÃO mudaram (só a escala geral, não a curva) —
+    /// dividir Base/Min/Max por 10 divide toda gestação calculada por 10 igualmente (é um fator
+    /// multiplicativo puro na fórmula). Reverter pra 6/6/240 antes de qualquer lançamento "de
+    /// verdade" — não é mudança de design, é conveniência de QA.
     /// </summary>
-    public const double BaseGestationHours = 6.0;
+    public const double BaseGestationHours = 0.6;
     public const double GestationGrowth = 0.185;
     public const double GestationRefScore = 10.0;
-    /// <summary>Piso baixou junto (12→6h, 06/08/2026): acompanha o novo Base, senão anularia o corte do comum.</summary>
-    public const double MinGestationHours = 6.0;
-    public const double MaxGestationHours = 240.0;
+    /// <summary>Piso baixou junto (12→6h, 06/08/2026; 6→0,6h TEMPORÁRIO 10/08 — ver BaseGestationHours).</summary>
+    public const double MinGestationHours = 0.6;
+    /// <summary>Teto TEMPORÁRIO ÷10 também (240→24h, 10/08/2026 — ver BaseGestationHours).</summary>
+    public const double MaxGestationHours = 24.0;
     public const double MutationChance = 0.08;
 
     /// <summary>
