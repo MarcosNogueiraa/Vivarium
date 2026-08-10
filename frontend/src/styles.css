@@ -1048,6 +1048,32 @@ input:focus {
   to { opacity: 0.75; transform: translateY(4px); }
 }
 
+/* ---------- Ranking + visita a aquário de outro jogador ---------- */
+.ranking-view { display: flex; flex-direction: column; gap: 14px; }
+.leaderboard { display: flex; flex-direction: column; padding: 6px; }
+.leaderboard-row {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.leaderboard-row:last-child { border-bottom: none; }
+.leaderboard-row .rank { width: 3ch; color: var(--faint); font-variant-numeric: tabular-nums; }
+.leaderboard-row .username { flex: 1; font-weight: 600; }
+.leaderboard-row .value { display: flex; align-items: center; gap: 4px; }
+.leaderboard-row.is-self { background: rgba(84, 230, 209, 0.08); border-radius: 10px; }
+.leaderboard-self-outside { border-top: 2px dashed var(--line); margin-top: 6px; }
+
+.ranking-spectator { display: flex; flex-direction: column; gap: 12px; }
+.spectator-header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.spectator-header strong { font-family: var(--display); font-size: 1.1rem; }
+.spectator-stats { display: flex; gap: 10px; flex-wrap: wrap; }
+.stat-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 13px; border-radius: 999px;
+  background: var(--panel); border: 1px solid var(--line);
+  font-variant-numeric: tabular-nums; font-weight: 600;
+}
+.stat-chip small { color: var(--faint); font-weight: 500; }
+
 /* ---------- Responsivo (mobile) ---------- */
 @media (max-width: 640px) {
   .content { padding: 16px; }

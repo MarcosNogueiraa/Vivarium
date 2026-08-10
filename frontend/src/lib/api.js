@@ -72,4 +72,6 @@ export const api = {
   devFinishBreeding: () => request("POST", "/api/dev/breeding/finish"),
   dailyRewardStatus: () => request("GET", "/api/game/daily-reward"),
   claimDailyReward: () => request("POST", "/api/game/daily-reward/claim"),
+  leaderboard: (metric) => request("GET", `/api/leaderboard/${metric}`),
+  spectatorTank: (username) => request("GET", `/api/leaderboard/visit/${encodeURIComponent(username)}`),
 };
