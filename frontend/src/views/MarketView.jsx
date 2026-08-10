@@ -51,7 +51,11 @@ export function MarketView({ userId, refreshTank, notify }) {
         {listings.map((l) => (
           <div key={l.id} className="card" style={{ "--tier": bandOf(Number(l.rarityScore)).color }}>
             <button className="fish-stage as-button" onClick={() => setDetail(l)} title="Ver detalhes">
-              <FishCanvas seed={l.seed} isBred={l.isBred} parentASeed={l.parentASeed} parentBSeed={l.parentBSeed} />
+              <FishCanvas
+                seed={l.seed} isBred={l.isBred} parentASeed={l.parentASeed} parentBSeed={l.parentBSeed}
+                parentAGrandparentASeed={l.parentAGrandparentASeed} parentAGrandparentBSeed={l.parentAGrandparentBSeed}
+                parentBGrandparentASeed={l.parentBGrandparentASeed} parentBGrandparentBSeed={l.parentBGrandparentBSeed}
+              />
             </button>
             <div className="card-row">
               <RarityBadge score={Number(l.rarityScore)} />

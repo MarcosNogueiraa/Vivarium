@@ -33,7 +33,12 @@ function Farewell({ creature }) {
   return (
     <div className="farewell-fish">
       <div className="farewell-portrait" style={{ "--tier": band.color }}>
-        <FishCanvas seed={creature.seed} width={120} isBred={creature.isBred} parentASeed={creature.parentASeed} parentBSeed={creature.parentBSeed} />
+        <FishCanvas
+          seed={creature.seed} width={120} isBred={creature.isBred}
+          parentASeed={creature.parentASeed} parentBSeed={creature.parentBSeed}
+          parentAGrandparentASeed={creature.parentAGrandparentASeed} parentAGrandparentBSeed={creature.parentAGrandparentBSeed}
+          parentBGrandparentASeed={creature.parentBGrandparentASeed} parentBGrandparentBSeed={creature.parentBGrandparentBSeed}
+        />
       </div>
       <span className="badge" style={{ "--tier": band.color }}>
         <span className="gem" /> {band.name} · {score.toFixed(1)}
@@ -53,7 +58,12 @@ function ParentChip({ creature, dead, onEnter, onLeave }) {
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
-      <FishCanvas seed={creature.seed} width={64} isBred={creature.isBred} parentASeed={creature.parentASeed} parentBSeed={creature.parentBSeed} />
+      <FishCanvas
+        seed={creature.seed} width={64} isBred={creature.isBred}
+        parentASeed={creature.parentASeed} parentBSeed={creature.parentBSeed}
+        parentAGrandparentASeed={creature.parentAGrandparentASeed} parentAGrandparentBSeed={creature.parentAGrandparentBSeed}
+        parentBGrandparentASeed={creature.parentBGrandparentASeed} parentBGrandparentBSeed={creature.parentBGrandparentBSeed}
+      />
     </div>
   );
 }
@@ -122,6 +132,8 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
           <FishCanvas
             seed={creature.seed} width={220} isBred={creature.isBred}
             parentASeed={creature.parentASeed} parentBSeed={creature.parentBSeed}
+            parentAGrandparentASeed={creature.parentAGrandparentASeed} parentAGrandparentBSeed={creature.parentAGrandparentBSeed}
+            parentBGrandparentASeed={creature.parentBGrandparentASeed} parentBGrandparentBSeed={creature.parentBGrandparentBSeed}
             revealStep={suspense ? step : null}
           />
         </div>
