@@ -28,6 +28,7 @@ if (args.Length == 0)
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- list-creatures <email>");
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- diff-scores [email]");
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- fix-scores");
+    Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- finish-all-breeding");
     return 1;
 }
 
@@ -329,6 +330,26 @@ switch (args[0])
             Console.WriteLine($"    ParentAId={c.ParentAId} ParentBId={c.ParentBId} ParentASeed={c.ParentASeed} ParentBSeed={c.ParentBSeed}");
             Console.WriteLine($"    CreatedAt={c.CreatedAt:yyyy-MM-dd HH:mm:ss}");
         }
+        return 0;
+    }
+    case "finish-all-breeding":
+    {
+        // Zera o tempo restante de TODA gestação em andamento (Status=InProgress, ReadyAt no
+        // futuro) — gesto único pra quem já tinha cruzamento rodando poder aproveitar o corte
+        // de 10x na gestação (CLAUDE.md §8.11) sem esperar o prazo antigo, mais lento, que já
+        // estava travado no ReadyAt calculado no momento do Start (não muda sozinho quando a
+        // config muda). Não mexe em pais/filhote/risco — só antecipa a data de coleta.
+        var now = DateTime.UtcNow;
+        var slots = await db.BreedingSlots
+            .Where(s => s.Status == BreedingStatus.InProgress && s.ReadyAt > now)
+            .ToListAsync();
+        foreach (var s in slots)
+        {
+            Console.WriteLine($"  slot #{s.Id} (usuário #{s.UserId}): ReadyAt {s.ReadyAt:yyyy-MM-dd HH:mm:ss} -> agora");
+            s.ReadyAt = now;
+        }
+        await db.SaveChangesAsync();
+        Console.WriteLine($"\n{slots.Count} gestação(ões) em andamento liberada(s) pra coleta imediata.");
         return 0;
     }
     default:
