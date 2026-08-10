@@ -10,6 +10,7 @@ import { BackpackView } from "./BackpackView.jsx";
 import { MarketView } from "./MarketView.jsx";
 import { StoreView } from "./StoreView.jsx";
 import { BreedingView } from "./BreedingView.jsx";
+import { RankingView } from "./RankingView.jsx";
 import { HowItWorksGuide } from "./HowItWorksGuide.jsx";
 import { RarityGuide } from "./RarityGuide.jsx";
 import { ConfirmModal } from "../components/ConfirmModal.jsx";
@@ -67,6 +68,7 @@ export function GameView({ onLogout }) {
           <button className={tab === "market" ? "active" : ""} onClick={() => setTab("market")}>Mercado</button>
           <button className={tab === "store" ? "active" : ""} onClick={() => setTab("store")}>Loja</button>
           <button className={tab === "breeding" ? "active" : ""} onClick={() => setTab("breeding")}>Ninho</button>
+          <button className={tab === "ranking" ? "active" : ""} onClick={() => setTab("ranking")}>🏆 Ranking</button>
         </nav>
         <button className="guide-btn" onClick={() => setShowHowItWorks(true)} title="Como o jogo funciona">?</button>
         <span className="spacer" />
@@ -110,6 +112,7 @@ export function GameView({ onLogout }) {
         {tab === "market" && <MarketView userId={userId} refreshTank={refreshTank} notify={notify} />}
         {tab === "store" && <StoreView tank={tank} refreshTank={refreshTank} notify={notify} />}
         {tab === "breeding" && <BreedingView tank={tank} refreshTank={refreshTank} notify={notify} />}
+        {tab === "ranking" && <RankingView notify={notify} />}
       </main>
 
       <Toast message={toast} />

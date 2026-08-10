@@ -45,6 +45,7 @@ builder.Services.AddScoped<MarketService>();
 builder.Services.AddScoped<ItemService>();
 builder.Services.AddScoped<BreedingService>();
 builder.Services.AddScoped<AdminService>();
+builder.Services.AddScoped<LeaderboardService>();
 
 // Front roda em outro domínio (Cloudflare Pages) — origens via config
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
@@ -109,6 +110,7 @@ app.MapMarketEndpoints();
 app.MapItemEndpoints();
 app.MapBreedingEndpoints();
 app.MapAdminEndpoints();
+app.MapLeaderboardEndpoints();
 
 if (app.Environment.IsDevelopment())
     app.MapDevEndpoints();
