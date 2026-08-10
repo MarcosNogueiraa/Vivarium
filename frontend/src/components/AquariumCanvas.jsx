@@ -23,10 +23,18 @@ const FISH_SCALE = 0.34 * 0.8;
 // liderando, mesmo esperando os retardatários.
 const SCHOOL_TUNING = {
   FOLLOWER_MIN_SPEED_MULT: 0.6, // piso — mantido do comportamento anterior
-  FOLLOWER_MAX_SPEED_MULT: 1.15, // teto — folga de alcance, sem parecer "elástico"
+  FOLLOWER_MAX_SPEED_MULT: 1.15, // teto perto do líder — folga de alcance, sem parecer "elástico"
+  // Teto quando MUITO atrasado (lagFactor→1): múltiplo da velocidade ATUAL do líder, não da
+  // própria baseSpeed. Sem isso, um seguidor lento (baseSpeed baixo) nunca alcança um líder
+  // rápido: mesmo o líder "esperando" (LEADER_WAIT_MOVE_FACTOR_FLOOR=0.55) pode ainda ser mais
+  // rápido que baseSpeed*1.15 do seguidor, e a distância só cresce pra sempre (bug 10/08/2026,
+  // "peixes ficando muito afastados às vezes"). >1 pra realmente fechar a distância, não só
+  // acompanhar.
+  FOLLOWER_CATCHUP_MAX_OF_LEADER: 1.2,
   FOLLOWER_CATCHUP_SATURATE_DIST: 260, // mesma distância em que o líder passa a esperar
   FOLLOWER_CATCHUP_PUSH: 300, // px/s² de empurrão extra rumo ao líder, satura no clamp acima
-  LEADER_WAIT_ENTER_DIST: 260,
+  LEADER_WAIT_ENTER_DIST: 260, // gatilho pela distância MÉDIA do grupo
+  LEADER_WAIT_ENTER_DIST_OUTLIER: 420, // gatilho por um ÚNICO peixe isolado, mesmo com média ok
   LEADER_WAIT_EXIT_DIST: 130,
   LEADER_WAIT_MOVE_FACTOR_FLOOR: 0.55, // era 0.2 — líder continua claramente o mais rápido do grupo
   LEADER_MOVE_FACTOR_SMOOTH_RATE: 3, // 1/s — converge a ~95% em ~1s (3 constantes de tempo), sem trava seca
@@ -264,8 +272,13 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
 
           // Clamp único: fonte de verdade da velocidade efetiva do seguidor
           // neste frame — piso evita travar perto do líder (mesma proteção de
-          // antes), teto evita "disparar" além do próprio baseSpeed.
-          const maxSpeed = s.baseSpeed * SCHOOL_TUNING.FOLLOWER_MAX_SPEED_MULT;
+          // antes). Teto escala com o atraso: perto do líder, pouca folga sobre
+          // o próprio baseSpeed (mantém a variação natural); bem atrasado, pode
+          // acelerar até acima da velocidade ATUAL do líder — senão um seguidor
+          // lento nunca alcança um líder rápido (ver comentário em SCHOOL_TUNING).
+          const maxSpeedNear = s.baseSpeed * SCHOOL_TUNING.FOLLOWER_MAX_SPEED_MULT;
+          const maxSpeedFar = Math.abs(ls.vx) * lagFactor * SCHOOL_TUNING.FOLLOWER_CATCHUP_MAX_OF_LEADER;
+          const maxSpeed = Math.max(maxSpeedNear, maxSpeedFar);
           const minSpeed = s.baseSpeed * SCHOOL_TUNING.FOLLOWER_MIN_SPEED_MULT;
           const mag = Math.abs(s.vx);
           if (mag > maxSpeed) s.vx = Math.sign(s.vx) * maxSpeed;
@@ -282,15 +295,22 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
           // quem ele lidera), e a transição agora é suavizada por um filtro
           // exponencial em vez de um snap binário liga/desliga.
           const members = schoolGroups.get(c.traits.tail.color);
-          let sumDist = 0, n = 0;
+          let sumDist = 0, n = 0, maxDist = 0;
           for (const m of members) {
             if (m.c.id === c.id) continue;
-            sumDist += Math.hypot(m.s.x - s.x, m.s.y - s.y);
+            const d = Math.hypot(m.s.x - s.x, m.s.y - s.y);
+            sumDist += d;
+            if (d > maxDist) maxDist = d;
             n++;
           }
           const avgDist = n ? sumDist / n : 0;
 
-          if (avgDist > SCHOOL_TUNING.LEADER_WAIT_ENTER_DIST) s.waitingTarget = SCHOOL_TUNING.LEADER_WAIT_MOVE_FACTOR_FLOOR;
+          // Dois gatilhos independentes pra "esperar": distância MÉDIA do grupo (comportamento
+          // original) OU um único peixe isolado muito longe (10/08/2026 — num grupo grande, um
+          // outlier isolado pode não mexer muito na média, mascarando um peixe "perdido" que a
+          // média sozinha nunca detectaria).
+          if (avgDist > SCHOOL_TUNING.LEADER_WAIT_ENTER_DIST || maxDist > SCHOOL_TUNING.LEADER_WAIT_ENTER_DIST_OUTLIER)
+            s.waitingTarget = SCHOOL_TUNING.LEADER_WAIT_MOVE_FACTOR_FLOOR;
           else if (avgDist < SCHOOL_TUNING.LEADER_WAIT_EXIT_DIST) s.waitingTarget = 1;
           // entre os dois limiares, mantém o alvo anterior (histerese, igual antes)
 
