@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Vivarium.Api.Data;
 using Vivarium.Api.Services;
 using Vivarium.Core.Domain;
+using Vivarium.Core.Gameplay;
 
 // Ferramenta de manutenção local, sem endpoint HTTP nenhum — existe só pra ações
 // administrativas pontuais (ex: resetar senha de uma conta de teste, listar contas
@@ -15,6 +16,7 @@ using Vivarium.Core.Domain;
 //   dotnet run --project tools/Vivarium.AdminReset -- list-users
 //   dotnet run --project tools/Vivarium.AdminReset -- check-cross-refs <id1,id2,...>
 //   dotnet run --project tools/Vivarium.AdminReset -- delete-users <id1,id2,...>
+//   dotnet run --project tools/Vivarium.AdminReset -- list-creatures <email>
 
 if (args.Length == 0)
 {
@@ -23,6 +25,9 @@ if (args.Length == 0)
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- list-users");
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- check-cross-refs <id1,id2,...>");
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- delete-users <id1,id2,...>");
+    Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- list-creatures <email>");
+    Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- diff-scores [email]");
+    Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- fix-scores");
     return 1;
 }
 
@@ -162,8 +167,172 @@ switch (args[0])
             return 1;
         }
     }
+    case "dump-traits":
+    {
+        if (args.Length != 2)
+        {
+            Console.WriteLine("Uso: dotnet run --project tools/Vivarium.AdminReset -- dump-traits <id1,id2,...>");
+            return 1;
+        }
+        var ids = args[1].Split(',').Select(long.Parse).ToArray();
+        var creatures = await db.CreatureInstances.Where(c => ids.Contains(c.Id)).ToListAsync();
+        foreach (long id in ids)
+        {
+            var c = creatures.FirstOrDefault(x => x.Id == id);
+            if (c is null) { Console.WriteLine($"#{id}: não encontrada"); continue; }
+
+            Vivarium.Core.Generation.CreatureTraits traits;
+            if (c.ParentASeed is { } pa && c.ParentBSeed is { } pb)
+            {
+                var ancestryA = new Vivarium.Core.Generation.TraitGenerator.ParentAncestry(pa, c.ParentAGrandparentASeed, c.ParentAGrandparentBSeed);
+                var ancestryB = new Vivarium.Core.Generation.TraitGenerator.ParentAncestry(pb, c.ParentBGrandparentASeed, c.ParentBGrandparentBSeed);
+                traits = Vivarium.Core.Generation.TraitGenerator.BreedTraits(
+                    c.Seed, ancestryA, ancestryB, c.TraitConfigVersion,
+                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance);
+                Console.WriteLine($"#{c.Id} (FILHOTE) Seed={c.Seed} ParentASeed={pa} ParentBSeed={pb} ParentAGpA={c.ParentAGrandparentASeed} ParentAGpB={c.ParentAGrandparentBSeed} ParentBGpA={c.ParentBGrandparentASeed} ParentBGpB={c.ParentBGrandparentBSeed}");
+            }
+            else
+            {
+                traits = Vivarium.Core.Generation.TraitGenerator.Generate(c.Seed, c.TraitConfigVersion);
+                Console.WriteLine($"#{c.Id} (normal) Seed={c.Seed}");
+            }
+            Console.WriteLine($"    RarityScore no banco={c.RarityScore}  Recalculado agora={traits.RarityScore}");
+            Console.WriteLine($"    Shimmer: tier={traits.ShimmerTier} cor={traits.ShimmerColor} opacidade={traits.ShimmerOpacity:0.0}");
+            Console.WriteLine($"    Cauda:   cor={traits.Tail.Color} padrão={traits.Tail.Pattern} corPadrão={traits.Tail.PatternColor} tam={traits.Tail.PatternSize:0.0} op={traits.Tail.PatternOpacity:0.0}");
+            Console.WriteLine($"    Dorsal:  cor={traits.Dorsal.Color} padrão={traits.Dorsal.Pattern} corPadrão={traits.Dorsal.PatternColor} tam={traits.Dorsal.PatternSize:0.0} op={traits.Dorsal.PatternOpacity:0.0}");
+            Console.WriteLine($"    Peitoral:cor={traits.Pectoral.Color} padrão={traits.Pectoral.Pattern} corPadrão={traits.Pectoral.PatternColor} tam={traits.Pectoral.PatternSize:0.0} op={traits.Pectoral.PatternOpacity:0.0}");
+            Console.WriteLine($"    Movimento: caudaSpeed={traits.Movement.TailSpeed:0.0} finSpeed={traits.Movement.FinSpeed:0.0}");
+            Console.WriteLine();
+        }
+        return 0;
+    }
+    case "diff-scores":
+    {
+        // Só leitura — mede o estrago do bug de versionamento (TraitConfigVersion nunca
+        // incrementado apesar de mudanças de peso já terem acontecido): recalcula o score de
+        // TODA criatura viva (não vendida, não morta) com o motor ATUAL e compara com o que
+        // está gravado. Não escreve nada. Segundo argumento opcional filtra por email (detalhe).
+        string? filterEmail = args.Length >= 2 ? args[1] : null;
+        long? filterUserId = null;
+        if (filterEmail != null)
+        {
+            var fu = await db.Users.FirstOrDefaultAsync(u => u.Email == filterEmail);
+            if (fu is null) { Console.WriteLine($"Usuário '{filterEmail}' não encontrado."); return 1; }
+            filterUserId = fu.Id;
+        }
+        var all = await db.CreatureInstances
+            .Where(c => !c.IsDead && c.SoldAt == null && (filterUserId == null || c.OwnerId == filterUserId))
+            .ToListAsync();
+        int changed = 0;
+        double maxDelta = 0;
+        long maxDeltaId = 0;
+        var byUser = new Dictionary<long, (int Count, decimal TotalDelta)>();
+        foreach (var c in all)
+        {
+            double recalculated;
+            if (c.ParentASeed is { } pa && c.ParentBSeed is { } pb)
+            {
+                var ancestryA = new Vivarium.Core.Generation.TraitGenerator.ParentAncestry(pa, c.ParentAGrandparentASeed, c.ParentAGrandparentBSeed);
+                var ancestryB = new Vivarium.Core.Generation.TraitGenerator.ParentAncestry(pb, c.ParentBGrandparentASeed, c.ParentBGrandparentBSeed);
+                recalculated = Vivarium.Core.Generation.TraitGenerator.BreedTraits(
+                    c.Seed, ancestryA, ancestryB, c.TraitConfigVersion,
+                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance).RarityScore;
+            }
+            else
+            {
+                recalculated = Vivarium.Core.Generation.TraitGenerator.Generate(c.Seed, c.TraitConfigVersion).RarityScore;
+            }
+            decimal delta = (decimal)recalculated - c.RarityScore;
+            if (Math.Abs((double)delta) > 0.05)
+            {
+                changed++;
+                (int Count, decimal TotalDelta) cur = byUser.TryGetValue(c.OwnerId, out var v) ? v : (0, 0m);
+                byUser[c.OwnerId] = (cur.Count + 1, cur.TotalDelta + delta);
+                if (Math.Abs((double)delta) > Math.Abs(maxDelta)) { maxDelta = (double)delta; maxDeltaId = c.Id; }
+                if (filterUserId != null)
+                    Console.WriteLine($"  #{c.Id,-5} HabitatId={c.HabitatId,-5} gravado={c.RarityScore,7:0.00}  recalculado={recalculated,7:0.00}  delta={delta,7:+0.00;-0.00}  {(c.ParentAId != null ? "(filhote)" : "")}");
+            }
+        }
+        Console.WriteLine($"Total de criaturas vivas/ativas: {all.Count}");
+        Console.WriteLine($"Com score divergente (>0.05): {changed} ({100.0 * changed / Math.Max(1, all.Count):0.0}%)");
+        Console.WriteLine($"Maior divergência: criatura #{maxDeltaId}, delta={maxDelta:0.00}");
+        Console.WriteLine();
+        var userIds = byUser.Keys.ToList();
+        var users = await db.Users.Where(u => userIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.Username);
+        foreach (var kv in byUser.OrderByDescending(kv => Math.Abs(kv.Value.TotalDelta)))
+            Console.WriteLine($"  {users.GetValueOrDefault(kv.Key, $"#{kv.Key}"),-20} {kv.Value.Count,4} peixe(s) divergente(s), delta total={kv.Value.TotalDelta:0.0}");
+        return 0;
+    }
+    case "fix-scores":
+    {
+        // Corrige o bug de RarityScore desatualizado (TraitConfigVersion nunca incrementado
+        // apesar de mudanças de peso já terem acontecido — ver diff-scores): recalcula com o
+        // motor ATUAL e sobrescreve o campo gravado pra TODA criatura viva (não vendida, não
+        // morta) cujo score divergir. Não muda Seed/traits/ancestralidade — só sincroniza o
+        // número com o que já está sendo renderizado/usado ao vivo. Dentro de uma transação.
+        var all = await db.CreatureInstances.Where(c => !c.IsDead && c.SoldAt == null).ToListAsync();
+        int fixedCount = 0;
+        decimal totalDelta = 0;
+        foreach (var c in all)
+        {
+            double recalculated;
+            if (c.ParentASeed is { } pa && c.ParentBSeed is { } pb)
+            {
+                var ancestryA = new Vivarium.Core.Generation.TraitGenerator.ParentAncestry(pa, c.ParentAGrandparentASeed, c.ParentAGrandparentBSeed);
+                var ancestryB = new Vivarium.Core.Generation.TraitGenerator.ParentAncestry(pb, c.ParentBGrandparentASeed, c.ParentBGrandparentBSeed);
+                recalculated = Vivarium.Core.Generation.TraitGenerator.BreedTraits(
+                    c.Seed, ancestryA, ancestryB, c.TraitConfigVersion,
+                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance).RarityScore;
+            }
+            else
+            {
+                recalculated = Vivarium.Core.Generation.TraitGenerator.Generate(c.Seed, c.TraitConfigVersion).RarityScore;
+            }
+            decimal delta = (decimal)recalculated - c.RarityScore;
+            if (Math.Abs((double)delta) > 0.05)
+            {
+                Console.WriteLine($"  #{c.Id,-5} {c.RarityScore,7:0.00} -> {(decimal)recalculated,7:0.00}  (delta {delta,7:+0.00;-0.00})");
+                c.RarityScore = (decimal)recalculated;
+                fixedCount++;
+                totalDelta += delta;
+            }
+        }
+        await db.SaveChangesAsync();
+        Console.WriteLine($"\n{fixedCount} criatura(s) corrigida(s). Delta total={totalDelta:0.0}.");
+        return 0;
+    }
+    case "list-creatures":
+    {
+        if (args.Length != 2)
+        {
+            Console.WriteLine("Uso: dotnet run --project tools/Vivarium.AdminReset -- list-creatures <email>");
+            return 1;
+        }
+        string email = args[1];
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email);
+        if (user is null)
+        {
+            Console.WriteLine($"Usuário com email '{email}' não encontrado.");
+            return 1;
+        }
+        // Só leitura — dump completo (sem derivar traits, só o que está gravado) pra
+        // investigar discrepância de exibição entre telas (score/renda divergentes
+        // pra peixes que parecem "iguais" na UI).
+        var creatures = await db.CreatureInstances
+            .Where(c => c.OwnerId == user.Id)
+            .OrderBy(c => c.Id)
+            .ToListAsync();
+        Console.WriteLine($"Usuário #{user.Id} {user.Username} — {creatures.Count} criatura(s):\n");
+        foreach (var c in creatures)
+        {
+            Console.WriteLine($"#{c.Id}  Seed={c.Seed}  RarityScore={c.RarityScore}  TraitConfigVersion={c.TraitConfigVersion}  HabitatId={c.HabitatId}  IsDead={c.IsDead}  SoldAt={c.SoldAt}");
+            Console.WriteLine($"    ParentAId={c.ParentAId} ParentBId={c.ParentBId} ParentASeed={c.ParentASeed} ParentBSeed={c.ParentBSeed}");
+            Console.WriteLine($"    CreatedAt={c.CreatedAt:yyyy-MM-dd HH:mm:ss}");
+        }
+        return 0;
+    }
     default:
-        Console.WriteLine("Comando desconhecido. Use 'reset-password', 'list-users', 'check-cross-refs' ou 'delete-users'.");
+        Console.WriteLine("Comando desconhecido. Use 'reset-password', 'list-users', 'check-cross-refs', 'delete-users' ou 'list-creatures'.");
         return 1;
 }
 
