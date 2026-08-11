@@ -70,3 +70,71 @@ describe("Modal em mobile", () => {
     cy.get(".modal").should("not.exist");
   });
 });
+
+// Bug real relatado pelo dono do site (12/08/2026, celular de verdade): o modal de
+// detalhe do peixe não ficava centralizado. Duas causas raiz distintas, achadas via
+// instrumentação em Cypress (única forma confiável de medir layout mobile neste
+// projeto — ver CLAUDE.md §13):
+//
+// 1) `.tank-layout::before` (vinheta do modo cinema) tinha `inset:-20px` nos 4 lados —
+//    em qualquer viewport onde `.content{padding}` (16px no mobile) é menor que os
+//    20px de bleed, isso criava overflow horizontal REAL da página inteira (4px em
+//    390px de largura, confirmado desligando o pseudo-elemento e comparando
+//    `document.documentElement.scrollWidth` antes/depois). Os testes de overflow já
+//    existentes (`mobile-header.cy.js`) não pegavam isso porque comparavam contra
+//    `innerWidth` (que já inclui a folga da barra de rolagem vertical) em vez de
+//    `clientWidth` — 4px reais ficavam mascarados. Fix: bleed só vertical
+//    (`inset:-20px 0`), mais `overflow-x:hidden` em html/body como rede de segurança
+//    geral (não a correção em si, só evita que um futuro elemento decorativo cause a
+//    mesma classe de bug de novo).
+// 2) Bug SEPARADO, mais grave: `.modal-backdrop{display:grid; place-items:center}`
+//    centraliza o ITEM dentro da sua área de grade, mas não centraliza a TRILHA em
+//    si — como não há `grid-template-columns` explícito, a trilha implícita é
+//    dimensionada pelo conteúdo do `.modal` (`width:min(560px,96vw)`), não pelo
+//    espaço disponível. Em QUALQUER viewport abaixo de ~1000px, `96vw` já excede
+//    `100vw − 40px` (padding do backdrop), a trilha estoura o container, e sem
+//    `place-content` o excesso vaza só pra um lado (default `justify-content:normal`
+//    ≈ `start`) — o modal renderiza deslocado, não centralizado. Esse era o bug
+//    principal por trás do relato: reproduzido de forma determinística em Cypress
+//    puro (headless Chrome, sem device toolbar/emulação), com desvio constante de
+//    ~12-14px em qualquer largura testada — nada a ver com quirks de Safari mobile.
+//    Fix: `place-content:center` no backdrop centraliza a trilha (mesmo maior que o
+//    container), distribuindo o excesso igualmente pros dois lados.
+describe("Modal de detalhe do peixe fica centralizado (12/08/2026)", () => {
+  function login() {
+    cy.intercept("POST", "/api/auth/login", { statusCode: 200, body: { token: fakeJwt() } }).as("login");
+    cy.intercept("POST", "/api/game/heartbeat", { statusCode: 200, body: { online: true, maintenanceLevel: 100 } });
+    cy.intercept("GET", "/api/game/tank", { body: tankWithFish }).as("tank");
+    cy.intercept("GET", "/api/game/daily-reward", { statusCode: 200, body: { canClaim: false, amount: 25, nextAvailableAtUtc: null } });
+    cy.visit("/");
+    cy.get('input[placeholder="Username ou email"]').type("jogador1");
+    cy.get('input[placeholder^="Senha"]').type("senha-forte-123");
+    cy.contains("button", "Mergulhar").click();
+    cy.wait("@login");
+    cy.wait("@tank");
+  }
+
+  [[320, 568], [375, 667], [390, 844]].forEach(([w, h]) => {
+    it(`modal fica centralizado horizontalmente em ${w}x${h}`, () => {
+      cy.viewport(w, h);
+      login();
+      cy.get(".fish-row").first().click();
+      cy.get(".modal").should("be.visible").should(($modal) => {
+        const rect = $modal[0].getBoundingClientRect();
+        const expectedLeft = (w - rect.width) / 2;
+        // Tolerância de 2px por sub-pixel/scrollbar — antes do fix o desvio
+        // observado era de ~12-14px, bem acima dessa margem.
+        expect(Math.abs(rect.left - expectedLeft)).to.be.lessThan(2);
+      });
+    });
+
+    it(`sem overflow horizontal de página no Tanque com peixe presente em ${w}x${h}`, () => {
+      cy.viewport(w, h);
+      login();
+      cy.document().should((doc) => {
+        // +1px de folga por arredondamento sub-pixel.
+        expect(doc.documentElement.scrollWidth).to.be.lte(doc.documentElement.clientWidth + 1);
+      });
+    });
+  });
+});
