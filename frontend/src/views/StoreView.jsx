@@ -32,9 +32,24 @@ const FILTER_KEYS = ["auto_filter", "auto_filter_2", "auto_filter_3"];
 export function StoreView({ tank, refreshTank, notify }) {
   const [items, setItems] = useState(null);
   const [warnFilter, setWarnFilter] = useState(false);
+  const [vip, setVip] = useState(null);
+  const [vipBusy, setVipBusy] = useState(false);
 
   const refresh = useCallback(async () => { setItems(await api.items()); }, []);
   useEffect(() => { refresh().catch((err) => notify(err.message)); }, [refresh, notify]);
+
+  const refreshVip = useCallback(async () => { setVip(await api.vipStatus()); }, []);
+  useEffect(() => { refreshVip().catch((err) => notify(err.message)); }, [refreshVip, notify]);
+
+  async function buyVip(days) {
+    setVipBusy(true);
+    try {
+      await api.subscribeVip(days);
+      notify(`VIP +${days} dia(s)!`);
+      await Promise.all([refreshVip(), refreshTank()]);
+    } catch (err) { notify(err.message); }
+    finally { setVipBusy(false); }
+  }
 
   async function doBuy(item) {
     await api.buyItem(item.key);
@@ -63,8 +78,37 @@ export function StoreView({ tank, refreshTank, notify }) {
   const filterCapacity = Number(tank?.filterCapacity ?? 0);
   const fishWeight = tank ? tankFishWeight(tank.creatures) : 0;
 
+  const premiumBalance = Number(tank?.wallet?.PREMIUM ?? 0);
+
   return (
     <div className="grid">
+      <div className="card store-card store-card--premium vip-card">
+        <span className="store-card-icon">👑</span>
+        <strong>VIP</strong>
+        <p className="muted">
+          Coleta automática dos peixes prontos, mas só enquanto o tanque está online (trocar de aba
+          continua contando como online; fechar o navegador não). Pago em moeda premium, sem renovação
+          automática — expira sozinho, sem cobrança recorrente.
+        </p>
+        <p className="muted">
+          {tank?.isVip
+            ? <>Ativo até <b>{new Date(tank.vipEndAt).toLocaleDateString("pt-BR")}</b></>
+            : "Sem VIP ativo agora."}
+        </p>
+        {vip && (
+          <div className="card-row" style={{ flexWrap: "wrap", gap: 8 }}>
+            {Object.entries(vip.packages).map(([days, price]) => (
+              <button
+                key={days} className="btn-primary" disabled={vipBusy || premiumBalance < price}
+                title={premiumBalance < price ? "Saldo de moeda premium insuficiente" : undefined}
+                onClick={() => buyVip(Number(days))}
+              >
+                {days}d · 💎{Number(price).toFixed(0)}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       <div className="card store-card filter-status-card">
         <strong>Filtro automático</strong>
         {activeFilterKey

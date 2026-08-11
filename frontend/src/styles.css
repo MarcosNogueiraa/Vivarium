@@ -614,6 +614,14 @@ input:focus {
   font-variant-numeric: tabular-nums; font-weight: 700;
 }
 
+.vip-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 8px 14px; border-radius: 999px;
+  background: rgba(240, 190, 90, 0.14);
+  border: 1px solid rgba(240, 190, 90, 0.4);
+  color: var(--gold); font-weight: 700;
+}
+
 /* ---------- Cards (mercado / loja) ---------- */
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 18px; }
 
@@ -751,7 +759,7 @@ input:focus {
     order: 4; flex: 1 1 100%; width: 100%;
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   }
-  .topbar-stats .wallet-chip, .topbar-stats .premium-chip {
+  .topbar-stats .wallet-chip, .topbar-stats .premium-chip, .topbar-stats .vip-chip {
     padding: 6px 12px; font-size: 0.82rem;
   }
   .topbar-stats .daily-reward-btn { font-size: 0.8rem; padding: 7px 12px; }

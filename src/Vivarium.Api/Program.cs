@@ -46,6 +46,7 @@ builder.Services.AddScoped<ItemService>();
 builder.Services.AddScoped<BreedingService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<LeaderboardService>();
+builder.Services.AddScoped<VipService>();
 
 // Front roda em outro domínio (Cloudflare Pages) — origens via config
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
@@ -111,6 +112,7 @@ app.MapItemEndpoints();
 app.MapBreedingEndpoints();
 app.MapAdminEndpoints();
 app.MapLeaderboardEndpoints();
+app.MapVipEndpoints();
 
 if (app.Environment.IsDevelopment())
     app.MapDevEndpoints();

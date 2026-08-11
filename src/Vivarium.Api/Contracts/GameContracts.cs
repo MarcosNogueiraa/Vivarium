@@ -19,7 +19,9 @@ public record TankResponse(
     string CapacityBandName = "",
     int MaxCapacity = 0,
     decimal CapacityBandDegradationFactor = 1m,
-    decimal FilterCapacity = 0m);
+    decimal FilterCapacity = 0m,
+    bool IsVip = false,
+    DateTime? VipEndAt = null);
 
 public record BackpackResponse(int Capacity, IReadOnlyList<CreatureDto> Creatures);
 
