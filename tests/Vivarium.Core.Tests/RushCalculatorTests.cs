@@ -33,16 +33,12 @@ public class RushCalculatorTests
     }
 
     [Fact]
-    public void GestationHours_ComunsRapidos_LendariosContinuamLentos()
+    public void GestationHours_FlatDeUmaHoraParaTodoCasal()
     {
-        // Faixas ÷10 (10/08/2026, TEMPORÁRIO pra fase de testes — ver BreedingDefaults.BaseGestationHours).
-        // 2 comuns (score ~5 cada, combinado ~10 = ref): quase imediato (Base=0,6h).
-        double comuns = BreedingCalculator.GestationHours(5m, 5m);
-        Assert.InRange(comuns, 0.55, 0.65);
-
-        // 2 lendários (score ~14 cada): o corte foi assimétrico — o topo continua o mais lento
-        // proporcionalmente (~15-19h, era ~150-190h antes do ÷10 temporário).
-        double lendarios = BreedingCalculator.GestationHours(14m, 14m);
-        Assert.InRange(lendarios, 15, 19);
+        // TEMPORÁRIO (11/08/2026, pedido do usuário — ver BreedingDefaults.BaseGestationHours):
+        // Min=Max=1h, então TODO casal gesta em exatamente 1h, independente da raridade —
+        // mais volume de cruzamento pra achar bugs antes do reset dos aquários no lançamento.
+        Assert.Equal(1.0, BreedingCalculator.GestationHours(5m, 5m));
+        Assert.Equal(1.0, BreedingCalculator.GestationHours(14m, 14m));
     }
 }
