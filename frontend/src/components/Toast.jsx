@@ -1,4 +1,8 @@
-export function Toast({ message }) {
+export function Toast({ message, onDismiss }) {
   if (!message) return null;
-  return <div className="toast" role="status">{message}</div>;
+  return (
+    <div className="toast" role="status" onClick={onDismiss} title="Clique pra fechar">
+      {message}
+    </div>
+  );
 }

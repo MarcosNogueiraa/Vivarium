@@ -19,7 +19,7 @@ import { TankUpgradeCelebration } from "../components/TankUpgradeCelebration.jsx
 
 export function GameView({ onLogout }) {
   const { tank, userId, refreshTank, syncError, bandUpgrade, dismissBandUpgrade } = useGame();
-  const { toast, notify } = useToast();
+  const { toast, notify, dismiss: dismissToast } = useToast();
   const { status: dailyReward, refresh: refreshDailyReward } = useDailyReward();
   const [tab, setTab] = useState("tank");
   const [claimingReward, setClaimingReward] = useState(false);
@@ -139,7 +139,7 @@ export function GameView({ onLogout }) {
         {tab === "ranking" && <RankingView notify={notify} />}
       </main>
 
-      <Toast message={toast} />
+      <Toast message={toast} onDismiss={dismissToast} />
 
       {showHowItWorks && (
         <HowItWorksGuide
