@@ -60,8 +60,10 @@ public class BreedingService(VivariumDbContext db, GameService game)
         var now = DateTime.UtcNow;
         double hours = BreedingCalculator.GestationHours(parentA.RarityScore, parentB.RarityScore);
         decimal cost = BreedingCalculator.CostSoft(parentA.RarityScore, parentB.RarityScore);
+        var ancestryA = new TraitGenerator.ParentAncestry(parentA.Seed, parentA.ParentASeed, parentA.ParentBSeed);
+        var ancestryB = new TraitGenerator.ParentAncestry(parentB.Seed, parentB.ParentASeed, parentB.ParentBSeed);
         var tierDist = TraitGenerator.ChildTierDistribution(
-            parentA.Seed, parentB.Seed, TraitConfigV1.Version, BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
+            ancestryA, ancestryB, TraitConfigV1.Version, BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
 
         double chanceA = BreedingCalculator.DeathChance(BreedingCalculator.EffectiveBreedCount(parentA.BreedCount, parentA.LastBredAt, now));
         double chanceB = BreedingCalculator.DeathChance(BreedingCalculator.EffectiveBreedCount(parentB.BreedCount, parentB.LastBredAt, now));

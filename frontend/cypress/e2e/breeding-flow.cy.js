@@ -17,6 +17,10 @@ function creature(id, seed, rarityScore) {
 const parentA = creature(401, 111111, 5.2);
 const parentB = creature(402, 222222, 6.8);
 
+function bredCreature(id, seed, rarityScore, parentASeed, parentBSeed) {
+  return { ...creature(id, seed, rarityScore), isBred: true, parentASeed: String(parentASeed), parentBSeed: String(parentBSeed) };
+}
+
 const quoteBody = {
   costSoft: 150, stabilizerCostSoft: 150, insuranceCostPremium: 60,
   gestationHours: 12.5,
@@ -81,6 +85,27 @@ describe("Ninho — escolher e cruzar", () => {
     // então é ele quem vira o "peixe A" (primeiro clicado).
     cy.wait("@start").its("request.body").should("deep.equal", { parentAId: 402, parentBId: 401, useStabilizer: false, useInsurance: false });
     cy.contains("Casal levado pro ninho!");
+  });
+
+  it("mostra o selo de filhote 🐣 no card do peixe e na prévia de confirmação (pedido do usuário)", () => {
+    const bred = bredCreature(403, 333333, 7.1, 111111, 222222);
+    cy.intercept("GET", "/api/breeding", { body: { active: false, slot: null } }).as("status");
+    cy.intercept("GET", "/api/game/backpack", { body: { capacity: 50, creatures: [parentA, bred] } }).as("backpack");
+    login();
+    cy.wait(["@status", "@backpack"]);
+
+    // Só o filhote tem o selo — o peixe normal (parentA) não.
+    cy.get(".card").should("have.length", 2);
+    cy.get(".card").contains("🐣 Filhote").should("have.length", 1);
+
+    cy.get(".card").eq(0).find(".fish-stage").click();
+    cy.get(".card").eq(1).find(".fish-stage").click();
+    cy.intercept("GET", "/api/breeding/quote*", { body: quoteBody }).as("quote");
+    cy.contains("button", "Ver chances e cruzar").click();
+    cy.wait("@quote");
+
+    // Na prévia, o card do filhote também mostra o selo (e o outro pai não).
+    cy.get(".parent-preview-card").contains("🐣 Filhote").should("have.length", 1);
   });
 });
 
