@@ -47,8 +47,8 @@ function Farewell({ creature }) {
   );
 }
 
-/** Retrato pequeno de um pai/mãe na celebração; hover mostra as estatísticas (PeekPanel). */
-function ParentChip({ creature, dead, onEnter, onLeave }) {
+/** Retrato pequeno de um pai/mãe na celebração; hover ou toque mostram as estatísticas (PeekPanel). */
+function ParentChip({ creature, dead, onEnter, onLeave, onClick }) {
   const score = Number(creature.rarityScore);
   const band = bandOf(score);
   return (
@@ -57,6 +57,11 @@ function ParentChip({ creature, dead, onEnter, onLeave }) {
       style={{ "--tier": band.color }}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
+      onClick={onClick}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(e); } }}
+      role="button"
+      tabIndex={0}
+      title={`${band.name} · ${score.toFixed(1)} — toque pra ver os atributos`}
     >
       <FishCanvas
         seed={creature.seed} width={64} isBred={creature.isBred}
@@ -111,16 +116,28 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
     { key: "pectoral", label: "Nadadeira peitoral", value: partSummary(traits.pectoral), points: pointsOf((f) => f.part === "pectoral" || f.part === "fin") },
   ];
 
+  // Hover mostra o preview (desktop); clique/toque FIXA o preview aberto — útil
+  // em telas sem mouse, onde hover nunca dispara. Um clique no mesmo pai fecha
+  // de novo; clicar no outro pai troca o fixado; passar o mouse não sobrescreve
+  // um preview já fixado por clique.
   function showPeek(e, c) {
+    // getBoundingClientRect precisa ser lido AGORA — `e.currentTarget` some depois que o
+    // handler termina (SyntheticEvent), e o updater do setState só roda mais tarde.
     const rect = e.currentTarget.getBoundingClientRect();
-    setPeek({ x: rect.left + rect.width / 2, y: rect.top, creature: c });
+    setPeek((prev) => (prev?.pinned ? prev : { x: rect.left + rect.width / 2, y: rect.top, creature: c, pinned: false }));
   }
-  function hidePeek() { setPeek(null); }
+  function hidePeek() { setPeek((prev) => (prev?.pinned ? prev : null)); }
+  function togglePeekPinned(e, c) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setPeek((prev) => (prev?.pinned && prev.creature.id === c.id
+      ? null
+      : { x: rect.left + rect.width / 2, y: rect.top, creature: c, pinned: true }));
+  }
 
   return (
     <Modal onClose={onClose} narrow className="celebrate">
       <div className="celebrate-rays" style={{ "--tier": tierColor }} aria-hidden="true" />
-      <div className="celebrate-body">
+      <div className="celebrate-body" onClick={() => setPeek((prev) => (prev?.pinned ? null : prev))}>
         <div className="eyebrow" style={{ color: tierColor }}>
           {!revealed ? "✨ Abrindo peixe raro…" : isBreeding ? "🐣 Seu filhote nasceu!" : legendary ? "✦ Lendário! ✦" : "Peixe raro coletado"}
         </div>
@@ -187,6 +204,7 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
                   dead={deadParents.some((d) => d.id === p.id)}
                   onEnter={(e) => showPeek(e, p)}
                   onLeave={hidePeek}
+                  onClick={(e) => { e.stopPropagation(); togglePeekPinned(e, p); }}
                 />
               ))}
             </div>
