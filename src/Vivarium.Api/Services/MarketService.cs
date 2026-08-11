@@ -53,8 +53,20 @@ public class MarketService(VivariumDbContext db, GameService game)
             return ServiceResult.NotFound("Criatura não encontrada");
         if (creature.IsDead)
             return ServiceResult.Bad("Essa criatura não sobreviveu à gestação");
-        if (creature.HabitatId is null)
-            return ServiceResult.Bad("Criatura já está no mercado ou em trânsito");
+        if (creature.SoldAt is not null)
+            return ServiceResult.Bad("Essa criatura já foi vendida ao NPC");
+        // Bug real corrigido (12/08/2026, relatado pelo usuário): `HabitatId is null` também é
+        // verdade pra uma criatura na MOCHILA (estado normal, não "em trânsito") — o check
+        // bloqueava listar qualquer peixe guardado ali, sempre. O que realmente precisa ser
+        // checado é se já existe uma listagem ATIVA, e se o peixe não está preso numa gestação.
+        bool alreadyListed = await db.MarketListings.AnyAsync(m =>
+            m.CreatureInstanceId == creature.Id && m.Status == ListingStatus.Active);
+        if (alreadyListed)
+            return ServiceResult.Bad("Criatura já está no mercado");
+        bool breeding = await db.BreedingSlots.AnyAsync(s =>
+            s.Status == BreedingStatus.InProgress && (s.ParentAId == creature.Id || s.ParentBId == creature.Id));
+        if (breeding)
+            return ServiceResult.Bad("Criatura está em gestação — não pode ser vendida agora");
 
         creature.HabitatId = null; // sai do tanque enquanto listada
         var listing = new MarketListing
