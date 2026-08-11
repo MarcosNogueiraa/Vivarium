@@ -201,6 +201,12 @@ export function BreedingView({ tank, refreshTank, notify }) {
 
   const bothPicked = pickA && pickB;
   const preview = bothPicked ? breedingPreview(pickA, pickB) : null;
+  // Custo total em soft da gestação (só existe com a prévia carregada) — usado tanto na linha
+  // "Custo" quanto direto no botão de confirmar, pra ficar explícito antes de gastar (pedido do
+  // usuário: o custo não estava visível no momento da decisão, só rolando a prévia pra cima).
+  const totalCostSoft = quote && quote !== "loading"
+    ? quote.costSoft + (safety === "stabilizer" ? quote.stabilizerCostSoft : 0)
+    : 0;
 
   const content = status.active ? (
     <>
@@ -367,7 +373,7 @@ export function BreedingView({ tank, refreshTank, notify }) {
               <div className="card-row" style={{ marginTop: 16 }}>
                 <span>Custo</span>
                 <span className="mono">
-                  <Coin /> {(quote.costSoft + (safety === "stabilizer" ? quote.stabilizerCostSoft : 0)).toFixed(0)} soft
+                  <Coin /> {totalCostSoft.toFixed(0)} soft
                   {safety === "insurance" && <> + 💎 {quote.insuranceCostPremium.toFixed(0)} premium</>}
                 </span>
               </div>
@@ -451,7 +457,10 @@ export function BreedingView({ tank, refreshTank, notify }) {
               </div>
 
               <div className="detail-actions">
-                <button className="btn-primary" onClick={confirmStart}>Confirmar cruzamento</button>
+                <button className="btn-primary" onClick={confirmStart}>
+                  Confirmar cruzamento · <Coin /> {totalCostSoft.toFixed(0)} soft
+                  {safety === "insurance" && <> + 💎 {quote.insuranceCostPremium.toFixed(0)}</>}
+                </button>
                 <button onClick={() => setQuote(null)}>Cancelar</button>
               </div>
             </>
