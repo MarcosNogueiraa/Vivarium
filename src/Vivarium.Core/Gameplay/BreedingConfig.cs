@@ -18,21 +18,25 @@ public static class BreedingDefaults
     /// mas o Growth mais alto compensa e mantém o topo perto do valor anterior (lendário
     /// ~208h→~167h, ainda ~7 dias; épico típico ~80h, ~3-4 dias). Ver CLAUDE.md 8.8.
     ///
-    /// TEMPORÁRIO (10/08/2026): Base/Min/Max ÷10 (6→0,6h / 6→0,6h / 240→24h) só pra fase de
-    /// testes com jogadores reais — mesmo espírito e mesmo motivo do `GenerationIntervalMinutes`
-    /// 60→10 em `TickConfig.cs` (mais volume de cruzamento pros beta testers sem esperar dias).
-    /// `GestationGrowth`/`GestationRefScore` NÃO mudaram (só a escala geral, não a curva) —
-    /// dividir Base/Min/Max por 10 divide toda gestação calculada por 10 igualmente (é um fator
-    /// multiplicativo puro na fórmula). Reverter pra 6/6/240 antes de qualquer lançamento "de
-    /// verdade" — não é mudança de design, é conveniência de QA.
+    /// TEMPORÁRIO (11/08/2026): Min=Max=1h — gestação FLAT de 1 hora pra TODO casal, direto
+    /// de propósito do pedido do usuário. Antes disso (10/08/2026) já era um ÷10 temporário
+    /// (6→0,6h / 6→0,6h / 240→24h) só pra fase de testes; agora, como os aquários serão
+    /// resetados no lançamento mesmo, faz sentido ir direto pra 1h fixa pra todo mundo — mais
+    /// volume de cruzamento pra achar bugs no fluxo (herança, risco de morte, avós, etc.) sem
+    /// esperar nem os 24h que o teto anterior permitia pra um par lendário. `GestationGrowth`/
+    /// `GestationRefScore` continuam intocados (a curva não mudou, só ficou irrelevante
+    /// enquanto Min==Max — a fórmula ainda roda, só que o `Math.Clamp` sempre devolve 1h,
+    /// então basta restaurar Min/Max pra reativar a escala por raridade). Reverter pra
+    /// 6/6/240 antes de qualquer lançamento "de verdade" — não é mudança de design, é
+    /// conveniência de QA (mesmo espírito do `GenerationIntervalMinutes` 60→10 em `TickConfig.cs`).
     /// </summary>
-    public const double BaseGestationHours = 0.6;
+    public const double BaseGestationHours = 1.0;
     public const double GestationGrowth = 0.185;
     public const double GestationRefScore = 10.0;
-    /// <summary>Piso baixou junto (12→6h, 06/08/2026; 6→0,6h TEMPORÁRIO 10/08 — ver BaseGestationHours).</summary>
-    public const double MinGestationHours = 0.6;
-    /// <summary>Teto TEMPORÁRIO ÷10 também (240→24h, 10/08/2026 — ver BaseGestationHours).</summary>
-    public const double MaxGestationHours = 24.0;
+    /// <summary>Piso TEMPORÁRIO em 1h — ver BaseGestationHours (reverter pra 6h no lançamento).</summary>
+    public const double MinGestationHours = 1.0;
+    /// <summary>Teto TEMPORÁRIO em 1h — ver BaseGestationHours (reverter pra 240h no lançamento).</summary>
+    public const double MaxGestationHours = 1.0;
     public const double MutationChance = 0.08;
 
     /// <summary>
