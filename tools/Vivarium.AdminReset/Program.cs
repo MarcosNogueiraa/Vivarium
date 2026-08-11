@@ -17,6 +17,7 @@ using Vivarium.Core.Gameplay;
 //   dotnet run --project tools/Vivarium.AdminReset -- check-cross-refs <id1,id2,...>
 //   dotnet run --project tools/Vivarium.AdminReset -- delete-users <id1,id2,...>
 //   dotnet run --project tools/Vivarium.AdminReset -- list-creatures <email>
+//   dotnet run --project tools/Vivarium.AdminReset -- reset-account <email>
 
 if (args.Length == 0)
 {
@@ -29,6 +30,7 @@ if (args.Length == 0)
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- diff-scores [email]");
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- fix-scores");
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- finish-all-breeding");
+    Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- reset-account <email>");
     return 1;
 }
 
@@ -331,6 +333,99 @@ switch (args[0])
             Console.WriteLine($"    CreatedAt={c.CreatedAt:yyyy-MM-dd HH:mm:ss}");
         }
         return 0;
+    }
+    case "reset-account":
+    {
+        // Reseta uma conta pro estado de recém-registrada (SEM apagar a conta em si — login,
+        // senha, IsAdmin continuam). Apaga todo o progresso de jogo (criaturas, mochila, fila,
+        // gestação, inventário) e reseta carteira/tanque pros mesmos valores que AuthEndpoints
+        // usa no registro (HabitatDefaults/EconomyDefaults), incluindo o peixe inicial já
+        // pronto pra coletar (8.13) — pra ficar indistinguível de uma conta nova de verdade.
+        if (args.Length != 2)
+        {
+            Console.WriteLine("Uso: dotnet run --project tools/Vivarium.AdminReset -- reset-account <email>");
+            return 1;
+        }
+        string email = args[1];
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email);
+        if (user is null)
+        {
+            Console.WriteLine($"Usuário com email '{email}' não encontrado.");
+            return 1;
+        }
+
+        var creatureIds = await db.CreatureInstances.Where(c => c.OwnerId == user.Id).Select(c => c.Id).ToListAsync();
+        var listingCount = await db.MarketListings.CountAsync(m => m.SellerId == user.Id);
+        var fishCount = await db.CreatureInstances.CountAsync(c => c.OwnerId == user.Id);
+        Console.WriteLine($"Vai resetar: #{user.Id} {user.Username} ({user.Email}) — {fishCount} criatura(s), {listingCount} listagem(ns) como vendedor.");
+
+        // Mesmo cuidado do delete-users: uma criatura de OUTRO usuário (transferida/vendida no
+        // passado) pode ter essa conta como pai/mãe na linhagem (FK Restrict) — apagar sem
+        // checar quebraria a árvore genealógica de quem recebeu.
+        if (!await CheckCrossRefsAsync(db, [user.Id]))
+        {
+            Console.WriteLine("\nAbortado — resolva as referências cruzadas acima antes de resetar.");
+            return 1;
+        }
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+        try
+        {
+            await db.TransactionLogs.Where(t => t.FromUserId == user.Id || t.ToUserId == user.Id).ExecuteDeleteAsync();
+            await db.MarketListings.Where(m => m.SellerId == user.Id).ExecuteDeleteAsync();
+            await db.BreedingSlots.Where(s => s.UserId == user.Id).ExecuteDeleteAsync();
+            await db.CreatureInstances.Where(c => c.OwnerId == user.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(c => c.ParentAId, (long?)null).SetProperty(c => c.ParentBId, (long?)null));
+            await db.CreatureInstances.Where(c => c.OwnerId == user.Id).ExecuteDeleteAsync();
+            await db.UserInventories.Where(i => i.UserId == user.Id).ExecuteDeleteAsync();
+
+            var currencies = await db.CurrencyTypes.ToDictionaryAsync(c => c.Code, c => c.Id);
+            var softWallet = await db.WalletBalances.FirstAsync(w => w.UserId == user.Id && w.CurrencyTypeId == currencies["SOFT"]);
+            softWallet.Amount = EconomyDefaults.StartingSoftBalance;
+            var premiumWallet = await db.WalletBalances.FirstAsync(w => w.UserId == user.Id && w.CurrencyTypeId == currencies["PREMIUM"]);
+            premiumWallet.Amount = EconomyDefaults.StartingPremiumBalance;
+
+            var now = DateTime.UtcNow;
+            int aquariumTypeId = await db.HabitatTypes.Where(h => h.Code == "Aquarium").Select(h => h.Id).FirstAsync();
+            int breedingTypeId = await db.HabitatTypes.Where(h => h.Code == "Breeding").Select(h => h.Id).FirstAsync();
+            var aquarium = await db.Habitats.FirstAsync(h => h.UserId == user.Id && h.HabitatTypeId == aquariumTypeId);
+            await db.GenerationQueueItems.Where(q => q.HabitatId == aquarium.Id).ExecuteDeleteAsync();
+            aquarium.Capacity = HabitatDefaults.Capacity;
+            aquarium.MaintenanceLevel = HabitatDefaults.MaintenanceLevel;
+            aquarium.QueueCap = HabitatDefaults.QueueCap;
+            aquarium.GenerationIntervalMinutes = HabitatDefaults.GenerationIntervalMinutes;
+            aquarium.OnlineGenerationRate = HabitatDefaults.OnlineGenerationRate;
+            aquarium.OfflineGenerationRate = HabitatDefaults.OfflineGenerationRate;
+            aquarium.GenerationProgressMinutes = 0;
+            aquarium.CoinAccrual = 0;
+            aquarium.LastTickAt = now;
+            aquarium.LastHeartbeatAt = null;
+
+            int aquariumSpeciesId = await db.Species
+                .Where(s => s.HabitatTypeId == aquariumTypeId).Select(s => s.Id).FirstAsync();
+            db.GenerationQueueItems.Add(new GenerationQueueItem
+            {
+                HabitatId = aquarium.Id, SpeciesId = aquariumSpeciesId,
+                ReadyAt = now, Status = QueueItemStatus.Pending, IsSick = false,
+            });
+
+            var breedingHabitat = await db.Habitats.FirstOrDefaultAsync(h => h.UserId == user.Id && h.HabitatTypeId == breedingTypeId);
+            if (breedingHabitat is not null)
+                breedingHabitat.LastTickAt = now;
+
+            user.LastDailyRewardAt = null;
+
+            await db.SaveChangesAsync();
+            await tx.CommitAsync();
+            Console.WriteLine($"\nConta #{user.Id} {user.Username} resetada — {creatureIds.Count} criatura(s) apagada(s), carteira/tanque/mochila/gestação voltaram ao estado de conta nova (com 1 peixe pronto na fila).");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            await tx.RollbackAsync();
+            Console.WriteLine($"\nERRO, nada foi alterado (rollback): {ex.Message}");
+            return 1;
+        }
     }
     case "finish-all-breeding":
     {
