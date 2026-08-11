@@ -74,4 +74,6 @@ export const api = {
   claimDailyReward: () => request("POST", "/api/game/daily-reward/claim"),
   leaderboard: (metric) => request("GET", `/api/leaderboard/${metric}`),
   spectatorTank: (username) => request("GET", `/api/leaderboard/visit/${encodeURIComponent(username)}`),
+  vipStatus: () => request("GET", "/api/vip"),
+  subscribeVip: (days) => request("POST", "/api/vip/subscribe", { days }),
 };

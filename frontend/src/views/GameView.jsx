@@ -100,6 +100,11 @@ export function GameView({ onLogout }) {
           <span className="premium-chip" title="Moeda premium — única forma de acelerar fila/gestação (⚡)">
             💎{premium.toFixed(0)} <small>premium</small>
           </span>
+          {tank.isVip && (
+            <span className="vip-chip" title={`VIP ativo até ${new Date(tank.vipEndAt).toLocaleDateString("pt-BR")} — coleta automática enquanto online`}>
+              👑 VIP
+            </span>
+          )}
           {import.meta.env.DEV && (
             <button className="dev-btn" onClick={devCoins} title="Só existe em dev">+1000 fichas</button>
           )}
