@@ -6,7 +6,11 @@ import { Coin } from "../components/Coin.jsx";
 import { FishDetail } from "./FishDetail.jsx";
 
 const METRICS = [
-  { key: "rarity", label: "Raridade total", suffix: "", icon: "🏆", format: (v) => v.toFixed(1) },
+  // toFixed(2), não (1): score guarda 4 casas decimais no banco (HasPrecision(10,4)) — com 1
+  // casa só, muitos jogadores empatavam no ranking à medida que a base crescia (pedido do
+  // usuário, 11/08/2026). Renda continua em 1 casa — ali a chance de empate é bem menor
+  // (função exponencial contínua, não soma de vários scores discretos).
+  { key: "rarity", label: "Raridade total", suffix: "", icon: "🏆", format: (v) => v.toFixed(2) },
   { key: "income", label: "Renda por hora", suffix: "/h", icon: null, format: (v) => v.toFixed(1) },
 ];
 
@@ -41,7 +45,7 @@ export function RankingView({ notify }) {
           <span className="hint">{spectator.capacityBandName} · {spectator.creatures.length} peixe(s) · só visualização</span>
         </div>
         <div className="spectator-stats">
-          <span className="stat-chip">🏆 {Number(spectator.rarityTotal).toFixed(1)} <small>raridade total</small></span>
+          <span className="stat-chip">🏆 {Number(spectator.rarityTotal).toFixed(2)} <small>raridade total</small></span>
           <span className="stat-chip"><Coin />{Number(spectator.coinsPerHour).toFixed(1)} <small>/h</small></span>
           <span className="stat-chip">💧 {Number(spectator.maintenanceLevel).toFixed(0)} <small>água</small></span>
         </div>
