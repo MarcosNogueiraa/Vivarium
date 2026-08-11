@@ -48,6 +48,11 @@ describe("Modal em mobile", () => {
     cy.get(".modal").should("be.visible");
     cy.contains("Por que é raro").should("exist"); // existe no DOM, mesmo fora da vista ainda
 
+    // As seções nascem fechadas (12/08/2026) — abrir as duas pra ter conteúdo alto o
+    // suficiente e exercitar o overflow de verdade, mesmo objetivo original do teste.
+    cy.contains("button.detail-section-head", "Atributos").click();
+    cy.contains("button.detail-section-head", "Por que é raro").click();
+
     cy.get(".modal-close").should("be.visible");
     cy.get(".modal-body").scrollTo("bottom");
     cy.contains("Por que é raro").should("be.visible"); // agora visível, era o trecho que sumia no bug relatado
