@@ -917,6 +917,16 @@ input:focus {
 .water-impact { font-size: 0.8rem; }
 
 .detail-section { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; }
+/* Cabeçalho clicável de .detail-section (Atributos / Por que é raro) — nasce fechado no
+   FishDetail, pedido do usuário: a tela de detalhe estava grande demais, principalmente no
+   mobile. Reaproveita o visual do .eyebrow (não o estilo bold do .howto-head) + a mesma
+   animação de rotação do chevron já usada em .collapse-btn (TankView). */
+.detail-section-head {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  background: none; border: none; box-shadow: none; padding: 0; margin-bottom: 4px; cursor: pointer;
+}
+.detail-section-head .chevron { display: inline-block; transition: transform 0.2s ease; transform: rotate(-90deg); font-size: 0.8rem; color: var(--muted); }
+.detail-section-head .chevron.open { transform: rotate(0deg); }
 .trait-row { display: flex; justify-content: space-between; gap: 14px; padding: 5px 0; font-size: 0.9rem; }
 .trait-row .tr-label { color: var(--muted); flex-shrink: 0; }
 .trait-row .tr-value { text-align: right; }

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Modal } from "../components/Modal.jsx";
 import { FishCanvas } from "../components/FishCanvas.jsx";
 import { Coin } from "../components/Coin.jsx";
@@ -6,6 +6,20 @@ import { TraitRow } from "../components/TraitRow.jsx";
 import { coinsPerHourOf, rarityBreakdownOf, traitsOf, waterDegradationPerFishPerHour } from "../lib/generator.js";
 import { bandOf, PT, swimSpeedOf } from "../lib/fishRenderer.js";
 import { ageOf, factorLabel, partSummary, speedWord } from "../lib/format.js";
+
+/** Seção recolhível (nasce fechada) — reaproveita o visual do .eyebrow, só some o corpo até o clique. */
+function CollapsibleSection({ title, children }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="detail-section">
+      <button className="detail-section-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <span className="eyebrow">{title}</span>
+        <span className={`chevron${open ? " open" : ""}`}>▾</span>
+      </button>
+      {open && children}
+    </div>
+  );
+}
 
 export function FishDetail({ creature, onClose, children, inTank = false, bandFactor = 1 }) {
   const seed = creature.seed;
@@ -44,8 +58,7 @@ export function FishDetail({ creature, onClose, children, inTank = false, bandFa
         </div>
       </div>
 
-      <div className="detail-section">
-        <div className="eyebrow">Atributos</div>
+      <CollapsibleSection title="Atributos">
         <TraitRow label="Corpo" value={traits.shimmerTier === "None"
           ? "Cinza, sem brilho"
           : `${PT.tier[traits.shimmerTier]} · ${PT.shimmer[traits.shimmerColor]} ${traits.shimmerOpacity.toFixed(0)}%`} />
@@ -54,10 +67,9 @@ export function FishDetail({ creature, onClose, children, inTank = false, bandFa
         <TraitRow label="Nadadeira peitoral" value={partSummary(traits.pectoral)} />
         <TraitRow label="Movimento" value={`cauda ${speedWord(traits.movement.tailSpeed)}, `
           + `nadadeira ${speedWord(traits.movement.finSpeed)} · nado ${swimSpeedOf(traits).toFixed(0)} px/s`} />
-      </div>
+      </CollapsibleSection>
 
-      <div className="detail-section">
-        <div className="eyebrow">Por que é raro</div>
+      <CollapsibleSection title="Por que é raro">
         <p className="bd-help">Cada atributo soma pontos conforme quão improvável é. Quanto mais raro o conjunto, maior o score.</p>
         <div className="breakdown">
           {breakdown.factors.map((f, i) => (
@@ -70,7 +82,7 @@ export function FishDetail({ creature, onClose, children, inTank = false, bandFa
           ))}
         </div>
         <div className="bd-total">Score total <b>{breakdown.total.toFixed(2)}</b></div>
-      </div>
+      </CollapsibleSection>
 
       {children && <div className="detail-actions">{children}</div>}
     </Modal>
