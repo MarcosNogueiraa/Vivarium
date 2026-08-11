@@ -250,6 +250,67 @@ public class BreedTraitsTests
     }
 
     [Fact]
+    public void RetencaoDeLendario_ComAvosNaoLendarios_AindaAltaMasMenorQuePaisFrescos()
+    {
+        // Investigação (12/08/2026): usuário relatou que o FILHOTE REAL (não só a prévia, já
+        // corrigida acima) nasceu sem o brilho lendário ao cruzar 2 pais filhotes com Lendário
+        // real. Medido: 83% de retenção com avós comuns (vs 92% pra pais "frescos", mesmo par) —
+        // o grandparentReachChance (15% por lado) reduz a retenção, mas não drasticamente, porque
+        // o viés de raridade ainda favorece fortemente o lado que continua Lendário quando o
+        // outro "escapa" pro avô. Perder o tier uma vez (~17% de chance) é variância normal, não
+        // um bug — mas fixa o número aqui pra virar alarme se um bug futuro mudar isso de verdade.
+        long FindNoneSeed(long searchOffset) => ManySeeds(5_000).Select(s => s + searchOffset)
+            .First(s => TraitGenerator.Generate(s).ShimmerTier == ShimmerTier.None);
+        long grandparentA1 = FindNoneSeed(0);
+        long grandparentA2 = FindNoneSeed(1_000_000);
+        long grandparentB1 = FindNoneSeed(2_000_000);
+        long grandparentB2 = FindNoneSeed(3_000_000);
+
+        long ResolvedLegendaryParentSeed(long gpA, long gpB, long searchOffset)
+        {
+            foreach (long candidate in ManySeeds(5_000).Select(s => s + searchOffset))
+            {
+                var resolved = TraitGenerator.BreedTraits(candidate, gpA, gpB,
+                    TraitConfigV1.Version, BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
+                if (resolved.ShimmerTier == ShimmerTier.Legendary) return candidate;
+            }
+            throw new InvalidOperationException("Seed de pai lendário não encontrado.");
+        }
+
+        long parentASeed = ResolvedLegendaryParentSeed(grandparentA1, grandparentA2, 0);
+        long parentBSeed = ResolvedLegendaryParentSeed(grandparentB1, grandparentB2, 50_000_000);
+
+        var ancestryA = new TraitGenerator.ParentAncestry(parentASeed, grandparentA1, grandparentA2);
+        var ancestryB = new TraitGenerator.ParentAncestry(parentBSeed, grandparentB1, grandparentB2);
+
+        const int n = 50_000;
+        int legendaryCount = 0;
+        for (long childSeed = 1; childSeed <= n; childSeed++)
+        {
+            var child = TraitGenerator.BreedTraits(childSeed, ancestryA, ancestryB, TraitConfigV1.Version,
+                BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance);
+            if (child.ShimmerTier == ShimmerTier.Legendary) legendaryCount++;
+        }
+        double pct = legendaryCount / (double)n;
+
+        // Comparação com o caso "pais frescos" (sem avós, mesmo par) — mede o efeito ISOLADO
+        // do grandparentReachChance na retenção.
+        int legendaryCountFresh = 0;
+        for (long childSeed = 1; childSeed <= n; childSeed++)
+        {
+            var child = TraitGenerator.BreedTraits(childSeed, parentASeed, parentBSeed,
+                TraitConfigV1.Version, BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
+            if (child.ShimmerTier == ShimmerTier.Legendary) legendaryCountFresh++;
+        }
+        double pctFresh = legendaryCountFresh / (double)n;
+
+        Assert.InRange(pct, 0.78, 0.88);
+        Assert.InRange(pctFresh, 0.88, 0.96);
+        Assert.True(pct < pctFresh,
+            $"avós comuns deveriam reduzir um pouco a retenção ({pct:P1}) em relação a pais frescos ({pctFresh:P1})");
+    }
+
+    [Fact]
     public void ViesDeRaridade_TambemFavoreceCorDePartesMaisRaras()
     {
         // 31/07/2026: viés estendido de "só shimmer" pra também cor/padrão de parte —
