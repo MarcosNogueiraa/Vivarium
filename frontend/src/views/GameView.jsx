@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, clearToken } from "../lib/api.js";
 import { useGame } from "../hooks/useGame.js";
 import { useToast } from "../hooks/useToast.js";
@@ -26,6 +26,16 @@ export function GameView({ onLogout }) {
   const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [showRarityGuide, setShowRarityGuide] = useState(false);
   const [showGiveFishConfirm, setShowGiveFishConfirm] = useState(false);
+  const navRef = useRef(null);
+
+  // Em telas estreitas o nav vira uma tira de rolagem horizontal (styles.css,
+  // `.topbar-tabs .nav-pills`) — sem isso, trocar pra uma aba fora da área
+  // visível (ex: "Ninho" ou "🏆 Ranking" com a tela ainda no fundo) deixava o
+  // botão ativo escondido, sem indicação de qual aba está selecionada.
+  useEffect(() => {
+    navRef.current?.querySelector("button.active")
+      ?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+  }, [tab]);
 
   async function giveStarterFishToAll() {
     const { habitatsAffected } = await api.adminGiveStarterFishAll();
@@ -62,37 +72,46 @@ export function GameView({ onLogout }) {
       <header className="topbar">
         <div className="brand"><span className="dot" />Vivarium <small>aquário vivo</small></div>
         <span className="spacer" />
-        <nav className="nav-pills">
-          <button className={tab === "tank" ? "active" : ""} onClick={() => setTab("tank")}>Tanque</button>
-          <button className={tab === "backpack" ? "active" : ""} onClick={() => setTab("backpack")}>Mochila</button>
-          <button className={tab === "market" ? "active" : ""} onClick={() => setTab("market")}>Mercado</button>
-          <button className={tab === "store" ? "active" : ""} onClick={() => setTab("store")}>Loja</button>
-          <button className={tab === "breeding" ? "active" : ""} onClick={() => setTab("breeding")}>Ninho</button>
-          <button className={tab === "ranking" ? "active" : ""} onClick={() => setTab("ranking")}>🏆 Ranking</button>
-        </nav>
-        <button className="guide-btn" onClick={() => setShowHowItWorks(true)} title="Como o jogo funciona">?</button>
+        {/* `.topbar-tabs`/`.topbar-stats` só existem pra dar ao header um jeito de
+            se reorganizar em linhas separadas no mobile (CSS `order` + linha
+            cheia por grupo) sem duplicar nada — em telas largas eles usam
+            `display:contents` e desaparecem da árvore de layout, deixando o
+            topbar exatamente como sempre foi (ver styles.css). */}
+        <div className="topbar-tabs">
+          <nav className="nav-pills" ref={navRef}>
+            <button data-tab="tank" className={tab === "tank" ? "active" : ""} onClick={() => setTab("tank")}>Tanque</button>
+            <button data-tab="backpack" className={tab === "backpack" ? "active" : ""} onClick={() => setTab("backpack")}>Mochila</button>
+            <button data-tab="market" className={tab === "market" ? "active" : ""} onClick={() => setTab("market")}>Mercado</button>
+            <button data-tab="store" className={tab === "store" ? "active" : ""} onClick={() => setTab("store")}>Loja</button>
+            <button data-tab="breeding" className={tab === "breeding" ? "active" : ""} onClick={() => setTab("breeding")}>Ninho</button>
+            <button data-tab="ranking" className={tab === "ranking" ? "active" : ""} onClick={() => setTab("ranking")}>🏆 Ranking</button>
+          </nav>
+          <button className="guide-btn" onClick={() => setShowHowItWorks(true)} title="Como o jogo funciona">?</button>
+        </div>
         <span className="spacer" />
-        {dailyReward?.canClaim && (
-          <button className="daily-reward-btn" onClick={claimDailyReward} disabled={claimingReward}
-            title={`Resgatar recompensa diária: +${Number(dailyReward.amount).toFixed(0)} soft`}>
-            🎁 Recompensa diária
-          </button>
-        )}
-        <span className="wallet-chip"><Coin />{soft.toFixed(0)} <small>soft</small></span>
-        <span className="premium-chip" title="Moeda premium — única forma de acelerar fila/gestação (⚡)">
-          💎{premium.toFixed(0)} <small>premium</small>
-        </span>
-        {import.meta.env.DEV && (
-          <button className="dev-btn" onClick={devCoins} title="Só existe em dev">+1000 fichas</button>
-        )}
-        {import.meta.env.DEV && (
-          <button className="dev-btn" onClick={devPremium} title="Só existe em dev">+100 premium</button>
-        )}
-        {tank.isAdmin && (
-          <button className="dev-btn" onClick={() => setShowGiveFishConfirm(true)} title="Dá 1 peixe pronto pra coletar a todo jogador com espaço na fila">
-            🎣 Dar peixe a todos
-          </button>
-        )}
+        <div className="topbar-stats">
+          {dailyReward?.canClaim && (
+            <button className="daily-reward-btn" onClick={claimDailyReward} disabled={claimingReward}
+              title={`Resgatar recompensa diária: +${Number(dailyReward.amount).toFixed(0)} soft`}>
+              🎁 Recompensa diária
+            </button>
+          )}
+          <span className="wallet-chip"><Coin />{soft.toFixed(0)} <small>soft</small></span>
+          <span className="premium-chip" title="Moeda premium — única forma de acelerar fila/gestação (⚡)">
+            💎{premium.toFixed(0)} <small>premium</small>
+          </span>
+          {import.meta.env.DEV && (
+            <button className="dev-btn" onClick={devCoins} title="Só existe em dev">+1000 fichas</button>
+          )}
+          {import.meta.env.DEV && (
+            <button className="dev-btn" onClick={devPremium} title="Só existe em dev">+100 premium</button>
+          )}
+          {tank.isAdmin && (
+            <button className="dev-btn" onClick={() => setShowGiveFishConfirm(true)} title="Dá 1 peixe pronto pra coletar a todo jogador com espaço na fila">
+              🎣 Dar peixe a todos
+            </button>
+          )}
+        </div>
         <AccountMenu onLogout={() => { clearToken(); onLogout(); }} />
       </header>
 

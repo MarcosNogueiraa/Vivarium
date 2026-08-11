@@ -203,6 +203,13 @@ input:focus {
 }
 .topbar .spacer { flex: 1; }
 
+/* `.topbar-tabs`/`.topbar-stats` (GameView.jsx): grupos puramente estruturais
+   pro mobile reorganizar o header em linhas (ver @media 720px abaixo).
+   `display:contents` faz o wrapper "sumir" do layout — os filhos viram itens
+   diretos do flex `.topbar`, exatamente como antes de existirem esses divs —
+   então em telas largas nada muda visualmente. */
+.topbar-tabs, .topbar-stats { display: contents; }
+
 .wallet-chip {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 8px 15px; border-radius: 999px;
@@ -708,9 +715,46 @@ input:focus {
 
 .loading { text-align: center; color: var(--muted); padding: 20vh 0; font-family: var(--display); font-size: 1.2rem; }
 
+/* Cabeçalho mobile compacto (11/08/2026) — antes disso o topbar em telas
+   estreitas empilhava marca / carteira+premium / admin+conta / nav em DUAS
+   linhas (6 abas quebrando), ~5 linhas de "chrome" antes de qualquer conteúdo
+   do aquário aparecer (relato real do usuário, screenshot de celular).
+   Reorganizado em 3 linhas fixas via `order` (funciona mesmo sem mudar a
+   ordem no DOM, então o desktop — que não entra nesse @media — nem percebe):
+     1) marca ---- botão de conta
+     2) abas (tira única, rolagem horizontal) + botão de ajuda "?"
+     3) carteira/premium/recompensa/dev (só o que existir; quebra se precisar)
+   `.spacer` (usado pra empurrar coisas no layout de desktop) não faz falta
+   aqui — cada grupo já ocupa a própria linha inteira. */
 @media (max-width: 720px) {
-  .topbar { flex-wrap: wrap; gap: 12px; }
-  .nav-pills { order: 3; width: 100%; justify-content: center; }
+  .topbar { flex-wrap: wrap; gap: 10px; row-gap: 10px; }
+  .topbar > .spacer { display: none; }
+
+  .brand { order: 1; flex: 1 1 auto; font-size: 1.15rem; }
+  .account-menu { order: 2; flex: 0 0 auto; }
+
+  .topbar-tabs {
+    order: 3; flex: 1 1 100%; width: 100%;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .topbar-tabs .nav-pills {
+    flex: 1 1 auto; min-width: 0;
+    flex-wrap: nowrap; justify-content: flex-start;
+    overflow-x: auto; scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .topbar-tabs .nav-pills::-webkit-scrollbar { display: none; }
+  .topbar-tabs .nav-pills button { flex: 0 0 auto; white-space: nowrap; padding: 7px 14px; font-size: 0.85rem; }
+  .topbar-tabs .guide-btn { flex: 0 0 auto; }
+
+  .topbar-stats {
+    order: 4; flex: 1 1 100%; width: 100%;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .topbar-stats .wallet-chip, .topbar-stats .premium-chip {
+    padding: 6px 12px; font-size: 0.82rem;
+  }
+  .topbar-stats .daily-reward-btn { font-size: 0.8rem; padding: 7px 12px; }
 }
 
 /* ---------- HUD extras (capacidade, guia, produção potencial) ---------- */
@@ -818,18 +862,35 @@ input:focus {
 }
 @keyframes fade-in { from { opacity: 0; } }
 .modal {
-  position: relative; width: min(560px, 96vw); max-height: 92vh; overflow-y: auto;
-  padding: 22px; border-radius: 20px;
+  position: relative; width: min(560px, 96vw); max-height: 92vh;
+  /* O SCROLL vive só em `.modal-body` (abaixo) — `.modal` em si não rola mais,
+     então `.modal-close` (absolute, relativo a `.modal`) fica sempre no lugar
+     mesmo com o conteúdo interno rolando. Antes de 11/08/2026, `.modal` era o
+     próprio container com overflow-y:auto e o × (absolute) rolava JUNTO com o
+     conteúdo — em telas de celular com conteúdo alto (ex: "Por que é raro"
+     com vários atributos), o × saía da tela e o modal virava uma "página"
+     sem borda perceptível de onde ele começava/terminava (relato real de
+     usuário, screenshot). */
+  display: flex; flex-direction: column; overflow: hidden;
+  border-radius: 20px;
   background: var(--panel-strong);
   animation: modal-in 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.15);
 }
 .modal.narrow { width: min(420px, 96vw); }
 .modal.wide { width: min(720px, 96vw); }
 @keyframes modal-in { from { opacity: 0; transform: translateY(14px) scale(0.98); } }
+.modal-body {
+  overflow-y: auto; min-height: 0; padding: 22px;
+  /* Fade sutil no rodapé quando há mais conteúdo abaixo do fold — reforça que
+     é uma folha flutuante com limite, não a própria página. Some perto do
+     fim do scroll (a cor de fundo do painel já cobre o resto). */
+  background: linear-gradient(180deg, transparent calc(100% - 40px), rgba(3, 14, 18, 0.35) 100%);
+}
 .modal-close {
   position: absolute; top: 12px; right: 12px; z-index: 2;
   width: 34px; height: 34px; padding: 0; border-radius: 50%;
   font-size: 1.2rem; line-height: 1; color: var(--muted); box-shadow: none;
+  background: var(--panel-strong);
 }
 
 .detail-head { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
@@ -1090,12 +1151,23 @@ input:focus {
   .tank-hud { flex-wrap: wrap; gap: 8px; top: 10px; left: 10px; right: 10px; }
   .tank-hud .spacer { display: none; }
   .fish-list { grid-template-columns: 1fr; }
-  .modal { padding: 16px; }
+  .modal-body { padding: 16px; }
   .detail-head { flex-direction: column; text-align: center; }
   .detail-fish { width: min(200px, 60vw); }
   .detail-meta { align-items: center; }
   .onboard { flex-direction: column; align-items: stretch; }
-  .brand { font-size: 1.3rem; }
+
+  /* Barra fixa (sticky-bar) e ranking: alvos de toque cabendo sem vazar a
+     tela e sem espremer. `.sticky-bar` já era `display:flex` sem wrap e sem
+     limite de largura — com texto + 2 botões (ex: "3 peixe(s) selecionado(s)
+     — NPC paga 42 no total" + "Desselecionar" + "Vender ao NPC") ela conseguia
+     ficar mais larga que a tela, empurrando scroll horizontal da PÁGINA
+     inteira (bug real, achado nesta revisão mobile). */
+  .sticky-bar {
+    max-width: calc(100vw - 24px); flex-wrap: wrap; justify-content: center; text-align: center;
+  }
+  .leaderboard-row { flex-wrap: wrap; row-gap: 4px; }
+  .leaderboard-row .username { min-width: 90px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
