@@ -208,6 +208,48 @@ public class BreedTraitsTests
     }
 
     [Fact]
+    public void ChildTierDistribution_PaisFilhotesComTierRealLendario_NaoIgnoraAAncestralidade()
+    {
+        // Bug real corrigido 12/08/2026 (relatado pelo usuário): ChildTierDistribution usava
+        // Generate(seed) puro nos pais, ignorando que um pai pode ser ele mesmo um filhote com
+        // tier real bem diferente do que o seed cru geraria (78% de chance de "Sem brilho" do
+        // zero) — a prévia mostrava ~98% de chance de o filhote sair sem brilho quando os dois
+        // pais tinham Lendário de verdade (herdado via ancestralidade), quase o oposto do
+        // resultado real. Mesma classe de bug já corrigida em BreedTraits/FishCanvas (31/07 e
+        // 10/08/2026).
+        long grandparent = FindSeedWithTier(ShimmerTier.Legendary, 200_000);
+
+        long ResolvedLegendaryParentSeed(long searchOffset)
+        {
+            foreach (long candidate in ManySeeds(5_000).Select(s => s + searchOffset))
+            {
+                var resolved = TraitGenerator.BreedTraits(candidate, grandparent, grandparent,
+                    TraitConfigV1.Version, BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
+                if (resolved.ShimmerTier == ShimmerTier.Legendary) return candidate;
+            }
+            throw new InvalidOperationException("Seed de pai lendário não encontrado.");
+        }
+
+        long parentASeed = ResolvedLegendaryParentSeed(0);
+        long parentBSeed = ResolvedLegendaryParentSeed(50_000_000);
+
+        // Confirma a premissa do teste: o seed CRU desses pais não é lendário (senão o bug não
+        // seria exercitado) — o tier real só existe por causa da ancestralidade.
+        Assert.NotEqual(ShimmerTier.Legendary, TraitGenerator.Generate(parentASeed).ShimmerTier);
+        Assert.NotEqual(ShimmerTier.Legendary, TraitGenerator.Generate(parentBSeed).ShimmerTier);
+
+        var ancestryA = new TraitGenerator.ParentAncestry(parentASeed, grandparent, grandparent);
+        var ancestryB = new TraitGenerator.ParentAncestry(parentBSeed, grandparent, grandparent);
+        var dist = TraitGenerator.ChildTierDistribution(ancestryA, ancestryB, TraitConfigV1.Version,
+            BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
+
+        Assert.True(dist[ShimmerTier.Legendary] > 0.5,
+            $"pais realmente lendários deveriam manter o tier na maioria das vezes, saiu {dist[ShimmerTier.Legendary]:P1}");
+        Assert.True(dist[ShimmerTier.None] < 0.1,
+            $"chance de 'sem brilho' deveria ser baixa com pais lendários de verdade, saiu {dist[ShimmerTier.None]:P1}");
+    }
+
+    [Fact]
     public void ViesDeRaridade_TambemFavoreceCorDePartesMaisRaras()
     {
         // 31/07/2026: viés estendido de "só shimmer" pra também cor/padrão de parte —

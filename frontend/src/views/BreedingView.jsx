@@ -34,6 +34,7 @@ function ParentPreviewCard({ label, creature, traits }) {
         parentBGrandparentASeed={creature.parentBGrandparentASeed} parentBGrandparentBSeed={creature.parentBGrandparentBSeed}
       />
       <span className="badge" style={{ "--tier": band.color }}><span className="gem" /> {band.name} · {score.toFixed(1)}</span>
+      {creature.isBred && <span className="bred-tag">🐣 Filhote</span>}
       <div className="peek-row">
         {traits.shimmerTier === "None" ? "Corpo sem brilho" : `${PT.tier[traits.shimmerTier]} · ${PT.shimmer[traits.shimmerColor]}`}
       </div>
@@ -329,6 +330,7 @@ export function BreedingView({ tank, refreshTank, notify }) {
                     />
                   </button>
                   <RarityBadge score={Number(c.rarityScore)} />
+                  {c.isBred && <span className="bred-tag">🐣 Filhote</span>}
                   {peekId === c.id && (
                     <div className="peek-overlay">
                       <PeekPanel creature={c} />

@@ -210,12 +210,21 @@ public static class TraitGenerator
     /// matemática de <see cref="InheritOrMutate{T}"/>: com `mutationChance` de
     /// chance o tier vem do sorteio livre pela tabela base; senão, do viés entre
     /// os dois pais.
+    ///
+    /// <paramref name="parentA"/>/<paramref name="parentB"/> usam <see cref="ResolveOwnTraits"/>
+    /// (não <see cref="Generate"/> direto) — bug real corrigido 12/08/2026: se um pai É ele mesmo
+    /// um filhote (ex: um Épico que herdou brilho Lendário Iridescente dos avós), `Generate(seed)`
+    /// puro devolve um tier ALEATÓRIO sem relação nenhuma com o tier REAL desse pai (78% de chance
+    /// de sair "Sem brilho" do zero) — a prévia mostrava algo como 98% de chance de o filhote sair
+    /// sem brilho quando na verdade a chance real de manter Lendário era alta. Mesma classe de bug
+    /// já corrigida em `BreedTraits`/`FishCanvas` (31/07 e 10/08/2026) — sempre que uma criatura
+    /// "completa" ganha ancestralidade, checar todo lugar que ainda deriva traits de um seed cru.
     /// </summary>
     public static IReadOnlyDictionary<ShimmerTier, double> ChildTierDistribution(
-        long parentASeed, long parentBSeed, int configVersion, double mutationChance, double rarityBias)
+        ParentAncestry parentA, ParentAncestry parentB, int configVersion, double mutationChance, double rarityBias)
     {
-        var a = Generate(parentASeed, configVersion);
-        var b = Generate(parentBSeed, configVersion);
+        var a = ResolveOwnTraits(parentA, configVersion, mutationChance, rarityBias);
+        var b = ResolveOwnTraits(parentB, configVersion, mutationChance, rarityBias);
 
         double probA = WeightedTable.ProbabilityOf(TraitConfigV1.ShimmerTiers, a.ShimmerTier);
         double probB = WeightedTable.ProbabilityOf(TraitConfigV1.ShimmerTiers, b.ShimmerTier);
