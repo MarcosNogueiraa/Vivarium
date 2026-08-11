@@ -37,7 +37,14 @@
 
 * { box-sizing: border-box; margin: 0; }
 
-html, body { height: 100%; }
+/* `overflow-x: hidden` é rede de segurança (12/08/2026), não a correção em
+   si — a causa raiz real (`.tank-layout::before` com bleed horizontal, ver
+   comentário lá) foi corrigida separadamente. Isso só garante que um futuro
+   elemento decorativo que vaze alguns px da viewport nunca mais produza
+   scroll horizontal de página inteira / modal fixed descentralizado —
+   mesma classe de bug já vista aqui duas vezes (`.sticky-bar` 11/08,
+   `.tank-layout::before` 12/08). */
+html, body { height: 100%; overflow-x: hidden; }
 
 body {
   font-family: var(--ui);
@@ -403,7 +410,25 @@ input:focus {
    (isolation acima cria um contexto próprio, esse z-index negativo não vaza
    pro resto da página). */
 .tank-layout::before {
-  content: ""; position: absolute; inset: -20px; z-index: -2; pointer-events: none;
+  /* Só bleed vertical (`-20px` em cima/embaixo) — bleed horizontal foi
+     removido (12/08/2026): `inset:-20px` nos 4 lados criava overflow
+     horizontal REAL da página inteira sempre que `.content{padding}` (16px
+     no mobile) era menor que os 20px de bleed, sobrando `20-16=4px` de área
+     rolável fora da viewport (`document.documentElement.scrollWidth >
+     clientWidth`) — confirmado via instrumentação (desativar este pseudo-
+     elemento eliminava exatamente esses 4px). Isso não aparecia nos testes
+     de overflow já existentes porque comparavam contra `innerWidth` (que já
+     inclui a barra de rolagem vertical), não `clientWidth` — 4px reais
+     ficavam mascarados pela folga da barra. Era a causa raiz do modal de
+     detalhe do peixe não ficar centralizado em celular real: com a página
+     tendo overflow horizontal verdadeiro, o `position:fixed;inset:0` do
+     modal (correto no papel) passa a competir com a área rolável extra que
+     o navegador mobile abre pra página — mesma classe de bug já documentada
+     pra `.sticky-bar` (11/08/2026). O gradiente é centralizado (`at 50%
+     14%`), então perder o respiro horizontal de 20px não muda o efeito
+     visual perceptível — só o vertical (moldura/vinheta acima e abaixo do
+     tanque) precisava do bleed. */
+  content: ""; position: absolute; inset: -20px 0; z-index: -2; pointer-events: none;
   background: radial-gradient(ellipse 65% 55% at 50% 14%, transparent 0%, rgba(1, 6, 9, 0.5) 55%, rgba(0, 2, 3, 0.8) 100%);
 }
 
@@ -865,7 +890,26 @@ input:focus {
 /* ---------- Modal (detalhe do peixe / guia de raridade) ---------- */
 .modal-backdrop {
   position: fixed; inset: 0; z-index: 60;
-  display: grid; place-items: center; padding: 20px;
+  /* `place-items:center` sozinho só centraliza o item DENTRO da sua área de
+     grade — não centraliza a área/trilha em si dentro do container. Com um
+     único item sem `grid-template-columns` explícito, a trilha implícita
+     (`auto`) é dimensionada pelo CONTEÚDO do item (`.modal`, `width:min(560px,
+     96vw)`), não pelo espaço disponível do container — em qualquer viewport
+     abaixo de ~1000px, `96vw` já é maior que `100vw − 40px` (os 20px de
+     padding de cada lado aqui embaixo), então a trilha sempre "estoura" o
+     container. Sem `place-content`, o `justify-content` fica no default
+     (`normal`, equivalente a `start`) — a trilha alinha pela ESQUERDA e todo
+     o excesso vaza só pela DIREITA, resultado: o modal renderiza deslocado
+     pra esquerda (não centralizado), às vezes cortado pela borda direita da
+     tela. Bug real confirmado (12/08/2026) — reproduzido em Cypress puro
+     (`cy.viewport`, sem device toolbar/emulação): o desvio do centro era de
+     ~12-14px, CONSTANTE em qualquer largura de tela testada (320/375/390),
+     e não relacionado a overflow horizontal de página (existia igual antes
+     e depois do fix do `.tank-layout::before` acima). `place-content:
+     center` centraliza a TRILHA (mesmo que maior que o container) — agora o
+     excesso vaza igualmente pros dois lados, o modal fica visualmente
+     centralizado mesmo quando mais largo que a área útil do backdrop. */
+  display: grid; place-items: center; place-content: center; padding: 20px;
   background: rgba(1, 8, 11, 0.6); backdrop-filter: blur(6px);
   animation: fade-in 0.2s ease;
 }
@@ -1187,6 +1231,27 @@ input:focus {
   }
   .leaderboard-row { flex-wrap: wrap; row-gap: 4px; }
   .leaderboard-row .username { min-width: 90px; }
+
+  /* Alvos de toque (12/08/2026, passe de polish) — vários botões só-ícone
+     (fechar modal, conta, ferramentas do tanque, recolher seção) eram
+     34/30/26/38px, abaixo dos ~40-44px recomendados pra toque confortável
+     no polegar. `min-width`/`min-height` têm prioridade sobre `width`/
+     `height` fixos no cálculo do CSS (spec: min vence quando conflita), então
+     isso aumenta a área clicável sem duplicar cada regra de tamanho. Só no
+     mobile — no desktop com mouse o tamanho original já é preciso o
+     suficiente e mais denso visualmente. */
+  .modal-close, .account-btn, .tool-btn, .guide-btn { min-width: 40px; min-height: 40px; }
+  .collapse-btn { min-width: 38px; min-height: 38px; }
+}
+
+/* Em telas sem hover (toque) os botões-ferramenta do tanque (tela cheia,
+   pop-up, alternar cliques) ficavam permanentemente em opacidade 0.6 — a
+   regra original só volta a 1 no `:hover`/`:focus-within`, que um dedo nunca
+   dispara. Resultado real: 3 botões quase invisíveis o tempo todo em
+   qualquer celular/tablet, não só nos mais estreitos (por isso `hover:none`,
+   não uma largura de viewport). */
+@media (hover: none) {
+  .tank-tools { opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
