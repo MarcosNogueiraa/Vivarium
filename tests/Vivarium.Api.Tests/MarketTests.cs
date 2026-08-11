@@ -30,6 +30,24 @@ public class MarketTests : IClassFixture<VivariumApiFactory>
         return creatureId;
     }
 
+    private async Task<long> CriarCriaturaNaMochila(long userId)
+    {
+        long creatureId = 0;
+        await _factory.WithDbAsync(async db =>
+        {
+            var creature = new CreatureInstance
+            {
+                SpeciesId = 1, OwnerId = userId, HabitatId = null,
+                Seed = 484848, TraitConfigVersion = 1, RarityScore = 4.4m,
+                CreatedAt = DateTime.UtcNow,
+            };
+            db.CreatureInstances.Add(creature);
+            await db.SaveChangesAsync();
+            creatureId = creature.Id;
+        });
+        return creatureId;
+    }
+
     private static async Task<long> Listar(HttpClient seller, long creatureId, decimal price)
     {
         var response = await seller.PostAsJsonAsync("/api/market/listings", new
@@ -86,6 +104,33 @@ public class MarketTests : IClassFixture<VivariumApiFactory>
 
         var tank = await seller.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
         Assert.DoesNotContain(tank!.Creatures, c => c.Id == creatureId);
+    }
+
+    [Fact]
+    public async Task Listar_CriaturaDaMochila_Funciona()
+    {
+        // Bug real corrigido (12/08/2026, relatado pelo usuário): listar direto da mochila
+        // (HabitatId null — estado normal, não "em trânsito") retornava erro sempre, porque o
+        // check antigo tratava `HabitatId is null` como sinônimo de "já está no mercado".
+        var (seller, sellerId) = await _factory.RegisterAsync("vendedor-mochila");
+        long creatureId = await CriarCriaturaNaMochila(sellerId);
+
+        long listingId = await Listar(seller, creatureId, 15m);
+
+        var listings = await seller.GetFromJsonAsync<List<ListingDto>>("/api/market/listings");
+        Assert.Contains(listings!, l => l.Id == listingId && l.CreatureId == creatureId);
+    }
+
+    [Fact]
+    public async Task Listar_MesmaCriaturaDuasVezes_Retorna400NaSegunda()
+    {
+        var (seller, sellerId) = await _factory.RegisterAsync("vendedor-duplo");
+        long creatureId = await CriarCriaturaNoTanque(sellerId);
+        await Listar(seller, creatureId, 10m);
+
+        var second = await seller.PostAsJsonAsync("/api/market/listings", new { creatureInstanceId = creatureId, priceSoft = 20m });
+
+        Assert.Equal(HttpStatusCode.BadRequest, second.StatusCode);
     }
 
     [Fact]
