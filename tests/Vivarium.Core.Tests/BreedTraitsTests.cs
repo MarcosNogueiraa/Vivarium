@@ -260,14 +260,14 @@ public class BreedTraitsTests
         // corrigida acima) nasceu sem o brilho lendário ao cruzar 2 pais filhotes com Lendário
         // real. Medido (na época, GrandparentReachChance=0.15): 83% de retenção com avós comuns
         // (vs 92% pra pais "frescos", mesmo par).
-        // Reduzido pra 0.03 (mesmo dia, dois ajustes seguidos: 0.15→0.05→0.03 a pedido do
-        // usuário): a chance é sorteada 8x independentes por cruzamento (4 slots × 2 lados) —
-        // com 0.15, a chance de PELO MENOS UM traço vir de avô em qualquer cruzamento era
-        // ~72.8%, deixando a influência dos avós dominar a maioria dos cruzamentos (usuário
-        // relatou "resultados estranhos" olhando o histórico de uma conta real com múltiplas
-        // gerações). Com 0.03 cai pra ~21.6%. Efeito colateral esperado e correto: retenção de
-        // Lendário com avós comuns SOBE de 83%→~90% (menos chance de "escapar" pro avô
-        // não-lendário).
+        // Reduzido de 0.15 pra 0.03, depois pra 0.01 no mesmo dia (12/08/2026, usuário pediu
+        // herança mais confiável em cruzamentos multi-geração — "filhotes de filhotes" perdendo
+        // traço raro com frequência demais). A chance é sorteada 8x independentes por cruzamento
+        // (4 slots × 2 lados) — com 0.15, a chance de PELO MENOS UM traço vir de avô em qualquer
+        // cruzamento era ~72.8%. Com 0.01, cai pra ~7.7%. No mesmo ajuste, MutationChance também
+        // caiu de 0.08 pra 0.04 (mesmo motivo). Efeito colateral esperado e correto: retenção de
+        // Lendário com avós comuns SOBE de 83% (baseline original, GrandparentReachChance=0.15)
+        // pra ~95% (menos chance de "escapar" pro avô não-lendário, menos mutação também).
         long FindNoneSeed(long searchOffset) => ManySeeds(5_000).Select(s => s + searchOffset)
             .First(s => TraitGenerator.Generate(s).ShimmerTier == ShimmerTier.None);
         long grandparentA1 = FindNoneSeed(0);
@@ -277,7 +277,10 @@ public class BreedTraitsTests
 
         long ResolvedLegendaryParentSeed(long gpA, long gpB, long searchOffset)
         {
-            foreach (long candidate in ManySeeds(5_000).Select(s => s + searchOffset))
+            // 40k (era 5k): com MutationChance mais baixo (12/08/2026, 0.08->0.04), achar um
+            // Lendário raro (só via mutação, já que os avós são "Sem brilho") precisa de um
+            // espaço de busca maior pro mesmo conjunto fixo de seeds continuar achando um match.
+            foreach (long candidate in ManySeeds(40_000).Select(s => s + searchOffset))
             {
                 var resolved = TraitGenerator.BreedTraits(candidate, gpA, gpB,
                     TraitConfigV1.Version, BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
@@ -313,8 +316,8 @@ public class BreedTraitsTests
         }
         double pctFresh = legendaryCountFresh / (double)n;
 
-        Assert.InRange(pct, 0.86, 0.94);
-        Assert.InRange(pctFresh, 0.88, 0.96);
+        Assert.InRange(pct, 0.92, 0.98);
+        Assert.InRange(pctFresh, 0.94, 1.00);
         Assert.True(pct < pctFresh,
             $"avós comuns deveriam reduzir um pouco a retenção ({pct:P1}) em relação a pais frescos ({pctFresh:P1})");
     }
