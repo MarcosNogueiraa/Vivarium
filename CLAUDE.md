@@ -61,18 +61,18 @@ Cada uma das 3 partes (cauda, dorsal, peitoral) sorteia **independentemente** de
 
 ### Padrão sobre a parte — aplicado igualmente às 3 partes
 
-Tabela **v2 (29/07/2026)**: "Sem padrão" domina mais (76%) e há 11 tipos, os novos com pesos baixos de propósito (raro = valioso). Ocelo e Mármore são a caça de topo. Cada parte sorteia 1 padrão desta mesma tabela.
+Tabela **v3 (12/08/2026)**: "Sem padrão" domina mais (76.2%) e há 11 tipos, os novos com pesos baixos de propósito (raro = valioso). Ocelo e Mármore são a caça de topo. Cada parte sorteia 1 padrão desta mesma tabela. **Degradê caiu de 0.6% pra 0.4%** (delta somado em "Sem padrão") como parte da mudança abaixo — pedido do usuário pra torná-lo mais raro e visualmente mais marcante.
 
 | Tipo de padrão | Peso (%) |
 |---|---|
-| Sem padrão | 76% |
+| Sem padrão | 76.2% |
 | Estria | 8% |
 | Bolinha | 8% |
 | Escamas | 3% |
 | Raios | 1.6% |
 | Ziguezague | 1.2% |
 | Rede | 0.9% |
-| Degradê | 0.6% |
+| Degradê | 0.4% |
 | Manchado | 0.35% |
 | Ocelo | 0.2% |
 | Mármore | 0.05% |
@@ -81,6 +81,11 @@ Se houver padrão (qualquer tipo ≠ "sem padrão"):
 - **Tamanho do padrão**: sorteio contínuo 0–100 (pequeno a grande), com peso maior no meio (distribuição normal), tiers extremos (muito pequeno <10 ou muito grande >90) contam como "raro" e entram no cálculo de rarity score.
 - **Cor do padrão**: mesma paleta curada acima, mas nunca igual à cor de base da mesma parte (evita padrão invisível).
 - **Opacidade do padrão**: 20–90%, sorteio uniforme; abaixo de 30% ou acima de 80% conta como raro no score.
+
+**Degradê — mix de duas cores (12/08/2026):** só pra esse padrão, um subtrait novo (`GradientMix`) sorteia como a cor de base e a cor do padrão se misturam visualmente na parte — `BaseDominant` (base ocupa a maior parte), `Even` (mistura equilibrada, 50/50) ou `PatternDominant` (padrão ocupa a maior parte), pesos **45% / 10% / 45%**. Visualmente é um gradiente vertical cujo ponto de corte se desloca conforme o mix (`fishRenderer.js`, `drawPattern`); `patternSize` continua controlando só a suavidade da transição, independente do mix — são traits ortogonais, cada um com seu próprio salt (`{parte}_pattern_mix`), seguindo o princípio já documentado de "trait novo = salt novo, sem tocar nos existentes". Pedido explícito do usuário: o Degradê "merece destaque" — feio virar mais um padrão qualquer entre 11.
+- **Regra de score assimétrica** (só o Degradê tem isso): em `Even`, as duas cores contam pro score, exatamente como já acontecia por padrão pra qualquer parte com padrão (cor de base + cor do padrão sempre são pontuadas independentemente). Em `BaseDominant`/`PatternDominant`, **só a cor dominante conta** — a minoritária é subtraída do score depois de já ter sido somada (`TraitGenerator.GeneratePart`/`BreedPart`, delta calculado à parte antes de somar em `score`, importa pra bater bit a bit entre geração fresca e mutação no breeding). Resultado: `Even` (10% de chance dentro do Degradê, ~0.04% de todas as partes — mais raro que Mármore) rende mais score que os assimétricos, recompensando genuinamente o resultado mais raro.
+- Calibração (`Vivarium.Simulation`, 1M seeds): frequência real bate exatamente com o peso configurado; cortes de raridade (`RARITY_RANGES`/`BANDS`) praticamente não se moveram (5.34/7.45/9.78/13.89 vs. os já documentados 5.4/7.5/9.8/14.0, dentro da variação normal entre rodadas) — **não precisou recalibrar** o frontend.
+- Guia in-game (`RarityGuide.jsx`) ganhou uma seção própria explicando o mecanismo, já que ele foge do padrão "1 trait, 1 tabela" do resto do sistema.
 
 ---
 
@@ -204,6 +209,12 @@ O ponto-chave: **um hash por trait**, não um único random state sequencial. Is
 > **Correção aplicada (10/08/2026):** `tools/Vivarium.AdminReset` ganhou `diff-scores [email]` (só leitura, recalcula com o motor atual e compara com o gravado) e `fix-scores` (recalcula e sobrescreve `RarityScore` de toda criatura viva divergente — não mexe em `Seed`/ancestralidade, só sincroniza o número com o que já está sendo renderizado). Rodado uma vez em produção: 19 criaturas corrigidas (todas de uma única conta antiga, criadas antes da Raridade v2), delta líquido -62,6 (a maioria estava com score MAIOR que o real: `TraitConfigVersion`, não travando os pesos, deixa qualquer combinação de mudanças futuras derivar pra qualquer direção).
 >
 > **Isso VAI acontecer de novo na próxima mudança de peso/algoritmo** — a causa raiz (versionamento vestigial) não foi corrigida, só o sintoma. Até alguém implementar de verdade o versionamento (ex: `TraitWeightConfig` já existe no schema §9.2 mas nunca é lido pelo motor — `TraitConfigV1` é uma classe estática hardcoded, não uma linha de banco), a política operacional é: **depois de qualquer mudança que altere pesos/algoritmo de um trait já existente, rodar `dotnet run --project tools/Vivarium.AdminReset -- fix-scores` em produção** antes de considerar a mudança concluída — senão o campo `RarityScore` de peixes já existentes fica invisivelmente errado até alguém notar (como aconteceu aqui, dias depois).
+>
+> **Primeiro bump real de `Version` (1→2, 12/08/2026, mecanismo de mix do Degradê acima) — e um risco de outage descoberto no processo, não só na ferramenta admin.** Ao dar bump em `TraitConfigV1.Version` e rodar a suíte de testes da API, 17 testes quebraram com 500 — não era só `fix-scores`/`diff-scores`/`dump-traits` (AdminReset) que passavam `c.TraitConfigVersion` (o valor GRAVADO na linha, sempre 1) pro motor; **os próprios serviços da API em produção fazem o mesmo** (tanque, breeding, ranking, resolução de cor de cauda pra sinergia — qualquer lugar que deriva traits de uma criatura já existente). Como `Generate`/`BreedTraits` lançavam exceção pra qualquer `configVersion` diferente da atual, o primeiro bump de verdade quebraria **toda criatura já existente em produção** com erro 500 assim que o deploy saísse — até alguém rodar `fix-scores`, uma janela real de instabilidade pros jogadores, não uma falha só de ferramenta interna.
+>
+> **Correção mais profunda que só `fix-scores`:** o guard `if (configVersion != TraitConfigV1.Version) throw` nunca teve sentido prático — só existe UMA config hardcoded (`TraitConfigV1`), nunca houve suporte real a múltiplas versões (o comentário do parágrafo acima já apontava isso). Travar em qualquer mismatch virava uma mina que detonaria em TODO bump futuro, não só este. `TraitGenerator.Generate`/`BreedTraits` agora só lançam exceção pra `configVersion > TraitConfigV1.Version` (dado corrompido/impossível — não pode vir "do futuro"); qualquer versão igual ou anterior usa a config atual silenciosamente, sem erro. Isso fecha o risco de outage de vez, não só pra este bump — testes existentes (`VersaoDeConfigDesconhecida_Lanca`, que usa 999) continuam passando sem mudança, já que 999 > 2 sempre lança.
+>
+> `AdminReset -- fix-scores` também ganhou o fix que já estava previsto: passava a versão GRAVADA na linha (`c.TraitConfigVersion`) pro motor em vez da versão ATUAL (`TraitConfigV1.Version`) — com o guard relaxado isso não quebra mais, mas continuava semanticamente errado (recalculava com a config errada) e nunca atualizava `c.TraitConfigVersion` de volta, deixando o campo desatualizado pra sempre e expondo o mesmo tipo de bug de novo a cada rebalanceamento. Corrigido: `fix-scores`/`diff-scores`/`dump-traits` sempre usam `TraitConfigV1.Version` (a versão atual do motor) e `fix-scores` agora também grava `c.TraitConfigVersion` junto com o `RarityScore` corrigido. Ainda vale rodar `diff-scores` (auditoria) + `fix-scores` depois de qualquer deploy que mude pesos/algoritmo — só que agora é higiene, não uma corrida contra um outage.
 
 ---
 

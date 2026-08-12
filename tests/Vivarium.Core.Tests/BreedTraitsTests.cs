@@ -57,6 +57,10 @@ public class BreedTraitsTests
                 {
                     Assert.True(childPart.Color == partA.Color || childPart.Color == partB.Color);
                     Assert.True(childPart.Pattern == partA.Pattern || childPart.Pattern == partB.Pattern);
+                    if (childPart.Pattern == PatternType.Gradient)
+                        Assert.NotNull(childPart.Mix);
+                    else
+                        Assert.Null(childPart.Mix);
                     if (childPart.Pattern != PatternType.None)
                     {
                         // Invariante sempre válida (herdada ou não): padrão nunca tem a
@@ -463,6 +467,32 @@ public class BreedTraitsTests
 
         Assert.Equal(TraitGenerator.BreedTraits(999, 1, 2, TraitConfigV1.Version, 0.08, 0.15), resolved);
         Assert.NotEqual(TraitGenerator.Generate(999), resolved);
+    }
+
+    [Fact]
+    public void Gradiente_MixHerdadoEmBlocoQuandoOSubtraitVemDoMesmoPai()
+    {
+        // Pai A com cauda em Degradê, pai B sem padrão nenhum — sem mutação, sempre
+        // que o padrão do filho vier de A E os subtraits também vierem do MESMO bloco
+        // (patternColor/size/opacity idênticos aos de A, só possível por herança
+        // literal, não coincidência), o mix precisa ter vindo junto, nunca sorteado à parte.
+        long parentA = ManySeeds(50_000).First(s => TraitGenerator.Generate(s).Tail.Pattern == PatternType.Gradient);
+        long parentB = ManySeeds(50_000).First(s => TraitGenerator.Generate(s).Tail.Pattern == PatternType.None);
+        var traitsA = TraitGenerator.Generate(parentA);
+
+        bool foundInherited = false;
+        for (long childSeed = 1; childSeed <= 20_000; childSeed++)
+        {
+            var child = TraitGenerator.BreedTraits(childSeed, parentA, parentB, TraitConfigV1.Version, mutationChance: 0.0, rarityBias: 0.0);
+            if (child.Tail.Pattern != PatternType.Gradient) continue;
+            if (child.Tail.PatternColor != traitsA.Tail.PatternColor) continue;
+            if (child.Tail.PatternSize != traitsA.Tail.PatternSize) continue;
+            if (child.Tail.PatternOpacity != traitsA.Tail.PatternOpacity) continue;
+
+            foundInherited = true;
+            Assert.Equal(traitsA.Tail.Mix, child.Tail.Mix);
+        }
+        Assert.True(foundInherited, "não achou nenhum filho com subtraits de Degradê herdados de A pra validar o mix em bloco");
     }
 
     private static long FindSeedWithTailColor(PartColor color, int searchLimit = 5_000)

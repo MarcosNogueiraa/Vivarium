@@ -84,10 +84,16 @@ export const CONFIG = {
     ["Orange", 22.0], ["Blue", 20.0], ["Red", 18.0], ["Yellow", 16.0],
     ["Green", 14.0], ["Purple", 6.0], ["Black", 3.0], ["PureWhite", 1.0],
   ],
+  // Gradient: 0.6 -> 0.4 (12/08/2026, delta somado em None) — espelha TraitConfigV1 (manter em sincronia).
   patternTypes: [
-    ["None", 76.0], ["Stripe", 8.0], ["Dot", 8.0], ["Scales", 3.0], ["Rays", 1.6],
-    ["Chevron", 1.2], ["Net", 0.9], ["Gradient", 0.6], ["Mottled", 0.35],
+    ["None", 76.2], ["Stripe", 8.0], ["Dot", 8.0], ["Scales", 3.0], ["Rays", 1.6],
+    ["Chevron", 1.2], ["Net", 0.9], ["Gradient", 0.4], ["Mottled", 0.35],
     ["Ocellus", 0.2], ["Marble", 0.05],
+  ],
+  // Mistura de cores do Degradê (12/08/2026) — espelha TraitConfigV1.GradientMixRatios.
+  // Even (50/50) é o mais raro; nos assimétricos só a cor dominante conta no score.
+  gradientMixRatios: [
+    ["BaseDominant", 45.0], ["Even", 10.0], ["PatternDominant", 45.0],
   ],
   shimmerScoreWeight: 2.5,
   setBonus: { samePattern2: 1.0, samePattern3: 2.5, sameColor2: 0.8, sameColor3: 2.0 },
@@ -187,14 +193,17 @@ export function generateTraits(seed) {
     const color = weightedPick(colorTable, roll01(seed, partSalt + "_color"));
     const pattern = weightedPick(CONFIG.patternTypes, roll01(seed, partSalt + "_pattern"));
     if (pattern === "None")
-      return { color, pattern, patternColor: null, patternSize: null, patternOpacity: null };
+      return { color, pattern, patternColor: null, patternSize: null, patternOpacity: null, mix: null };
 
     const patternPalette = CONFIG.partColors.filter(([value]) => value !== color);
     const patternColor = weightedPick(patternPalette, roll01(seed, partSalt + "_pattern_color"));
     const size = normalPick(seed, partSalt + "_pattern_size", CONFIG.sizeMean, CONFIG.sizeStdDev);
     const opacity = CONFIG.opacityMin
       + roll01(seed, partSalt + "_pattern_opacity") * (CONFIG.opacityMax - CONFIG.opacityMin);
-    return { color, pattern, patternColor, patternSize: size, patternOpacity: opacity };
+    const mix = pattern === "Gradient"
+      ? weightedPick(CONFIG.gradientMixRatios, roll01(seed, partSalt + "_pattern_mix"))
+      : null;
+    return { color, pattern, patternColor, patternSize: size, patternOpacity: opacity, mix };
   }
 
   const mv = CONFIG.movement;
@@ -262,23 +271,27 @@ function breedPart(seed, partSalt, mutationChance, rarityBias, a, b, colorTable)
   const patternPick = inheritOrMutate(seed, partSalt + "_pattern", mutationChance, a.pattern, b.pattern, CONFIG.patternTypes, rarityBias);
   const pattern = patternPick.value;
   if (pattern === "None")
-    return { color, pattern, patternColor: null, patternSize: null, patternOpacity: null };
+    return { color, pattern, patternColor: null, patternSize: null, patternOpacity: null, mix: null };
 
   const patternSource = patternPick.fromA ? a : b;
   const subtraitsFromSource = !patternPick.mutated && patternSource.pattern === pattern && patternSource.patternColor !== color;
 
-  let patternColor, patternSize, patternOpacity;
+  let patternColor, patternSize, patternOpacity, mix;
   if (subtraitsFromSource) {
     patternColor = patternSource.patternColor;
     patternSize = patternSource.patternSize;
     patternOpacity = patternSource.patternOpacity;
+    mix = patternSource.mix ?? null; // não-nulo quando o padrão herdado é Gradient
   } else {
     const patternPalette = CONFIG.partColors.filter(([v]) => v !== color);
     patternColor = weightedPick(patternPalette, roll01(seed, partSalt + "_pattern_color"));
     patternSize = normalPick(seed, partSalt + "_pattern_size", CONFIG.sizeMean, CONFIG.sizeStdDev);
     patternOpacity = CONFIG.opacityMin + roll01(seed, partSalt + "_pattern_opacity") * (CONFIG.opacityMax - CONFIG.opacityMin);
+    mix = pattern === "Gradient"
+      ? weightedPick(CONFIG.gradientMixRatios, roll01(seed, partSalt + "_pattern_mix"))
+      : null;
   }
-  return { color, pattern, patternColor, patternSize, patternOpacity };
+  return { color, pattern, patternColor, patternSize, patternOpacity, mix };
 }
 
 /** Traits reais de um pai — generateTraits direto se fresco, ou recomputa 1 nível (sem reach-back) se ele é filhote. */
@@ -550,7 +563,8 @@ export function rarityBreakdown(seed) {
   const partColors = [], partPatterns = [];
   for (const part of ["tail", "dorsal", "pectoral"]) {
     const [color, colorP] = pickProb(colorTable, roll01(seed, part + "_color"));
-    push("partColor", part, color, colorP);
+    const colorFactor = { key: "partColor", part, value: color, probPct: colorP * 100, points: selfInfo(colorP) };
+    factors.push(colorFactor);
     partColors.push(color);
     const [pattern, patternP] = pickProb(CONFIG.patternTypes, roll01(seed, part + "_pattern"));
     push("patternType", part, pattern, patternP);
@@ -559,7 +573,8 @@ export function rarityBreakdown(seed) {
 
     const patternPalette = CONFIG.partColors.filter(([v]) => v !== color);
     const [pc, pcP] = pickProb(patternPalette, roll01(seed, part + "_pattern_color"));
-    push("patternColor", part, pc, pcP);
+    const patternColorFactor = { key: "patternColor", part, value: pc, probPct: pcP * 100, points: selfInfo(pcP) };
+    factors.push(patternColorFactor);
 
     const size = normalPick(seed, part + "_pattern_size", CONFIG.sizeMean, CONFIG.sizeStdDev);
     if (size < CONFIG.sizeExtremeLow)
@@ -573,6 +588,20 @@ export function rarityBreakdown(seed) {
       push("patternOpacityExtreme", part, "baixa", (CONFIG.opacityExtremeLow - CONFIG.opacityMin) / range);
     else if (opacity > CONFIG.opacityExtremeHigh)
       push("patternOpacityExtreme", part, "alta", (CONFIG.opacityMax - CONFIG.opacityExtremeHigh) / range);
+
+    if (pattern === "Gradient") {
+      const [mix, mixP] = pickProb(CONFIG.gradientMixRatios, roll01(seed, part + "_pattern_mix"));
+      push("gradientMix", part, mix, mixP);
+      // Só a cor DOMINANTE conta — zera o fator da minoritária (sem tirar da lista,
+      // pra UI mostrar "por que não conta" em vez de simplesmente sumir).
+      if (mix === "PatternDominant") {
+        colorFactor.points = 0;
+        colorFactor.note = "não contabilizado (degradê assimétrico)";
+      } else if (mix === "BaseDominant") {
+        patternColorFactor.points = 0;
+        patternColorFactor.note = "não contabilizado (degradê assimétrico)";
+      }
+    }
   }
 
   const mv = CONFIG.movement;
@@ -653,7 +682,9 @@ export function bredRarityBreakdown(childSeed, parentASeed, parentBSeed,
   for (const part of ["tail", "dorsal", "pectoral"]) {
     const [pa, pb] = parts[part];
     const colorPick = inheritOrMutate(childSeed, part + "_color", mutationChance, pa.color, pb.color, colorTable, rarityBias);
-    push("partColor", part, colorPick.value, probabilityOf(colorTable, colorPick.value));
+    const colorProb = probabilityOf(colorTable, colorPick.value);
+    const colorFactor = { key: "partColor", part, value: colorPick.value, probPct: colorProb * 100, points: selfInfo(colorProb) };
+    factors.push(colorFactor);
     partColors.push(colorPick.value);
 
     const patternPick = inheritOrMutate(childSeed, part + "_pattern", mutationChance, pa.pattern, pb.pattern, CONFIG.patternTypes, rarityBias);
@@ -665,19 +696,25 @@ export function bredRarityBreakdown(childSeed, parentASeed, parentBSeed,
     const subtraitsFromSource = !patternPick.mutated && patternSource.pattern === patternPick.value
       && patternSource.patternColor !== colorPick.value;
 
-    let patternColor, size, opacity;
+    let patternColor, size, opacity, mix;
     if (subtraitsFromSource) {
       patternColor = patternSource.patternColor;
       size = patternSource.patternSize;
       opacity = patternSource.patternOpacity;
+      mix = patternSource.mix ?? null;
     } else {
       const patternPalette = CONFIG.partColors.filter(([v]) => v !== colorPick.value);
       patternColor = weightedPick(patternPalette, roll01(childSeed, part + "_pattern_color"));
       size = normalPick(childSeed, part + "_pattern_size", CONFIG.sizeMean, CONFIG.sizeStdDev);
       opacity = CONFIG.opacityMin + roll01(childSeed, part + "_pattern_opacity") * (CONFIG.opacityMax - CONFIG.opacityMin);
+      mix = patternPick.value === "Gradient"
+        ? weightedPick(CONFIG.gradientMixRatios, roll01(childSeed, part + "_pattern_mix"))
+        : null;
     }
     const scoringPalette = CONFIG.partColors.filter(([v]) => v !== colorPick.value);
-    push("patternColor", part, patternColor, probabilityOf(scoringPalette, patternColor));
+    const patternColorProb = probabilityOf(scoringPalette, patternColor);
+    const patternColorFactor = { key: "patternColor", part, value: patternColor, probPct: patternColorProb * 100, points: selfInfo(patternColorProb) };
+    factors.push(patternColorFactor);
 
     if (size < CONFIG.sizeExtremeLow)
       push("patternSizeExtreme", part, "pequeno", normalCdf(CONFIG.sizeExtremeLow, CONFIG.sizeMean, CONFIG.sizeStdDev));
@@ -689,6 +726,18 @@ export function bredRarityBreakdown(childSeed, parentASeed, parentBSeed,
       push("patternOpacityExtreme", part, "baixa", (CONFIG.opacityExtremeLow - CONFIG.opacityMin) / range);
     else if (opacity > CONFIG.opacityExtremeHigh)
       push("patternOpacityExtreme", part, "alta", (CONFIG.opacityMax - CONFIG.opacityExtremeHigh) / range);
+
+    if (patternPick.value === "Gradient" && mix != null) {
+      const mixProb = probabilityOf(CONFIG.gradientMixRatios, mix);
+      push("gradientMix", part, mix, mixProb);
+      if (mix === "PatternDominant") {
+        colorFactor.points = 0;
+        colorFactor.note = "não contabilizado (degradê assimétrico)";
+      } else if (mix === "BaseDominant") {
+        patternColorFactor.points = 0;
+        patternColorFactor.note = "não contabilizado (degradê assimétrico)";
+      }
+    }
   }
 
   const mv = CONFIG.movement;

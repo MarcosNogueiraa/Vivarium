@@ -68,7 +68,7 @@ public class GameTests : IClassFixture<VivariumApiFactory>
 
         Assert.True(long.Parse(creature!.Seed) >= 0);
         Assert.True(creature.RarityScore > 0);
-        Assert.Equal(1, creature.TraitConfigVersion);
+        Assert.Equal(Vivarium.Core.Generation.TraitConfigV1.Version, creature.TraitConfigVersion);
 
         tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
         Assert.Single(tank!.Creatures);

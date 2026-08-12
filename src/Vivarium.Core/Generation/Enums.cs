@@ -55,3 +55,14 @@ public enum PartType
     Dorsal,
     Pectoral,
 }
+
+/// <summary>
+/// Proporção de mistura entre a cor de base e a cor do padrão, só pra Pattern == Gradient.
+/// Nomenclatura semântica (não "25/50/75") pra deixar explícito qual cor domina cada valor.
+/// </summary>
+public enum GradientMix
+{
+    BaseDominant,
+    Even,
+    PatternDominant,
+}

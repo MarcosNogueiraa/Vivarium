@@ -200,7 +200,8 @@ static void DumpLine(long seed)
         sb.Append(';').Append(p.Color).Append(';').Append(p.Pattern)
           .Append(';').Append(p.PatternColor?.ToString() ?? "-")
           .Append(';').Append(p.PatternSize?.ToString("F6", inv) ?? "-")
-          .Append(';').Append(p.PatternOpacity?.ToString("F6", inv) ?? "-");
+          .Append(';').Append(p.PatternOpacity?.ToString("F6", inv) ?? "-")
+          .Append(';').Append(p.Mix?.ToString() ?? "-");
     }
     sb.Append(';').Append(t.Movement.TailSpeed.ToString("F6", inv))
       .Append(';').Append(t.Movement.TailAmplitude.ToString("F6", inv))
@@ -225,7 +226,8 @@ static void BreedDumpLine(long childSeed, long parentASeed, long parentBSeed)
         sb.Append(';').Append(p.Color).Append(';').Append(p.Pattern)
           .Append(';').Append(p.PatternColor?.ToString() ?? "-")
           .Append(';').Append(p.PatternSize?.ToString("F6", inv) ?? "-")
-          .Append(';').Append(p.PatternOpacity?.ToString("F6", inv) ?? "-");
+          .Append(';').Append(p.PatternOpacity?.ToString("F6", inv) ?? "-")
+          .Append(';').Append(p.Mix?.ToString() ?? "-");
     }
     sb.Append(';').Append(t.Movement.TailSpeed.ToString("F6", inv))
       .Append(';').Append(t.Movement.TailAmplitude.ToString("F6", inv))
@@ -253,7 +255,8 @@ static void GrandparentDumpLine(long childSeed, long parentASeed, long? gpAA, lo
         sb.Append(';').Append(p.Color).Append(';').Append(p.Pattern)
           .Append(';').Append(p.PatternColor?.ToString() ?? "-")
           .Append(';').Append(p.PatternSize?.ToString("F6", inv) ?? "-")
-          .Append(';').Append(p.PatternOpacity?.ToString("F6", inv) ?? "-");
+          .Append(';').Append(p.PatternOpacity?.ToString("F6", inv) ?? "-")
+          .Append(';').Append(p.Mix?.ToString() ?? "-");
     }
     sb.Append(';').Append(t.Movement.TailSpeed.ToString("F6", inv))
       .Append(';').Append(t.Movement.TailAmplitude.ToString("F6", inv))

@@ -275,6 +275,105 @@ describe("rarityBreakdown", () => {
   });
 });
 
+describe("Degradê — mix de cores (12/08/2026)", () => {
+  function manySeeds(count) {
+    const seeds = [];
+    for (let i = 1; i <= count; i++) seeds.push(BigInt(i) * 7919n);
+    return seeds;
+  }
+
+  function findSeedWithGradientMix(mix, searchLimit) {
+    for (let s = 1n; s <= BigInt(searchLimit); s++) {
+      const t = generateTraits(s);
+      for (const key of ["tail", "dorsal", "pectoral"]) {
+        if (t[key].pattern === "Gradient" && t[key].mix === mix) return { seed: s, part: key };
+      }
+    }
+    throw new Error(`nenhum seed com Degradê ${mix} nos primeiros ${searchLimit}`);
+  }
+
+  it("mix só é não-nulo quando o padrão é Gradient", () => {
+    for (const seed of manySeeds(3000)) {
+      const t = generateTraits(seed);
+      for (const part of [t.tail, t.dorsal, t.pectoral]) {
+        if (part.pattern === "Gradient") expect(part.mix).not.toBeNull();
+        else expect(part.mix).toBeNull();
+      }
+    }
+  });
+
+  it("distribuição do mix bate com os pesos (Even bem mais raro que os assimétricos)", () => {
+    const counts = { BaseDominant: 0, Even: 0, PatternDominant: 0 };
+    let total = 0;
+    for (const seed of manySeeds(20000)) {
+      const t = generateTraits(seed);
+      for (const part of [t.tail, t.dorsal, t.pectoral]) {
+        if (part.mix) { counts[part.mix]++; total++; }
+      }
+    }
+    expect(total).toBeGreaterThan(30);
+    expect(counts.BaseDominant / total).toBeGreaterThan(0.25);
+    expect(counts.BaseDominant / total).toBeLessThan(0.65);
+    expect(counts.Even / total).toBeGreaterThan(0.01);
+    expect(counts.Even / total).toBeLessThan(0.25);
+    expect(counts.PatternDominant / total).toBeGreaterThan(0.25);
+    expect(counts.PatternDominant / total).toBeLessThan(0.65);
+  }, 20000);
+
+  it("Even soma as duas cores (base e padrão) no breakdown de raridade", () => {
+    const { seed, part } = findSeedWithGradientMix("Even", 20000);
+    const { factors } = rarityBreakdown(seed);
+    const colorFactor = factors.find((f) => f.key === "partColor" && f.part === part);
+    const patternColorFactor = factors.find((f) => f.key === "patternColor" && f.part === part);
+    expect(colorFactor.points).toBeGreaterThan(0);
+    expect(patternColorFactor.points).toBeGreaterThan(0);
+    expect(colorFactor.note).toBeUndefined();
+    expect(patternColorFactor.note).toBeUndefined();
+  });
+
+  it("split assimétrico só conta a cor dominante — a minoritária zera e ganha uma nota", () => {
+    for (const mix of ["BaseDominant", "PatternDominant"]) {
+      const { seed, part } = findSeedWithGradientMix(mix, 5000);
+      const { factors } = rarityBreakdown(seed);
+      const colorFactor = factors.find((f) => f.key === "partColor" && f.part === part);
+      const patternColorFactor = factors.find((f) => f.key === "patternColor" && f.part === part);
+      if (mix === "BaseDominant") {
+        expect(colorFactor.points).toBeGreaterThan(0);
+        expect(patternColorFactor.points).toBe(0);
+        expect(patternColorFactor.note).toBeDefined();
+      } else {
+        expect(patternColorFactor.points).toBeGreaterThan(0);
+        expect(colorFactor.points).toBe(0);
+        expect(colorFactor.note).toBeDefined();
+      }
+    }
+  });
+
+  it("mix herdado em bloco no breeding quando o subtrait vem do mesmo pai", () => {
+    let parentA = null;
+    for (let s = 1n; s <= 5000n; s++) {
+      if (generateTraits(s).tail.pattern === "Gradient") { parentA = s; break; }
+    }
+    let parentB = null;
+    for (let s = 1n; s <= 5000n; s++) {
+      if (generateTraits(s).tail.pattern === "None") { parentB = s; break; }
+    }
+    const traitsA = generateTraits(parentA);
+
+    let foundInherited = false;
+    for (let childSeed = 1n; childSeed <= 5000n; childSeed++) {
+      const child = breedTraits(childSeed, parentA, parentB, 0, 0);
+      if (child.tail.pattern !== "Gradient") continue;
+      if (child.tail.patternColor !== traitsA.tail.patternColor) continue;
+      if (child.tail.patternSize !== traitsA.tail.patternSize) continue;
+      if (child.tail.patternOpacity !== traitsA.tail.patternOpacity) continue;
+      foundInherited = true;
+      expect(child.tail.mix).toBe(traitsA.tail.mix);
+    }
+    expect(foundInherited).toBe(true);
+  }, 20000);
+});
+
 describe("waterDegradationPerFishPerHour", () => {
   it("cresce com a raridade (peixe mais raro suja mais)", () => {
     const comum = waterDegradationPerFishPerHour(5);
