@@ -7,10 +7,23 @@ namespace Vivarium.Core.Generation;
 /// </summary>
 public static class TraitGenerator
 {
+    /// <summary>
+    /// TEMPORÁRIO/TESTE (13/08/2026, a pedido explícito do usuário): seed reservado que força
+    /// o "peixe de atributos quase impossíveis" (branco+mármore nas 3 partes, brilho Lendário
+    /// Iridescente, movimento extremo) pra visualização — NÃO deriva de hash, ignora o sorteio
+    /// normal. Existe só pra mostrar como esse peixe ficaria; o próprio usuário confirmou que
+    /// vai apagar o peixe de teste depois. Remover este bloco (e o espelho em generator.js)
+    /// quando o teste terminar — não é uma feature permanente do jogo.
+    /// </summary>
+    public const long ShowcaseImpossibleSeed = 999999999999999999L;
+
     public static CreatureTraits Generate(long seed, int configVersion = TraitConfigV1.Version)
     {
         if (configVersion != TraitConfigV1.Version)
             throw new ArgumentException($"Versão de config desconhecida: {configVersion}", nameof(configVersion));
+
+        if (seed == ShowcaseImpossibleSeed)
+            return ForcedShowcaseTraits();
 
         // Acumula -log10(P) de cada trait sorteado; soma final = RarityScore.
         double score = 0;
@@ -178,6 +191,61 @@ public static class TraitGenerator
             ownA.Movement.FinAmplitude, ownB.Movement.FinAmplitude, TraitConfigV1.FinAmplitudeMin, TraitConfigV1.FinAmplitudeMax);
 
         var movement = new MovementTraits(tailSpeed, tailAmplitude, finSpeed, finAmplitude);
+
+        return new CreatureTraits(tier, shimmerColor, shimmerOpacity, tail, dorsal, pectoral, movement, score);
+    }
+
+    /// <summary>
+    /// Ver <see cref="ShowcaseImpossibleSeed"/> — TEMPORÁRIO/TESTE, remover depois. Constrói o
+    /// peixe "quase impossível" (branco+mármore nas 3 partes, Lendário/Iridescente, movimento
+    /// extremo) com valores fixos, mas calcula o RarityScore de verdade a partir da
+    /// probabilidade real de cada valor nas mesmas tabelas de peso (nada de score inventado).
+    /// </summary>
+    private static CreatureTraits ForcedShowcaseTraits()
+    {
+        double score = 0;
+
+        const ShimmerTier tier = ShimmerTier.Legendary;
+        double tierP = WeightedTable.ProbabilityOf(TraitConfigV1.ShimmerTiers, tier);
+        score += TraitConfigV1.ShimmerScoreWeight * SelfInformation(tierP);
+
+        const ShimmerColor shimmerColor = ShimmerColor.Iridescent;
+        var (_, opacityMax) = TraitConfigV1.ShimmerOpacityByTier[tier];
+        double shimmerOpacity = opacityMax;
+
+        PartColor boosted = TraitConfigV1.ClosestPartColor(shimmerColor);
+        var partColorTable = ApplyCorrelation(TraitConfigV1.PartColors, boosted);
+
+        PartTraits MakePart()
+        {
+            const PartColor color = PartColor.PureWhite;
+            score += SelfInformation(WeightedTable.ProbabilityOf(partColorTable, color));
+
+            const PatternType pattern = PatternType.Marble;
+            score += SelfInformation(WeightedTable.ProbabilityOf(TraitConfigV1.PatternTypes, pattern));
+
+            const PartColor patternColor = PartColor.Black;
+            var patternPalette = TraitConfigV1.PartColors.Where(e => e.Value != color).ToArray();
+            score += SelfInformation(WeightedTable.ProbabilityOf(patternPalette, patternColor));
+
+            const double size = 100.0;
+            score += PatternSizeExtremeInfo(size);
+
+            const double opacity = TraitConfigV1.PatternOpacityMax;
+            score += PatternOpacityExtremeInfo(opacity);
+
+            return new PartTraits(color, pattern, patternColor, size, opacity);
+        }
+
+        var tail = MakePart();
+        var dorsal = MakePart();
+        var pectoral = MakePart();
+        score += SetBonus(tail, dorsal, pectoral);
+
+        const double tailSpeed = 100.0, finSpeed = 100.0;
+        score += MovementExtremeInfo(tailSpeed);
+        score += MovementExtremeInfo(finSpeed);
+        var movement = new MovementTraits(tailSpeed, TraitConfigV1.TailAmplitudeMax, finSpeed, TraitConfigV1.FinAmplitudeMax);
 
         return new CreatureTraits(tier, shimmerColor, shimmerOpacity, tail, dorsal, pectoral, movement, score);
     }

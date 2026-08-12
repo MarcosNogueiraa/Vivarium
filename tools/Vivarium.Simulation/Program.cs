@@ -19,11 +19,37 @@ if (args.Length >= 1 && args[0] == "dump")
     return;
 }
 
+if (args.Length >= 1 && args[0] == "seed")
+{
+    if (args.Length < 2 || !long.TryParse(args[1], out var oneSeed))
+    {
+        Console.WriteLine("Uso: dotnet run --project tools/Vivarium.Simulation -- seed <seed>");
+        return;
+    }
+    DumpLine(oneSeed);
+    return;
+}
+
 if (args.Length >= 1 && args[0] == "best")
 {
     int count = args.Length > 1 && int.TryParse(args[1], out var bcount) ? bcount : 5_000_000;
     int top = args.Length > 2 && int.TryParse(args[2], out var bt) ? bt : 5;
     BestSeeds(count, top);
+    return;
+}
+
+// `bestpattern <count> <top> <minPartsComPadrao> [PatternType]` — igual ao `best`, mas só
+// considera seeds em que pelo menos N partes (cauda/dorsal/peitoral) saíram com um padrão
+// específico (default Marble, o mais raro — 0.05% por parte). Busca paralela porque
+// filtrar por um padrão raro em 1 parte só já exige ~667 amostras em média por acerto, e
+// 2+ partes exige ordens de magnitude mais.
+if (args.Length >= 1 && args[0] == "bestpattern")
+{
+    long count = args.Length > 1 && long.TryParse(args[1], out var pc) ? pc : 20_000_000L;
+    int top = args.Length > 2 && int.TryParse(args[2], out var pt) ? pt : 5;
+    int minParts = args.Length > 3 && int.TryParse(args[3], out var pm) ? pm : 1;
+    var wantedPattern = args.Length > 4 && Enum.TryParse<PatternType>(args[4], out var pp) ? pp : PatternType.Marble;
+    BestByPattern(count, top, minParts, wantedPattern);
     return;
 }
 
@@ -264,6 +290,53 @@ static void BestSeeds(int count, int top)
     foreach (var (seed, score) in best)
     {
         Console.WriteLine($"seed={seed}  RarityScore={score:0.0000}");
+        DumpLine(seed);
+        Console.WriteLine();
+    }
+}
+
+static void BestByPattern(long count, int top, int minParts, PatternType wantedPattern)
+{
+    int threads = Environment.ProcessorCount;
+    long perThread = count / threads;
+    var results = new System.Collections.Concurrent.ConcurrentBag<(long Seed, double Score, int Matches)>();
+
+    Console.WriteLine($"Buscando entre {count:N0} seeds ({threads} threads, ~{perThread:N0} cada) por >= {minParts} parte(s) com padrão {wantedPattern}...\n");
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+
+    System.Threading.Tasks.Parallel.For(0, threads, threadIndex =>
+    {
+        var rng = new Random(Guid.NewGuid().GetHashCode());
+        var localBest = new List<(long Seed, double Score, int Matches)>();
+        for (long i = 0; i < perThread; i++)
+        {
+            long seed = rng.NextInt64();
+            var t = TraitGenerator.Generate(seed);
+            int matches = 0;
+            if (t.Tail.Pattern == wantedPattern) matches++;
+            if (t.Dorsal.Pattern == wantedPattern) matches++;
+            if (t.Pectoral.Pattern == wantedPattern) matches++;
+            if (matches < minParts) continue;
+
+            localBest.Add((seed, t.RarityScore, matches));
+            if (localBest.Count > top * 4)
+                localBest = localBest.OrderByDescending(b => b.Matches).ThenByDescending(b => b.Score).Take(top).ToList();
+        }
+        foreach (var r in localBest) results.Add(r);
+    });
+
+    sw.Stop();
+    var best = results.OrderByDescending(b => b.Matches).ThenByDescending(b => b.Score).Take(top).ToList();
+
+    Console.WriteLine($"Busca terminada em {sw.Elapsed.TotalSeconds:0.0}s — {results.Count} seed(s) bateram o filtro.\n");
+    if (best.Count == 0)
+    {
+        Console.WriteLine("Nenhum seed encontrado com esse critério dentro do orçamento de busca — tente aumentar <count> ou reduzir <minParts>.");
+        return;
+    }
+    foreach (var (seed, score, matches) in best)
+    {
+        Console.WriteLine($"seed={seed}  RarityScore={score:0.0000}  Partes com {wantedPattern}={matches}");
         DumpLine(seed);
         Console.WriteLine();
     }
