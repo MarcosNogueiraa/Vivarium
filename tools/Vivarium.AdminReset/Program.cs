@@ -19,6 +19,7 @@ using Vivarium.Core.Gameplay;
 //   dotnet run --project tools/Vivarium.AdminReset -- list-creatures <email>
 //   dotnet run --project tools/Vivarium.AdminReset -- reset-account <email>
 //   dotnet run --project tools/Vivarium.AdminReset -- give-seed <username-ou-email> <seed>
+//   dotnet run --project tools/Vivarium.AdminReset -- give-premium-all <quantidade>
 
 if (args.Length == 0)
 {
@@ -33,6 +34,7 @@ if (args.Length == 0)
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- finish-all-breeding");
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- reset-account <email>");
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- give-seed <username-ou-email> <seed>");
+    Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- give-premium-all <quantidade>");
     return 1;
 }
 
@@ -492,6 +494,52 @@ switch (args[0])
         Console.WriteLine($"  Shimmer: {traits.ShimmerTier} ({traits.ShimmerColor?.ToString() ?? "-"})");
         Console.WriteLine($"  Cauda: {traits.Tail.Color}/{traits.Tail.Pattern}   Dorsal: {traits.Dorsal.Color}/{traits.Dorsal.Pattern}   Peitoral: {traits.Pectoral.Color}/{traits.Pectoral.Pattern}");
         return 0;
+    }
+    case "give-premium-all":
+    {
+        // Credita `quantidade` de moeda PREMIUM na carteira de TODO usuário — ação pontual
+        // pra testes com jogadores reais (ex: validar o fluxo de VIP/rush/seguro sem precisar
+        // de um pagamento de verdade). Um TransactionLog.AdminGrant por usuário, auditado
+        // igual a qualquer outro crédito de moeda (mesmo princípio de TransactionLog único,
+        // CLAUDE.md §9.1). Não mexe em SOFT nem em nada além da carteira PREMIUM.
+        if (args.Length != 2 || !decimal.TryParse(args[1], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out decimal amount) || amount <= 0)
+        {
+            Console.WriteLine("Uso: dotnet run --project tools/Vivarium.AdminReset -- give-premium-all <quantidade>");
+            return 1;
+        }
+
+        int premiumId = await db.CurrencyTypes.Where(c => c.Code == "PREMIUM").Select(c => c.Id).FirstAsync();
+        var wallets = await db.WalletBalances.Where(w => w.CurrencyTypeId == premiumId).ToListAsync();
+
+        Console.WriteLine($"Vai creditar {amount:0} premium em {wallets.Count} carteira(s).");
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+        try
+        {
+            var now = DateTime.UtcNow;
+            foreach (var w in wallets)
+            {
+                w.Amount += amount;
+                db.TransactionLogs.Add(new TransactionLog
+                {
+                    Type = TransactionType.AdminGrant,
+                    ToUserId = w.UserId,
+                    CurrencyTypeId = premiumId,
+                    Amount = amount,
+                    CreatedAt = now,
+                });
+            }
+            await db.SaveChangesAsync();
+            await tx.CommitAsync();
+            Console.WriteLine($"\n{wallets.Count} carteira(s) creditada(s) com {amount:0} premium cada.");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            await tx.RollbackAsync();
+            Console.WriteLine($"\nERRO, nada foi alterado (rollback): {ex.Message}");
+            return 1;
+        }
     }
     default:
         Console.WriteLine("Comando desconhecido. Use 'reset-password', 'list-users', 'check-cross-refs', 'delete-users' ou 'list-creatures'.");
