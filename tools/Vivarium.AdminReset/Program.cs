@@ -18,6 +18,7 @@ using Vivarium.Core.Gameplay;
 //   dotnet run --project tools/Vivarium.AdminReset -- delete-users <id1,id2,...>
 //   dotnet run --project tools/Vivarium.AdminReset -- list-creatures <email>
 //   dotnet run --project tools/Vivarium.AdminReset -- reset-account <email>
+//   dotnet run --project tools/Vivarium.AdminReset -- give-seed <username-ou-email> <seed>
 
 if (args.Length == 0)
 {
@@ -31,6 +32,7 @@ if (args.Length == 0)
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- fix-scores");
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- finish-all-breeding");
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- reset-account <email>");
+    Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- give-seed <username-ou-email> <seed>");
     return 1;
 }
 
@@ -445,6 +447,50 @@ switch (args[0])
         }
         await db.SaveChangesAsync();
         Console.WriteLine($"\n{slots.Count} gestação(ões) em andamento liberada(s) pra coleta imediata.");
+        return 0;
+    }
+    case "give-seed":
+    {
+        // Insere um CreatureInstance com um seed ESCOLHIDO (não sorteado na coleta) direto na
+        // mochila do usuário (HabitatId=null) — pra dar um peixe específico (ex: o de maior
+        // RarityScore achado por `Vivarium.Simulation best`, CLAUDE.md). Não fabrica traits: o
+        // seed é real, os traits continuam 100% derivados dele pelo motor normal
+        // (Vivarium.Core.Generation.TraitGenerator), só a ESCOLHA de qual seed foi manual em vez
+        // de aleatória. Uso pontual — não expõe endpoint HTTP nenhum, mesma filosofia da ferramenta.
+        if (args.Length != 3 || !long.TryParse(args[2], out long seed))
+        {
+            Console.WriteLine("Uso: dotnet run --project tools/Vivarium.AdminReset -- give-seed <username-ou-email> <seed>");
+            return 1;
+        }
+        string identifier = args[1];
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Username == identifier || u.Email == identifier);
+        if (user is null)
+        {
+            Console.WriteLine($"Usuário '{identifier}' não encontrado.");
+            return 1;
+        }
+
+        var traits = Vivarium.Core.Generation.TraitGenerator.Generate(seed, Vivarium.Core.Generation.TraitConfigV1.Version);
+
+        int aquariumTypeId = await db.HabitatTypes.Where(h => h.Code == "Aquarium").Select(h => h.Id).FirstAsync();
+        int aquariumSpeciesId = await db.Species.Where(s => s.HabitatTypeId == aquariumTypeId).Select(s => s.Id).FirstAsync();
+
+        var creature = new CreatureInstance
+        {
+            SpeciesId = aquariumSpeciesId,
+            OwnerId = user.Id,
+            HabitatId = null, // mochila — jogador decide se quer colocar no tanque
+            Seed = seed,
+            TraitConfigVersion = Vivarium.Core.Generation.TraitConfigV1.Version,
+            RarityScore = (decimal)traits.RarityScore,
+            CreatedAt = DateTime.UtcNow,
+        };
+        db.CreatureInstances.Add(creature);
+        await db.SaveChangesAsync();
+
+        Console.WriteLine($"Peixe #{creature.Id} criado na mochila de #{user.Id} {user.Username} — seed={seed}, RarityScore={creature.RarityScore:0.0000}");
+        Console.WriteLine($"  Shimmer: {traits.ShimmerTier} ({traits.ShimmerColor?.ToString() ?? "-"})");
+        Console.WriteLine($"  Cauda: {traits.Tail.Color}/{traits.Tail.Pattern}   Dorsal: {traits.Dorsal.Color}/{traits.Dorsal.Pattern}   Peitoral: {traits.Pectoral.Color}/{traits.Pectoral.Pattern}");
         return 0;
     }
     default:
