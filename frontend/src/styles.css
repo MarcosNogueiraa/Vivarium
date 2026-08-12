@@ -1194,6 +1194,38 @@ input:focus {
   to { opacity: 0.75; transform: translateY(4px); }
 }
 
+/* ---------- Registro de cruzamentos (§8.19) ---------- */
+.hist-list { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.hist-entry {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 12px 14px; border-radius: 14px;
+  background: var(--panel); border: 1px solid var(--line);
+}
+/* flex-wrap: os 3 peixinhos + 2 operadores não cabem numa linha só em telas
+   estreitas — quebram em duas linhas em vez de espremer ou vazar horizontal. */
+.hist-entry-fish { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.hist-fish { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 64px; }
+.hist-fish-thumb {
+  position: relative; width: 56px; height: 56px; border-radius: 10px; overflow: hidden;
+  background: linear-gradient(180deg, #0d3a48, #072430);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tier) 40%, var(--line));
+}
+.hist-fish-thumb .fish-canvas { width: 100%; }
+.hist-fish-dead { filter: grayscale(0.85) brightness(0.75); }
+.hist-fish-rip {
+  position: absolute; top: 1px; right: 1px; font-size: 0.75rem;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+}
+.hist-fish-label { font-size: 0.68rem; color: var(--faint); }
+.hist-fish-score { font-size: 0.76rem; font-weight: 700; }
+.hist-fish-missing { color: var(--faint); font-size: 0.78rem; width: auto; }
+.hist-op { color: var(--muted); font-weight: 700; font-size: 1.1rem; }
+.hist-entry-meta {
+  display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap;
+  font-size: 0.8rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 8px;
+}
+.hist-date { font-variant-numeric: tabular-nums; }
+
 /* ---------- Ranking + visita a aquário de outro jogador ---------- */
 .ranking-view { display: flex; flex-direction: column; gap: 14px; }
 .leaderboard { display: flex; flex-direction: column; padding: 6px; }
