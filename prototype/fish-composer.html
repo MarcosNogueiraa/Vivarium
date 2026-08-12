@@ -41,6 +41,25 @@
     gap: 20px; align-items: start;
   }
   @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  .builder { width: 100%; max-width: 1060px; }
+  .builder summary { cursor: pointer; font-size: 0.95rem; font-weight: 600; padding: 4px 0; }
+  .builder summary .sub { color: var(--muted); font-weight: 400; font-size: 0.82rem; margin-left: 8px; }
+  .builder-body {
+    margin-top: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px; display: flex; flex-direction: column; gap: 16px;
+  }
+  .builder-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; }
+  .builder-block { border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .builder-block h3 { font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); font-weight: 600; }
+  .field { display: flex; flex-direction: column; gap: 3px; }
+  .field span { color: var(--muted); font-size: 0.74rem; }
+  select {
+    background: var(--panel-2); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 0.85rem;
+  }
+  .field input[type="range"] { accent-color: var(--accent); }
+  .field .range-out { color: var(--muted); font-family: var(--mono); font-size: 0.76rem; }
+  .builder-note { color: var(--muted); font-size: 0.78rem; }
 
   .stage {
     background: linear-gradient(180deg, #0d3244 0%, #092331 55%, #071b26 100%);
@@ -188,6 +207,34 @@
     </div>
   </aside>
 </main>
+
+<details class="builder" id="builder">
+  <summary>Montagem manual <span class="sub">— escolha cada trait à mão, mesmo que a combinação não bata com as regras normais</span></summary>
+  <div class="builder-body">
+    <p class="builder-note">
+      Ignora o sorteio (seed) inteiramente — você escolhe cada valor. O score exibido ainda é calculado
+      pela mesma fórmula (Σ −log10 da probabilidade de cada valor escolhido, mesmo peso de brilho/conjunto),
+      então combinações "impossíveis" tendem a mostrar um score alto mas artificial — é só pra visualizar,
+      não representa um peixe que o motor real conseguiria gerar.
+    </p>
+    <div class="builder-grid">
+      <div class="builder-block">
+        <h3>Corpo (brilho)</h3>
+        <div class="field"><span>Tier</span><select id="man-tier"></select></div>
+        <div class="field"><span>Cor do brilho</span><select id="man-shimmer-color"></select></div>
+        <div class="field"><span>Opacidade <output class="range-out" id="man-shimmer-opacity-out"></output>%</span>
+          <input type="range" id="man-shimmer-opacity" min="0" max="100" step="1" value="80"></div>
+      </div>
+      <div class="builder-block" data-part="tail"><h3>Cauda</h3></div>
+      <div class="builder-block" data-part="dorsal"><h3>Nadadeira dorsal</h3></div>
+      <div class="builder-block" data-part="pectoral"><h3>Barbatana peitoral</h3></div>
+    </div>
+    <div class="row">
+      <button class="primary" id="btn-montar">Montar peixe</button>
+      <span class="builder-note">O peixe montado substitui a visualização até você gerar por seed de novo.</span>
+    </div>
+  </div>
+</details>
 
 <footer>
   Port JS do motor determinístico de <code>Vivarium.Core</code> (config v1). O cliente final receberá os
@@ -824,6 +871,18 @@ function drawFish(traits, time) {
   ctx.lineWidth = 2;
   ctx.stroke(bodyPath);
 
+  // 3b. "Cor absoluta" (CLAUDE.md §4, 08/08/2026): cauda/dorsal/peitoral na MESMA cor
+  // tingem o corpo também, por cima do cinza (overlay), mantendo o degradê por baixo.
+  if (traits.tail.color === traits.dorsal.color && traits.dorsal.color === traits.pectoral.color) {
+    ctx.save();
+    ctx.clip(bodyPath);
+    ctx.globalCompositeOperation = "overlay";
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = PART_HEX[traits.tail.color];
+    ctx.fillRect(...BODY_BBOX);
+    ctx.restore();
+  }
+
   // 4. Shimmer sobre o corpo (blend overlay)
   drawShimmer(traits, time);
 
@@ -992,6 +1051,167 @@ document.querySelectorAll(".tiers button").forEach(btn =>
     const seed = findSeedWithTier(btn.dataset.tier);
     if (seed !== null) render(seed);
   }));
+
+// ---------- Montagem manual (bypassa o seed — escolha livre de cada trait) ----------
+// Pra testar combinações que o motor real nunca sortearia (ex: Mármore branco +
+// brilho Lendário nas 3 partes ao mesmo tempo). O score ainda usa a mesma fórmula
+// (Σ −log10 da probabilidade de cada valor ESCOLHIDO nas tabelas reais), então dá
+// pra ver o número que uma combinação "impossível" geraria — mas isso não significa
+// que o motor real algum dia produziria esse peixe a partir de um seed de verdade.
+
+const ALL_SHIMMER_COLORS = Object.values(CONFIG.shimmerColorsByTier).flat();
+const PART_LIST = [["tail", "Cauda"], ["dorsal", "Nadadeira dorsal"], ["pectoral", "Barbatana peitoral"]];
+
+function fillSelect(select, options, labels) {
+  select.innerHTML = options.map((v) => `<option value="${v}">${labels ? labels[v] : v}</option>`).join("");
+}
+
+const manTierSelect = document.getElementById("man-tier");
+const manShimmerColorSelect = document.getElementById("man-shimmer-color");
+const manShimmerOpacity = document.getElementById("man-shimmer-opacity");
+const manShimmerOpacityOut = document.getElementById("man-shimmer-opacity-out");
+
+fillSelect(manTierSelect, CONFIG.shimmerTiers.map(([v]) => v), PT.tier);
+fillSelect(manShimmerColorSelect, ALL_SHIMMER_COLORS, PT.shimmer);
+manTierSelect.value = "Legendary";
+manShimmerColorSelect.value = "Iridescent";
+manShimmerOpacityOut.textContent = manShimmerOpacity.value;
+manShimmerOpacity.addEventListener("input", () => { manShimmerOpacityOut.textContent = manShimmerOpacity.value; });
+
+const manPartFields = {};
+for (const [key] of PART_LIST) {
+  const block = document.querySelector(`.builder-block[data-part="${key}"]`);
+  block.insertAdjacentHTML("beforeend", `
+    <div class="field"><span>Cor</span><select data-f="color"></select></div>
+    <div class="field"><span>Padrão</span><select data-f="pattern"></select></div>
+    <div class="field"><span>Cor do padrão</span><select data-f="patternColor"></select></div>
+    <div class="field"><span>Tamanho do padrão <output class="range-out" data-out="patternSize"></output></span>
+      <input type="range" data-f="patternSize" min="0" max="100" step="1" value="50"></div>
+    <div class="field"><span>Opacidade do padrão <output class="range-out" data-out="patternOpacity"></output>%</span>
+      <input type="range" data-f="patternOpacity" min="0" max="100" step="1" value="55"></div>
+  `);
+  const colorSel = block.querySelector('[data-f="color"]');
+  const patternSel = block.querySelector('[data-f="pattern"]');
+  const patternColorSel = block.querySelector('[data-f="patternColor"]');
+  const sizeRange = block.querySelector('[data-f="patternSize"]');
+  const opacityRange = block.querySelector('[data-f="patternOpacity"]');
+  const sizeOut = block.querySelector('[data-out="patternSize"]');
+  const opacityOut = block.querySelector('[data-out="patternOpacity"]');
+
+  fillSelect(colorSel, CONFIG.partColors.map(([v]) => v), PT.color);
+  fillSelect(patternSel, CONFIG.patternTypes.map(([v]) => v), PT.pattern);
+  fillSelect(patternColorSel, CONFIG.partColors.map(([v]) => v), PT.color);
+  colorSel.value = "PureWhite";
+  patternSel.value = "Marble";
+  patternColorSel.value = "Black";
+  sizeOut.textContent = sizeRange.value;
+  opacityOut.textContent = opacityRange.value;
+  sizeRange.addEventListener("input", () => { sizeOut.textContent = sizeRange.value; });
+  opacityRange.addEventListener("input", () => { opacityOut.textContent = opacityRange.value; });
+
+  manPartFields[key] = { colorSel, patternSel, patternColorSel, sizeRange, opacityRange };
+}
+
+function readManualPart(fields) {
+  const color = fields.colorSel.value;
+  const pattern = fields.patternSel.value;
+  if (pattern === "None") return { color, pattern, patternColor: null, patternSize: null, patternOpacity: null };
+  return {
+    color, pattern,
+    patternColor: fields.patternColorSel.value,
+    patternSize: Number(fields.sizeRange.value),
+    patternOpacity: Number(fields.opacityRange.value),
+  };
+}
+
+/** Probabilidade de um valor já escolhido na tabela — 0 (ex: cor de padrão = cor base,
+ * normalmente proibido) vira um piso pequeno em vez de travar o score em Infinity. */
+function probabilityOf(table, value) {
+  let total = 0, match = 0;
+  for (const [v, w] of table) { total += w; if (v === value) match = w; }
+  return match / total || 1e-6;
+}
+
+function scoreManualTraits(t) {
+  let score = 0;
+  const selfInfo = (p) => -Math.log10(p);
+
+  score += CONFIG.shimmerScoreWeight * selfInfo(probabilityOf(CONFIG.shimmerTiers, t.shimmerTier));
+
+  const boosted = (t.shimmerTier === "Vibrant" || t.shimmerTier === "Rare" || t.shimmerTier === "Legendary")
+    ? CONFIG.closestPartColor[t.shimmerColor] : null;
+  const colorTable = applyCorrelation(CONFIG.partColors, boosted);
+
+  for (const part of [t.tail, t.dorsal, t.pectoral]) {
+    score += selfInfo(probabilityOf(colorTable, part.color));
+    score += selfInfo(probabilityOf(CONFIG.patternTypes, part.pattern));
+    if (part.pattern === "None") continue;
+    const patternPalette = CONFIG.partColors.filter(([v]) => v !== part.color);
+    score += selfInfo(probabilityOf(patternPalette, part.patternColor));
+    if (part.patternSize < CONFIG.sizeExtremeLow)
+      score += selfInfo(normalCdf(CONFIG.sizeExtremeLow, CONFIG.sizeMean, CONFIG.sizeStdDev));
+    else if (part.patternSize > CONFIG.sizeExtremeHigh)
+      score += selfInfo(1 - normalCdf(CONFIG.sizeExtremeHigh, CONFIG.sizeMean, CONFIG.sizeStdDev));
+    const range = CONFIG.opacityMax - CONFIG.opacityMin;
+    if (part.patternOpacity < CONFIG.opacityExtremeLow)
+      score += selfInfo(Math.max((CONFIG.opacityExtremeLow - CONFIG.opacityMin) / range, 1e-6));
+    else if (part.patternOpacity > CONFIG.opacityExtremeHigh)
+      score += selfInfo(Math.max((CONFIG.opacityMax - CONFIG.opacityExtremeHigh) / range, 1e-6));
+  }
+
+  const sb = CONFIG.setBonus;
+  const maxGroup = (arr) => {
+    const counts = {}; let max = 0;
+    for (const v of arr) { counts[v] = (counts[v] || 0) + 1; max = Math.max(max, counts[v]); }
+    return max;
+  };
+  const nonNone = [t.tail, t.dorsal, t.pectoral].map((p) => p.pattern).filter((p) => p !== "None");
+  const patMatch = nonNone.length ? maxGroup(nonNone) : 0;
+  if (patMatch === 3) score += sb.samePattern3; else if (patMatch === 2) score += sb.samePattern2;
+  const colMatch = maxGroup([t.tail.color, t.dorsal.color, t.pectoral.color]);
+  if (colMatch === 3) score += sb.sameColor3; else if (colMatch === 2) score += sb.sameColor2;
+
+  return score;
+}
+
+let manualCounter = 0n;
+
+function renderManual() {
+  const tier = manTierSelect.value;
+  const traits = {
+    shimmerTier: tier,
+    shimmerColor: tier === "None" ? null : manShimmerColorSelect.value,
+    shimmerOpacity: tier === "None" ? 0 : Number(manShimmerOpacity.value),
+    tail: readManualPart(manPartFields.tail),
+    dorsal: readManualPart(manPartFields.dorsal),
+    pectoral: readManualPart(manPartFields.pectoral),
+    movement: { tailSpeed: movement.tailSpeed, tailAmplitude: movement.tailAmp, finSpeed: movement.finSpeed, finAmplitude: movement.finAmp },
+  };
+  traits.rarityScore = scoreManualTraits(traits);
+
+  // Seed sintético (BigInt, fora do espaço de seeds reais) só pra: (a) cache do sprite
+  // por parte, (b) sub-rolls visuais (posição de manchas do Mottled/Ocellus/Marble) —
+  // não representa nenhum peixe real, incrementa a cada montagem pra não reusar sprite.
+  currentSeed = 900000000000000000n + manualCounter++;
+  currentTraits = traits;
+  seedInput.value = "";
+
+  const band = bandOf(currentTraits.rarityScore);
+  badge.textContent = band.name;
+  badge.style.background = band.color;
+  scoreEl.textContent = `score ${currentTraits.rarityScore.toFixed(2)} (montado à mão)`;
+
+  const shimmerLine = tier === "None"
+    ? `<div class="trait-line"><span class="part">Corpo</span><span>${PT.tier.None}</span></div>`
+    : `<div class="trait-line"><span class="part">Corpo</span>` +
+      `<span>${PT.tier[tier]} · ${PT.shimmer[traits.shimmerColor]}, ${traits.shimmerOpacity.toFixed(0)}%</span></div>`;
+  traitsEl.innerHTML = shimmerLine +
+    partLine("Cauda", traits.tail) + partLine("Nadadeira dorsal", traits.dorsal) + partLine("Barbatana peitoral", traits.pectoral);
+
+  if (reducedMotion) drawFish(currentTraits, 0);
+}
+
+document.getElementById("btn-montar").addEventListener("click", renderManual);
 
 render(randomSeed());
 

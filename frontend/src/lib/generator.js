@@ -146,27 +146,7 @@ function applyCorrelation(table, boosted) {
   return table.map(([value, w]) => [value, value === boosted ? boostedNew : w * othersScale]);
 }
 
-// TEMPORÁRIO/TESTE (13/08/2026, a pedido do usuário) — espelha
-// TraitGenerator.ShowcaseImpossibleSeed (Vivarium.Core): um seed reservado que força o
-// "peixe de atributos quase impossíveis" (branco+mármore nas 3 partes, Lendário/Iridescente,
-// movimento extremo) pra visualização, sem sortear nada. Remover junto com o lado C# quando
-// o teste terminar — não é feature permanente.
-const SHOWCASE_IMPOSSIBLE_SEED = 999999999999999999n;
-function forcedShowcaseTraits() {
-  const part = { color: "PureWhite", pattern: "Marble", patternColor: "Black", patternSize: 100, patternOpacity: 90 };
-  return {
-    shimmerTier: "Legendary",
-    shimmerColor: "Iridescent",
-    shimmerOpacity: 100,
-    tail: { ...part },
-    dorsal: { ...part },
-    pectoral: { ...part },
-    movement: { tailSpeed: 100, tailAmplitude: CONFIG.movement.tailAmpMax, finSpeed: 100, finAmplitude: CONFIG.movement.finAmpMax },
-  };
-}
-
 export function generateTraits(seed) {
-  if (seed === SHOWCASE_IMPOSSIBLE_SEED) return forcedShowcaseTraits();
   const tier = weightedPick(CONFIG.shimmerTiers, roll01(seed, "body_shimmer"));
 
   let shimmerColor = null;
@@ -510,28 +490,6 @@ export function rarityBreakdown(seed) {
   const selfInfo = (p) => -Math.log10(p);
   const push = (key, part, value, prob) =>
     factors.push({ key, part, value, probPct: prob * 100, points: selfInfo(prob) });
-
-  // Ver SHOWCASE_IMPOSSIBLE_SEED acima — TEMPORÁRIO/TESTE, remover junto.
-  if (seed === SHOWCASE_IMPOSSIBLE_SEED) {
-    push("shimmerTier", null, "Legendary", probabilityOf(CONFIG.shimmerTiers, "Legendary"));
-    factors[factors.length - 1].points *= CONFIG.shimmerScoreWeight;
-    const boosted = applyCorrelation(CONFIG.partColors, CONFIG.closestPartColor.Iridescent);
-    for (const part of ["tail", "dorsal", "pectoral"]) {
-      push("partColor", part, "PureWhite", probabilityOf(boosted, "PureWhite"));
-      push("patternType", part, "Marble", probabilityOf(CONFIG.patternTypes, "Marble"));
-      const patternPalette = CONFIG.partColors.filter(([v]) => v !== "PureWhite");
-      push("patternColor", part, "Black", probabilityOf(patternPalette, "Black"));
-      push("patternSizeExtreme", part, "grande", 1 - normalCdf(CONFIG.sizeExtremeHigh, CONFIG.sizeMean, CONFIG.sizeStdDev));
-      push("patternOpacityExtreme", part, "alta", (CONFIG.opacityMax - CONFIG.opacityExtremeHigh) / (CONFIG.opacityMax - CONFIG.opacityMin));
-    }
-    for (const which of ["tail", "fin"])
-      factors.push({ key: "speedExtreme", part: which, value: "rápida", probPct: (1 - normalCdf(CONFIG.movement.speedExtremeHigh, CONFIG.movement.speedMean, CONFIG.movement.speedStdDev)) * 100, points: CONFIG.movement.scoreWeight * selfInfo(1 - normalCdf(CONFIG.movement.speedExtremeHigh, CONFIG.movement.speedMean, CONFIG.movement.speedStdDev)) });
-    factors.push({ key: "samePattern", part: null, value: "3", probPct: null, points: CONFIG.setBonus.samePattern3 });
-    factors.push({ key: "sameColor", part: null, value: "3", probPct: null, points: CONFIG.setBonus.sameColor3 });
-    const total = factors.reduce((s, f) => s + f.points, 0);
-    factors.sort((a, b) => b.points - a.points);
-    return { total, factors };
-  }
 
   // Corpo é destaque: contribuição do tier multiplicada por shimmerScoreWeight.
   const [tier, tierP] = pickProb(CONFIG.shimmerTiers, roll01(seed, "body_shimmer"));

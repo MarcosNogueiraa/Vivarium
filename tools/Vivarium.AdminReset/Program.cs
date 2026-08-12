@@ -20,6 +20,7 @@ using Vivarium.Core.Gameplay;
 //   dotnet run --project tools/Vivarium.AdminReset -- reset-account <email>
 //   dotnet run --project tools/Vivarium.AdminReset -- give-seed <username-ou-email> <seed>
 //   dotnet run --project tools/Vivarium.AdminReset -- give-premium-all <quantidade>
+//   dotnet run --project tools/Vivarium.AdminReset -- delete-creature <id>
 
 if (args.Length == 0)
 {
@@ -35,6 +36,7 @@ if (args.Length == 0)
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- reset-account <email>");
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- give-seed <username-ou-email> <seed>");
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- give-premium-all <quantidade>");
+    Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- delete-creature <id>");
     return 1;
 }
 
@@ -336,6 +338,35 @@ switch (args[0])
             Console.WriteLine($"    ParentAId={c.ParentAId} ParentBId={c.ParentBId} ParentASeed={c.ParentASeed} ParentBSeed={c.ParentBSeed}");
             Console.WriteLine($"    CreatedAt={c.CreatedAt:yyyy-MM-dd HH:mm:ss}");
         }
+        return 0;
+    }
+    case "delete-creature":
+    {
+        // Apaga UMA criatura pontual (ex: um peixe de teste criado por give-seed). Bloqueia
+        // se ela for pai/mãe de alguém (FK Restrict em ParentAId/BId — mesma checagem de
+        // delete-users), se estiver listada no mercado, ou presa numa gestação ativa.
+        if (args.Length != 2 || !long.TryParse(args[1], out long creatureId))
+        {
+            Console.WriteLine("Uso: dotnet run --project tools/Vivarium.AdminReset -- delete-creature <id>");
+            return 1;
+        }
+        var creature = await db.CreatureInstances.FindAsync(creatureId);
+        if (creature is null)
+        {
+            Console.WriteLine($"Criatura #{creatureId} não encontrada.");
+            return 1;
+        }
+        bool isParent = await db.CreatureInstances.AnyAsync(c => c.ParentAId == creatureId || c.ParentBId == creatureId);
+        bool listed = await db.MarketListings.AnyAsync(m => m.CreatureInstanceId == creatureId && m.Status == ListingStatus.Active);
+        bool breeding = await db.BreedingSlots.AnyAsync(s => (s.ParentAId == creatureId || s.ParentBId == creatureId) && s.Status == BreedingStatus.InProgress);
+        if (isParent || listed || breeding)
+        {
+            Console.WriteLine($"Abortado — criatura #{creatureId} tem referência ativa (pai de outra: {isParent}, listada: {listed}, em gestação: {breeding}).");
+            return 1;
+        }
+        db.CreatureInstances.Remove(creature);
+        await db.SaveChangesAsync();
+        Console.WriteLine($"Criatura #{creatureId} (seed={creature.Seed}) apagada.");
         return 0;
     }
     case "reset-account":
