@@ -52,18 +52,21 @@ public static class BreedingDefaults
     /// um traço de um AVÔ em vez do pai direto, quando esse pai é ele mesmo um filhote — um
     /// traço "pulando uma geração", como recessivo. Deliberadamente MENOR que a chance de herdar
     /// do pai direto (que domina o resto do tempo).
-    /// 0.03 (era 0.15, 12/08/2026 — usuário pediu reduzir mais, primeiro pra 0.05 depois pra
-    /// 0.03 no mesmo dia): essa chance é sorteada de forma INDEPENDENTE 8 vezes por cruzamento
-    /// (4 slots × 2 lados dos pais, `EffectiveParentTraits` chamado uma vez por slot por lado)
-    /// — com 15%, a chance de PELO MENOS UM traço vir de um avô em qualquer cruzamento era
-    /// `1-(0.85)^8 ≈ 72.8%`, quase 3 em cada 4 cruzamentos, deixando a influência dos avós
-    /// parecer dominante mesmo a chance individual sendo baixa (usuário relatou resultados
-    /// "estranhos" analisando o histórico de cruzamentos de uma conta real com múltiplas
-    /// gerações). Com 0.03, a mesma conta cai pra `1-(0.97)^8 ≈ 21.6%` — a mecânica continua
-    /// existindo (não foi zerada), só deixa de ser o caso comum. Validado com
+    /// Trajetória de ajustes no mesmo dia (12/08/2026), a pedido do usuário: 0.15→0.03→0.01→0.001.
+    /// Essa chance é sorteada de forma INDEPENDENTE 8 vezes por cruzamento (4 slots × 2 lados dos
+    /// pais) — com 15%, a chance de PELO MENOS UM traço vir de um avô em qualquer cruzamento era
+    /// `1-(0.85)^8 ≈ 72.8%`, quase 3 em cada 4 cruzamentos, deixando a influência dos avós parecer
+    /// dominante mesmo a chance individual sendo baixa (usuário relatou resultados "estranhos"
+    /// analisando o histórico de cruzamentos de uma conta real com múltiplas gerações). Depois de
+    /// confirmar caso a caso (via consulta direta ao banco) que cada ocorrência era o mecanismo
+    /// funcionando corretamente — não bug — o usuário decidiu por conta própria deixar as chances
+    /// "como se fossem peixes gerados do zero", ou seja, essencialmente desligar o mecanismo, mas
+    /// preservando um resíduo mínimo em vez de zerar de vez (pra não remover a mecânica por
+    /// completo). Com 0.001, a chance de pelo menos 1 traço vir de avô cai pra
+    /// `1-(0.999)^8 ≈ 0.8%` — praticamente nunca acontece, mas ainda existe. Validado com
     /// `Vivarium.Simulation breed`.
     /// </summary>
-    public const double GrandparentReachChance = 0.01;
+    public const double GrandparentReachChance = 0.001;
 
     // --- Custo dinâmico (soft) ---
     // O tempo de gestação já é o sink principal pra pares raros (um lendário
