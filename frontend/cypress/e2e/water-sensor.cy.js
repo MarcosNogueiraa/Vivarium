@@ -44,7 +44,7 @@ describe("Sensor de Qualidade da Água", () => {
   it("sem o sensor: mostra preço e botão de compra, sem slider", () => {
     login();
 
-    cy.contains(".card", "Sensor de Qualidade da Água").within(() => {
+    cy.contains("strong", "Sensor de Qualidade da Água").closest(".card").within(() => {
       cy.contains("800");
       cy.contains("button", "Comprar");
       cy.get('input[type="range"]').should("not.exist");
@@ -62,11 +62,11 @@ describe("Sensor de Qualidade da Água", () => {
     });
     cy.intercept("GET", "/api/items/", { body: itemsComprado }).as("itemsAfter");
 
-    cy.contains(".card", "Sensor de Qualidade da Água").contains("button", "Comprar").click();
+    cy.contains("strong", "Sensor de Qualidade da Água").closest(".card").contains("button", "Comprar").click();
     cy.wait("@buy");
     cy.contains("Sensor de Qualidade da Água comprado!");
 
-    cy.contains(".card", "Sensor de Qualidade da Água").within(() => {
+    cy.contains("strong", "Sensor de Qualidade da Água").closest(".card").within(() => {
       cy.get('input[type="range"]').should("exist");
       cy.contains("button", "Comprar").should("not.exist");
     });
@@ -78,8 +78,15 @@ describe("Sensor de Qualidade da Água", () => {
 
     cy.intercept("POST", "/api/game/water-sensor/trigger", { statusCode: 200, body: { autoCleanTriggerPercent: 60 } }).as("setTrigger");
 
-    cy.contains(".card", "Sensor de Qualidade da Água").within(() => {
-      cy.get('input[type="range"]').invoke("val", 60).trigger("input", { force: true });
+    // input controlado do React: `.invoke("val", n)` só muda o atributo DOM sem passar pelo
+    // setter nativo que o React rastreia, então o onChange nunca dispara — usar o setter
+    // nativo de HTMLInputElement diretamente (gotcha conhecido de Cypress + React).
+    cy.contains("strong", "Sensor de Qualidade da Água").closest(".card").within(() => {
+      cy.get('input[type="range"]').then(($input) => {
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+        setter.call($input[0], 60);
+        $input[0].dispatchEvent(new Event("input", { bubbles: true }));
+      });
     });
 
     // Antes do debounce (400ms), nenhuma request ainda.
@@ -93,7 +100,7 @@ describe("Sensor de Qualidade da Água", () => {
   it("sem VIP ativo, avisa que o sensor comprado ainda não tem efeito", () => {
     login({ hasWaterSensor: true, autoCleanTriggerPercent: 30, isVip: false }, itemsComprado);
 
-    cy.contains(".card", "Sensor de Qualidade da Água").within(() => {
+    cy.contains("strong", "Sensor de Qualidade da Água").closest(".card").within(() => {
       cy.contains("Só tem efeito com VIP ativo");
     });
   });
