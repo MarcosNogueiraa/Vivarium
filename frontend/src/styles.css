@@ -1156,6 +1156,8 @@ input:focus {
 }
 .reveal-attr b { color: var(--muted); font-weight: 600; margin-right: 4px; }
 .reveal-pts { color: var(--glow); font-weight: 700; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.reveal-chance { color: var(--muted); font-size: 0.78rem; margin-left: 2px; }
+.reveal-source { color: var(--faint); font-size: 0.74rem; margin-left: 6px; font-style: italic; }
 .reveal-total { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 6px; }
 .reveal-total b { color: var(--ink); }
 @keyframes reveal-attr-in { from { opacity: 0; transform: translateY(-4px); } }
