@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { traitsOf } from "../lib/generator.js";
 import { bandOf, PT } from "../lib/fishRenderer.js";
 import { partSummary } from "../lib/format.js";
@@ -20,11 +21,20 @@ export function PeekPanel({ creature }) {
   );
 }
 
-/** Ancora o PeekPanel numa posição fixa da tela (ex: acima do elemento sob o mouse). */
+/**
+ * Ancora o PeekPanel numa posição fixa da tela (ex: acima do elemento sob o mouse).
+ * Portal pra `document.body` (12/08/2026, bug real: dentro de `CollectCelebration`, esse
+ * painel é filho de `.modal.celebrate`, que tem `overflow:hidden` pros raios de luz da
+ * animação — mesmo sendo `position:fixed`, um ancestral com overflow:hidden ainda corta a
+ * pintura de um descendente fixed que continua no mesmo DOM. Clicar no pai registrava o
+ * clique (o estado `peek` mudava), só o painel nunca aparecia. Mesmo princípio já usado em
+ * `Modal.jsx` pro modal em si.
+ */
 export function PeekAnchor({ x, y, creature }) {
-  return (
+  return createPortal(
     <div className="peek-anchor" style={{ left: x, top: y }}>
       <PeekPanel creature={creature} />
-    </div>
+    </div>,
+    document.body,
   );
 }

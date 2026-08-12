@@ -61,7 +61,10 @@ describe("Ninho — atributos dos pais na celebração", () => {
     // raiz (mouseenter/mouseleave nativos não borbulham) — precisa disparar o evento que
     // React de fato escuta, não o sintético.
     cy.get(".parents-chips .parent-chip").eq(0).trigger("mouseover");
-    cy.get(".peek-card").should("be.visible");
+    // .should("exist"), não "be.visible": o painel tem `pointer-events:none` (proposital,
+    // pra não atrapalhar hover) — a checagem de cobertura do Cypress usa elementFromPoint,
+    // que "pula" elementos com pointer-events:none e reporta falso-positivo de "coberto".
+    cy.get(".peek-card").should("exist");
     cy.get(".peek-card").contains("5.0"); // rarityScore do parentA
     cy.get(".peek-card").contains("Cauda:");
 
@@ -72,7 +75,7 @@ describe("Ninho — atributos dos pais na celebração", () => {
   it("clicar fixa os atributos abertos, clicar de novo fecha", () => {
     login();
     cy.get(".parents-chips .parent-chip").eq(1).click();
-    cy.get(".peek-card").should("be.visible");
+    cy.get(".peek-card").should("exist"); // ver nota acima sobre pointer-events:none
     cy.get(".peek-card").contains("4.2"); // rarityScore do parentB
 
     cy.get(".parents-chips .parent-chip").eq(1).click();
