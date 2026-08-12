@@ -21,7 +21,12 @@ public record TankResponse(
     decimal CapacityBandDegradationFactor = 1m,
     decimal FilterCapacity = 0m,
     bool IsVip = false,
-    DateTime? VipEndAt = null);
+    DateTime? VipEndAt = null,
+    bool HasWaterSensor = false,
+    decimal AutoCleanTriggerPercent = 0m,
+    decimal WaterSensorMaxTriggerPercent = 0m);
+
+public record SetAutoCleanTriggerRequest(decimal Percent);
 
 public record BackpackResponse(int Capacity, IReadOnlyList<CreatureDto> Creatures);
 

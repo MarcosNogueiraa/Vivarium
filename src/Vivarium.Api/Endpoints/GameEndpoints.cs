@@ -61,5 +61,13 @@ public static class GameEndpoints
         group.MapPost("/creatures/{creatureId:long}/sell-vendor", async (
             long creatureId, ClaimsPrincipal principal, GameService game) =>
             (await game.SellToVendorAsync(TokenService.GetUserId(principal), creatureId, DateTime.UtcNow)).ToHttp());
+
+        // ---------- Sensor de Qualidade da Água / Limpeza Automática (§8.18) ----------
+        // A compra do sensor em si passa pelo catálogo genérico (POST /api/items/water_sensor/buy) —
+        // aqui só a configuração do gatilho, que não tem custo.
+
+        group.MapPost("/water-sensor/trigger", async (
+            SetAutoCleanTriggerRequest req, ClaimsPrincipal principal, GameService game) =>
+            (await game.SetAutoCleanTriggerAsync(TokenService.GetUserId(principal), req.Percent)).ToHttp());
     }
 }
