@@ -32,4 +32,12 @@ public class BreedingSlot
     public BreedingStatus Status { get; set; }
     public long? ChildCreatureId { get; set; }
     public CreatureInstance? ChildCreature { get; set; }
+    /// <summary>
+    /// Resultado do risco de morte, gravado na coleta (§8.19, registro de cruzamentos) —
+    /// antes disso o desfecho só existia na resposta da API (CollectBreedingResponse), nunca
+    /// persistido; sem isso um histórico não teria como saber quem morreu em qual gestação.
+    /// Null enquanto InProgress (só definido em CollectAsync).
+    /// </summary>
+    public bool? ParentADied { get; set; }
+    public bool? ParentBDied { get; set; }
 }

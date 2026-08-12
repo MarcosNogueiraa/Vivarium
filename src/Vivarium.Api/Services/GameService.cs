@@ -323,6 +323,42 @@ public class GameService(VivariumDbContext db)
         return false;
     }
 
+    /// <summary>
+    /// Resgata peixe(s) presos no habitat de reprodução por falta de espaço no momento da
+    /// coleta (§8.8/§8.19) — antes da checagem de espaço em BreedingService.CollectAsync
+    /// (12/08/2026), um pai sobrevivente sem vaga no tanque/mochila ficava parado ali pra
+    /// sempre, sem nenhum mecanismo de recuperação (o Ninho nunca passa pelo tick normal, e
+    /// mesmo depois do jogador abrir espaço não existia nada que movesse o peixe de volta —
+    /// achado via relato real de usuário). Roda a cada carregamento do tanque (defesa em
+    /// profundidade: cobre tanto os casos já presos ANTES desta correção quanto qualquer
+    /// futuro edge case que a checagem no Collect não previna): qualquer criatura do usuário
+    /// estacionada num habitat tipo Breeding sem estar referenciada por uma gestação em
+    /// andamento é candidata a mover pro tanque/mochila assim que houver espaço.
+    /// </summary>
+    private async Task RescueStrandedBreedingParentsAsync(long userId, Habitat mainHabitat)
+    {
+        var breedingHabitatIds = await db.Habitats
+            .Where(h => h.UserId == userId && h.HabitatType!.Code == "Breeding")
+            .Select(h => h.Id)
+            .ToListAsync();
+        if (breedingHabitatIds.Count == 0)
+            return;
+
+        var activeSlots = await db.BreedingSlots
+            .Where(s => s.UserId == userId && s.Status == BreedingStatus.InProgress)
+            .Select(s => new { s.ParentAId, s.ParentBId })
+            .ToListAsync();
+        var activeSlotCreatureIds = activeSlots.SelectMany(s => new[] { s.ParentAId, s.ParentBId }).ToList();
+
+        var stranded = await db.CreatureInstances
+            .Where(c => c.OwnerId == userId && c.HabitatId != null && breedingHabitatIds.Contains(c.HabitatId!.Value)
+                && !activeSlotCreatureIds.Contains(c.Id))
+            .ToListAsync();
+
+        foreach (var creature in stranded)
+            await TryPlaceAsync(creature, mainHabitat);
+    }
+
     /// <summary>Tanque → mochila.</summary>
     private async Task<string?> StoreCoreAsync(long userId, long creatureId, Habitat habitat)
     {
@@ -478,6 +514,7 @@ public class GameService(VivariumDbContext db)
         try
         {
             await ApplyTickAsync(habitat, now);
+            await RescueStrandedBreedingParentsAsync(userId, habitat);
             await db.SaveChangesAsync();
         }
         catch (DbUpdateConcurrencyException)

@@ -24,3 +24,14 @@ public record BreedingQuoteDto(
 
 /// <summary>Resultado da coleta: o filhote + se algum dos pais não sobreviveu à gestação.</summary>
 public record CollectBreedingResponse(CreatureDto Child, bool ParentADied, bool ParentBDied);
+
+/// <summary>
+/// Registro de cruzamentos (§8.19) — 1 linha por gestação já coletada, mais recente primeiro.
+/// Reaproveita os dados que o BreedingSlot já guarda (nada novo além de ParentADied/BDied,
+/// que passaram a ser gravados na coleta) — pensado tanto pro jogador consultar quanto pra
+/// troubleshooting (mesma forma que já respondia "por que meu peixe X nasceu assim").
+/// </summary>
+public record BreedingHistoryEntryDto(
+    long Id, CreatureDto ParentA, CreatureDto ParentB, CreatureDto? Child,
+    DateTime StartedAt, DateTime ReadyAt, decimal CostPaid,
+    bool ParentADied, bool ParentBDied, bool InsuranceUsed);

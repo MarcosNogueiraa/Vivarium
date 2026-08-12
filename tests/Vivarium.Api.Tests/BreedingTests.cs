@@ -310,6 +310,83 @@ public class BreedingTests : IClassFixture<VivariumApiFactory>
     }
 
     [Fact]
+    public async Task Collect_SemEspacoPraFilhoteEOsDoisPais_Bloqueia()
+    {
+        // Regressão (12/08/2026): antes disso, um pai sobrevivente sem vaga no tanque/mochila
+        // ficava preso dentro do próprio habitat de reprodução, invisível pro jogador (achado
+        // via relato real de usuário). Agora a coleta simplesmente não é permitida até haver
+        // espaço pro pior caso (filhote + os 2 pais sobrevivendo) — ninguém fica preso.
+        var (client, userId) = await _factory.RegisterAsync("breed14");
+        await GiveSoft(userId, 1000m);
+        long a = await CreateOwnedCreature(userId, 5m, 5001);
+        long b = await CreateOwnedCreature(userId, 6m, 5002);
+        (await client.PostAsJsonAsync("/api/breeding/start", new { parentAId = a, parentBId = b })).EnsureSuccessStatusCode();
+        await MakeSlotReadyNow(userId);
+
+        // Tanque (capacidade 3) e mochila (capacidade 50) ficam com só 1 vaga livre no total —
+        // menos que as 3 necessárias pro pior caso.
+        long habitatId = await HabitatIdOf(userId);
+        await _factory.WithDbAsync(async db =>
+        {
+            for (int i = 0; i < 3; i++)
+                db.CreatureInstances.Add(new CreatureInstance
+                {
+                    SpeciesId = 1, OwnerId = userId, HabitatId = habitatId,
+                    Seed = 9000 + i, TraitConfigVersion = 1, RarityScore = 4m, CreatedAt = DateTime.UtcNow,
+                });
+            for (int i = 0; i < 49; i++)
+                db.CreatureInstances.Add(new CreatureInstance
+                {
+                    SpeciesId = 1, OwnerId = userId, HabitatId = null,
+                    Seed = 9100 + i, TraitConfigVersion = 1, RarityScore = 4m, CreatedAt = DateTime.UtcNow,
+                });
+            await db.SaveChangesAsync();
+        });
+
+        var collectResp = await client.PostAsync("/api/breeding/collect", null);
+        Assert.Equal(HttpStatusCode.BadRequest, collectResp.StatusCode);
+
+        // Nada foi mutado: a gestação continua em andamento, sem filhote criado.
+        var status = await client.GetFromJsonAsync<BreedingStatusDto>("/api/breeding");
+        Assert.True(status!.Active);
+    }
+
+    [Fact]
+    public async Task Tanque_ResgataPeixePresoNoNinhoSemGestacaoAtiva()
+    {
+        // Regressão (12/08/2026): antes da checagem em Collect existir, um pai sobrevivente
+        // sem vaga no tanque/mochila ficava parado dentro do próprio habitat de reprodução
+        // pra sempre — nem GET /api/game/tank nem nada mais o resgatava depois que o jogador
+        // abria espaço. Simula esse estado (peixe estacionado no Breeding sem slot ativo
+        // referenciando ele) e confirma que carregar o tanque move ele de volta sozinho.
+        var (client, userId) = await _factory.RegisterAsync("breed15");
+        long breedingHabitatId = 0;
+        long strandedId = 0;
+        await _factory.WithDbAsync(async db =>
+        {
+            var breedingHabitat = await db.Habitats.FirstAsync(h => h.UserId == userId && h.HabitatType!.Code == "Breeding");
+            breedingHabitatId = breedingHabitat.Id;
+            var stranded = new CreatureInstance
+            {
+                SpeciesId = 1, OwnerId = userId, HabitatId = breedingHabitatId,
+                Seed = 7001, TraitConfigVersion = 1, RarityScore = 5m, CreatedAt = DateTime.UtcNow,
+            };
+            db.CreatureInstances.Add(stranded);
+            await db.SaveChangesAsync();
+            strandedId = stranded.Id;
+        });
+
+        var tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
+        Assert.Contains(tank!.Creatures, c => c.Id == strandedId); // saiu do Ninho, voltou pro tanque
+
+        await _factory.WithDbAsync(async db =>
+        {
+            var c = await db.CreatureInstances.FirstAsync(x => x.Id == strandedId);
+            Assert.NotEqual(breedingHabitatId, c.HabitatId);
+        });
+    }
+
+    [Fact]
     public async Task Seguro_GarantePremiumTravaRiscoZeroECobraPremium()
     {
         var (client, userId) = await _factory.RegisterAsync("breed10");
