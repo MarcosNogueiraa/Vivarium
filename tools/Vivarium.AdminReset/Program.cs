@@ -4,6 +4,7 @@ using Vivarium.Api.Data;
 using Vivarium.Api.Services;
 using Vivarium.Core.Domain;
 using Vivarium.Core.Gameplay;
+using Vivarium.Core.Generation;
 
 // Ferramenta de manutenção local, sem endpoint HTTP nenhum — existe só pra ações
 // administrativas pontuais (ex: resetar senha de uma conta de teste, listar contas
@@ -18,6 +19,7 @@ using Vivarium.Core.Gameplay;
 //   dotnet run --project tools/Vivarium.AdminReset -- delete-users <id1,id2,...>
 //   dotnet run --project tools/Vivarium.AdminReset -- list-creatures <email>
 //   dotnet run --project tools/Vivarium.AdminReset -- reset-account <email>
+//   dotnet run --project tools/Vivarium.AdminReset -- give-fish <email|username> <seed> [--backpack]
 
 if (args.Length == 0)
 {
@@ -31,6 +33,7 @@ if (args.Length == 0)
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- fix-scores");
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- finish-all-breeding");
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- reset-account <email>");
+    Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- give-fish <email|username> <seed> [--backpack]");
     return 1;
 }
 
@@ -332,6 +335,69 @@ switch (args[0])
             Console.WriteLine($"    ParentAId={c.ParentAId} ParentBId={c.ParentBId} ParentASeed={c.ParentASeed} ParentBSeed={c.ParentBSeed}");
             Console.WriteLine($"    CreatedAt={c.CreatedAt:yyyy-MM-dd HH:mm:ss}");
         }
+        return 0;
+    }
+    case "give-fish":
+    {
+        // Credita um peixe com um SEED ESPECÍFICO (não sorteado) na conta de um jogador —
+        // uso pontual (ex: achado por `Vivarium.Simulation best`), nunca exposto via API.
+        // Traits sempre derivados do seed pelo motor de verdade (TraitGenerator), igual a
+        // qualquer outro peixe — não fabrica trait nenhum, só escolhe QUAL seed nasce.
+        if (args.Length < 3)
+        {
+            Console.WriteLine("Uso: dotnet run --project tools/Vivarium.AdminReset -- give-fish <email|username> <seed> [--backpack]");
+            return 1;
+        }
+        string identifier = args[1];
+        if (!long.TryParse(args[2], out long seed))
+        {
+            Console.WriteLine($"Seed inválido: '{args[2]}'.");
+            return 1;
+        }
+        bool forceBackpack = args.Length > 3 && args[3] == "--backpack";
+
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == identifier || u.Username == identifier);
+        if (user is null)
+        {
+            Console.WriteLine($"Usuário '{identifier}' não encontrado (busquei por email e username).");
+            return 1;
+        }
+
+        var habitat = await db.Habitats
+            .Include(h => h.HabitatType)
+            .FirstOrDefaultAsync(h => h.UserId == user.Id && h.HabitatType!.Code == "Aquarium");
+        if (habitat is null)
+        {
+            Console.WriteLine($"Usuário '{user.Username}' não tem um Aquário (Habitat) ainda.");
+            return 1;
+        }
+
+        int speciesId = await db.Species
+            .Where(s => s.HabitatTypeId == habitat.HabitatTypeId)
+            .Select(s => s.Id)
+            .FirstAsync();
+
+        int activeCount = await db.CreatureInstances.CountAsync(c => c.HabitatId == habitat.Id);
+        bool toTank = !forceBackpack && activeCount < habitat.Capacity;
+
+        var traits = TraitGenerator.Generate(seed, TraitConfigV1.Version);
+
+        var creature = new CreatureInstance
+        {
+            SpeciesId = speciesId,
+            OwnerId = user.Id,
+            HabitatId = toTank ? habitat.Id : null,
+            Seed = seed,
+            TraitConfigVersion = TraitConfigV1.Version,
+            RarityScore = (decimal)traits.RarityScore,
+            CreatedAt = DateTime.UtcNow,
+        };
+        db.CreatureInstances.Add(creature);
+        await db.SaveChangesAsync();
+
+        Console.WriteLine($"Peixe criado pra {user.Username} ({user.Email}): #{creature.Id}, Seed={seed}, RarityScore={traits.RarityScore:0.0000}");
+        Console.WriteLine($"Tier={traits.ShimmerTier} ShimmerColor={traits.ShimmerColor?.ToString() ?? "-"} | Tail={traits.Tail.Color}/{traits.Tail.Pattern} Dorsal={traits.Dorsal.Color}/{traits.Dorsal.Pattern} Pectoral={traits.Pectoral.Color}/{traits.Pectoral.Pattern}");
+        Console.WriteLine(toTank ? "Foi direto pro tanque." : "Foi pra mochila (tanque cheio ou --backpack pedido).");
         return 0;
     }
     case "reset-account":
