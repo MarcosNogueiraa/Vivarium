@@ -5,13 +5,13 @@ import { ConfirmModal } from "../components/ConfirmModal.jsx";
 import { FILTER_WARN_THRESHOLD, tankFishWeight } from "../lib/tankMath.js";
 
 const DESCRIPTIONS = {
-  filter_basic: "Restaura a qualidade da água para 100 na hora.",
-  auto_filter: "Permanente: cobre até 5 de peso de peixes com metade da degradação (acima disso, o benefício cai aos poucos).",
-  auto_filter_2: "Permanente: cobre até 10 de peso de peixes — upgrade do Filtro Automático (não acumula com ele).",
-  auto_filter_3: "Permanente: cobre até 18 de peso de peixes — o nível mais forte, pro tanque Master cheio.",
-  tank_upgrade: "+1 de capacidade no tanque (preço sobe a cada compra) — só dentro do aquário atual.",
-  aquario_grande: "Troca de aquário: sobe pra faixa 5-10 de capacidade. Preço fixo, bem mais alto que um upgrade normal — exige farm de verdade.",
-  aquario_master: "Troca de aquário: sobe pra faixa 10-15 de capacidade, o teto do MVP. Preço fixo, o maior sink de soft do jogo.",
+  filter_basic: "Uso único: limpa a água na hora, restaurando para 100%.",
+  auto_filter: "Permanente: limpa a água sozinho, sem precisar comprar filtro toda hora. Cobre um tanque de até 5 peixes comuns — peixes raros contam mais nessa conta. Acima da cobertura o efeito não desliga de uma vez, só vai enfraquecendo aos poucos.",
+  auto_filter_2: "Permanente: versão mais forte do Filtro Automático, cobre até 10 peixes comuns. Substitui o nível anterior — os dois não somam.",
+  auto_filter_3: "Permanente: o nível mais forte de Filtro Automático, cobre até 18 peixes comuns. Ideal pro Aquário Master lotado.",
+  tank_upgrade: "Abre mais 1 vaga no tanque (o preço sobe a cada compra). Só funciona dentro do aquário atual — pra crescer além do limite dele, é preciso trocar de aquário.",
+  aquario_grande: "Troca para um aquário maior, com espaço para 5 a 10 peixes. Preço fixo e alto — é uma conquista de médio prazo, não um upgrade do dia a dia.",
+  aquario_master: "Troca para o maior aquário do jogo, com espaço para 10 a 15 peixes. O investimento mais caro disponível.",
 };
 
 // Ícone + "peso" visual por item — sem isso todo card da loja tinha o mesmo
@@ -115,11 +115,12 @@ export function StoreView({ tank, refreshTank, notify }) {
           ? (
             <p className="muted">
               Nível ativo: <b>{items.find((i) => i.key === activeFilterKey)?.name}</b> — cobre até{" "}
-              <b>{filterCapacity}</b> de peso. Seu tanque pesa <b>{fishWeight.toFixed(1)}</b> agora
-              {fishWeight > filterCapacity ? " (acima da cobertura — o benefício cai aos poucos)." : "."}
+              <b>{filterCapacity}</b> peixes comuns. Seu tanque hoje equivale a{" "}
+              <b>{fishWeight.toFixed(1)}</b> peixes comuns (peixes raros contam mais que peixes comuns)
+              {fishWeight > filterCapacity ? " — acima da cobertura, o efeito do filtro vai enfraquecendo aos poucos." : "."}
             </p>
           )
-          : <p className="muted">Você ainda não tem filtro automático — a água degrada na velocidade cheia.</p>}
+          : <p className="muted">Você ainda não tem filtro automático — a água suja na velocidade máxima. O filtro manual continua funcionando normalmente; considere um Filtro Automático pra não precisar comprar toda hora.</p>}
       </div>
       {items.map((item) => {
         const tier = TIERS[item.key];

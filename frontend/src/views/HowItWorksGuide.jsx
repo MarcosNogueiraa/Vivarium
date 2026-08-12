@@ -19,7 +19,7 @@ const SECTIONS = [
         <p>Cada peixe no tanque suja a água continuamente (mais peixes = degrada mais rápido). Isso <b>não mata</b> ninguém nem some com nada — só reduz sua renda.</p>
         <p>De <b>80 a 100%</b> a água não tira nada da sua renda. Abaixo de 80%, a renda cai suavemente (não é um "penhasco"); com a água zerada, a renda também vai a zero.</p>
         <p>Abaixo de 40% a velocidade de geração cai pela metade; abaixo de 15%, itens novos da fila têm 10% de chance de nascer "doentes" (nascem com desvantagem no sorteio de raridade, não morrem).</p>
-        <p><b>Filtro</b> (soft) restaura a água pra 100%. <b>Filtro automático</b> (item permanente) reduz a degradação pela metade — mas não substitui o filtro manual, só desacelera a sujeira.</p>
+        <p><b>Filtro</b> (soft, uso único) restaura a água pra 100% na hora. <b>Filtro automático</b> (item permanente, com 3 níveis) limpa sozinho, sem precisar comprar filtro toda hora — cada nível cobre um tanque de até um certo número de peixes comuns (peixes raros contam mais); passar da cobertura não desliga o efeito de uma vez, só enfraquece aos poucos. Ele não substitui o filtro manual, só desacelera a sujeira.</p>
       </>
     ),
   },

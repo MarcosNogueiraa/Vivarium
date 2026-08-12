@@ -1,5 +1,6 @@
 import { Modal } from "../components/Modal.jsx";
-import { BANDS } from "../lib/fishRenderer.js";
+import { BANDS, PART_HEX, PT } from "../lib/fishRenderer.js";
+import { CONFIG } from "../lib/generator.js";
 import { RARITY_RANGES } from "../lib/format.js";
 
 export function RarityGuide({ onClose }) {
@@ -20,6 +21,27 @@ export function RarityGuide({ onClose }) {
           </div>
         ))}
       </div>
+
+      <div className="eyebrow" style={{ marginTop: 22 }}>Raridade das cores</div>
+      <p className="muted guide-intro">
+        Cauda, nadadeira dorsal e nadadeira peitoral sorteiam a cor de forma independente, cada uma nesta
+        mesma tabela. Quanto menor o percentual, mais rara — e mais valorizada no mercado — a cor.
+      </p>
+      <div className="guide-bands">
+        {CONFIG.partColors.map(([key, weight]) => (
+          <div className="guide-band" key={key}>
+            <span className="gem" style={{ background: PART_HEX[key], boxShadow: `0 0 10px ${PART_HEX[key]}` }} />
+            <span className="gb-name">{PT.color[key]}</span>
+            <span className="gb-range mono">{weight.toFixed(0)}%</span>
+          </div>
+        ))}
+      </div>
+      <p className="faint guide-foot">
+        Se o corpo do peixe sair com brilho vibrante, raro ou lendário, a cor mais parecida com a do
+        brilho fica temporariamente mais provável nas 3 partes — o jogo tenta formar peixes com um
+        "conjunto" visualmente combinando.
+      </p>
+
       <p className="faint guide-foot">Abra qualquer peixe para ver o detalhamento “por que é raro”.</p>
     </Modal>
   );
