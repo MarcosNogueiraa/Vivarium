@@ -33,6 +33,7 @@ export function GameView({ onLogout }) {
   const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [showRarityGuide, setShowRarityGuide] = useState(false);
   const [showGiveFishConfirm, setShowGiveFishConfirm] = useState(false);
+  const [showGrantPremiumConfirm, setShowGrantPremiumConfirm] = useState(false);
   const navRef = useRef(null);
 
   // Em telas estreitas o nav vira uma tira de rolagem horizontal (styles.css,
@@ -48,6 +49,13 @@ export function GameView({ onLogout }) {
     const { habitatsAffected } = await api.adminGiveStarterFishAll();
     setShowGiveFishConfirm(false);
     notify(`+1 peixe pronto pra ${habitatsAffected} jogador(es)`);
+  }
+
+  async function grantPremiumToAll() {
+    const { usersAffected, amount } = await api.adminGrantPremiumAll(1000);
+    setShowGrantPremiumConfirm(false);
+    notify(`+${amount} premium pra ${usersAffected} jogador(es)`);
+    await refreshTank();
   }
 
   async function devCoins() {
@@ -128,6 +136,11 @@ export function GameView({ onLogout }) {
               🎣 Dar peixe a todos
             </button>
           )}
+          {tank.isAdmin && (
+            <button className="dev-btn" onClick={() => setShowGrantPremiumConfirm(true)} title="Credita 1000 de moeda premium na carteira de todo jogador">
+              💎 1000 premium a todos
+            </button>
+          )}
         </div>
         <AccountMenu onLogout={() => { clearToken(); onLogout(); }} />
       </header>
@@ -170,6 +183,15 @@ export function GameView({ onLogout }) {
           confirmLabel="Dar peixe a todos"
           onConfirm={giveStarterFishToAll}
           onClose={() => setShowGiveFishConfirm(false)}
+        />
+      )}
+      {showGrantPremiumConfirm && (
+        <ConfirmModal
+          title="Dar 1000 premium a todos"
+          message="Todo jogador recebe +1000 de moeda premium na carteira. Ação de teste em produção — não é reversível. Confirma?"
+          confirmLabel="Dar 1000 premium a todos"
+          onConfirm={grantPremiumToAll}
+          onClose={() => setShowGrantPremiumConfirm(false)}
         />
       )}
       {bandUpgrade && <TankUpgradeCelebration bandName={bandUpgrade} onClose={dismissBandUpgrade} />}

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Vivarium.Api.Contracts;
 using Vivarium.Api.Data;
 using Vivarium.Api.Http;
 using Vivarium.Api.Services;
@@ -16,6 +17,15 @@ public static class AdminEndpoints
             ClaimsPrincipal principal, AdminService admin, VivariumDbContext db) =>
         {
             var result = await admin.GiveStarterFishToAllAsync(TokenService.GetUserId(principal), DateTime.UtcNow);
+            if (result.Ok)
+                await db.SaveChangesAsync();
+            return result.ToHttp();
+        });
+
+        group.MapPost("/grant-premium-all", async (
+            GrantPremiumRequest body, ClaimsPrincipal principal, AdminService admin, VivariumDbContext db) =>
+        {
+            var result = await admin.GrantPremiumToAllAsync(TokenService.GetUserId(principal), body.Amount, DateTime.UtcNow);
             if (result.Ok)
                 await db.SaveChangesAsync();
             return result.ToHttp();
