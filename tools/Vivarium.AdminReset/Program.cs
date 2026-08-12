@@ -4,7 +4,6 @@ using Vivarium.Api.Data;
 using Vivarium.Api.Services;
 using Vivarium.Core.Domain;
 using Vivarium.Core.Gameplay;
-using Vivarium.Core.Generation;
 
 // Ferramenta de manutenção local, sem endpoint HTTP nenhum — existe só pra ações
 // administrativas pontuais (ex: resetar senha de uma conta de teste, listar contas
@@ -19,7 +18,8 @@ using Vivarium.Core.Generation;
 //   dotnet run --project tools/Vivarium.AdminReset -- delete-users <id1,id2,...>
 //   dotnet run --project tools/Vivarium.AdminReset -- list-creatures <email>
 //   dotnet run --project tools/Vivarium.AdminReset -- reset-account <email>
-//   dotnet run --project tools/Vivarium.AdminReset -- give-fish <email|username> <seed> [--backpack]
+//   dotnet run --project tools/Vivarium.AdminReset -- give-seed <username-ou-email> <seed>
+//   dotnet run --project tools/Vivarium.AdminReset -- give-premium-all <quantidade>
 
 if (args.Length == 0)
 {
@@ -33,7 +33,8 @@ if (args.Length == 0)
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- fix-scores");
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- finish-all-breeding");
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- reset-account <email>");
-    Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- give-fish <email|username> <seed> [--backpack]");
+    Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- give-seed <username-ou-email> <seed>");
+    Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- give-premium-all <quantidade>");
     return 1;
 }
 
@@ -337,69 +338,6 @@ switch (args[0])
         }
         return 0;
     }
-    case "give-fish":
-    {
-        // Credita um peixe com um SEED ESPECÍFICO (não sorteado) na conta de um jogador —
-        // uso pontual (ex: achado por `Vivarium.Simulation best`), nunca exposto via API.
-        // Traits sempre derivados do seed pelo motor de verdade (TraitGenerator), igual a
-        // qualquer outro peixe — não fabrica trait nenhum, só escolhe QUAL seed nasce.
-        if (args.Length < 3)
-        {
-            Console.WriteLine("Uso: dotnet run --project tools/Vivarium.AdminReset -- give-fish <email|username> <seed> [--backpack]");
-            return 1;
-        }
-        string identifier = args[1];
-        if (!long.TryParse(args[2], out long seed))
-        {
-            Console.WriteLine($"Seed inválido: '{args[2]}'.");
-            return 1;
-        }
-        bool forceBackpack = args.Length > 3 && args[3] == "--backpack";
-
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == identifier || u.Username == identifier);
-        if (user is null)
-        {
-            Console.WriteLine($"Usuário '{identifier}' não encontrado (busquei por email e username).");
-            return 1;
-        }
-
-        var habitat = await db.Habitats
-            .Include(h => h.HabitatType)
-            .FirstOrDefaultAsync(h => h.UserId == user.Id && h.HabitatType!.Code == "Aquarium");
-        if (habitat is null)
-        {
-            Console.WriteLine($"Usuário '{user.Username}' não tem um Aquário (Habitat) ainda.");
-            return 1;
-        }
-
-        int speciesId = await db.Species
-            .Where(s => s.HabitatTypeId == habitat.HabitatTypeId)
-            .Select(s => s.Id)
-            .FirstAsync();
-
-        int activeCount = await db.CreatureInstances.CountAsync(c => c.HabitatId == habitat.Id);
-        bool toTank = !forceBackpack && activeCount < habitat.Capacity;
-
-        var traits = TraitGenerator.Generate(seed, TraitConfigV1.Version);
-
-        var creature = new CreatureInstance
-        {
-            SpeciesId = speciesId,
-            OwnerId = user.Id,
-            HabitatId = toTank ? habitat.Id : null,
-            Seed = seed,
-            TraitConfigVersion = TraitConfigV1.Version,
-            RarityScore = (decimal)traits.RarityScore,
-            CreatedAt = DateTime.UtcNow,
-        };
-        db.CreatureInstances.Add(creature);
-        await db.SaveChangesAsync();
-
-        Console.WriteLine($"Peixe criado pra {user.Username} ({user.Email}): #{creature.Id}, Seed={seed}, RarityScore={traits.RarityScore:0.0000}");
-        Console.WriteLine($"Tier={traits.ShimmerTier} ShimmerColor={traits.ShimmerColor?.ToString() ?? "-"} | Tail={traits.Tail.Color}/{traits.Tail.Pattern} Dorsal={traits.Dorsal.Color}/{traits.Dorsal.Pattern} Pectoral={traits.Pectoral.Color}/{traits.Pectoral.Pattern}");
-        Console.WriteLine(toTank ? "Foi direto pro tanque." : "Foi pra mochila (tanque cheio ou --backpack pedido).");
-        return 0;
-    }
     case "reset-account":
     {
         // Reseta uma conta pro estado de recém-registrada (SEM apagar a conta em si — login,
@@ -512,6 +450,96 @@ switch (args[0])
         await db.SaveChangesAsync();
         Console.WriteLine($"\n{slots.Count} gestação(ões) em andamento liberada(s) pra coleta imediata.");
         return 0;
+    }
+    case "give-seed":
+    {
+        // Insere um CreatureInstance com um seed ESCOLHIDO (não sorteado na coleta) direto na
+        // mochila do usuário (HabitatId=null) — pra dar um peixe específico (ex: o de maior
+        // RarityScore achado por `Vivarium.Simulation best`, CLAUDE.md). Não fabrica traits: o
+        // seed é real, os traits continuam 100% derivados dele pelo motor normal
+        // (Vivarium.Core.Generation.TraitGenerator), só a ESCOLHA de qual seed foi manual em vez
+        // de aleatória. Uso pontual — não expõe endpoint HTTP nenhum, mesma filosofia da ferramenta.
+        if (args.Length != 3 || !long.TryParse(args[2], out long seed))
+        {
+            Console.WriteLine("Uso: dotnet run --project tools/Vivarium.AdminReset -- give-seed <username-ou-email> <seed>");
+            return 1;
+        }
+        string identifier = args[1];
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Username == identifier || u.Email == identifier);
+        if (user is null)
+        {
+            Console.WriteLine($"Usuário '{identifier}' não encontrado.");
+            return 1;
+        }
+
+        var traits = Vivarium.Core.Generation.TraitGenerator.Generate(seed, Vivarium.Core.Generation.TraitConfigV1.Version);
+
+        int aquariumTypeId = await db.HabitatTypes.Where(h => h.Code == "Aquarium").Select(h => h.Id).FirstAsync();
+        int aquariumSpeciesId = await db.Species.Where(s => s.HabitatTypeId == aquariumTypeId).Select(s => s.Id).FirstAsync();
+
+        var creature = new CreatureInstance
+        {
+            SpeciesId = aquariumSpeciesId,
+            OwnerId = user.Id,
+            HabitatId = null, // mochila — jogador decide se quer colocar no tanque
+            Seed = seed,
+            TraitConfigVersion = Vivarium.Core.Generation.TraitConfigV1.Version,
+            RarityScore = (decimal)traits.RarityScore,
+            CreatedAt = DateTime.UtcNow,
+        };
+        db.CreatureInstances.Add(creature);
+        await db.SaveChangesAsync();
+
+        Console.WriteLine($"Peixe #{creature.Id} criado na mochila de #{user.Id} {user.Username} — seed={seed}, RarityScore={creature.RarityScore:0.0000}");
+        Console.WriteLine($"  Shimmer: {traits.ShimmerTier} ({traits.ShimmerColor?.ToString() ?? "-"})");
+        Console.WriteLine($"  Cauda: {traits.Tail.Color}/{traits.Tail.Pattern}   Dorsal: {traits.Dorsal.Color}/{traits.Dorsal.Pattern}   Peitoral: {traits.Pectoral.Color}/{traits.Pectoral.Pattern}");
+        return 0;
+    }
+    case "give-premium-all":
+    {
+        // Credita `quantidade` de moeda PREMIUM na carteira de TODO usuário — ação pontual
+        // pra testes com jogadores reais (ex: validar o fluxo de VIP/rush/seguro sem precisar
+        // de um pagamento de verdade). Um TransactionLog.AdminGrant por usuário, auditado
+        // igual a qualquer outro crédito de moeda (mesmo princípio de TransactionLog único,
+        // CLAUDE.md §9.1). Não mexe em SOFT nem em nada além da carteira PREMIUM.
+        if (args.Length != 2 || !decimal.TryParse(args[1], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out decimal amount) || amount <= 0)
+        {
+            Console.WriteLine("Uso: dotnet run --project tools/Vivarium.AdminReset -- give-premium-all <quantidade>");
+            return 1;
+        }
+
+        int premiumId = await db.CurrencyTypes.Where(c => c.Code == "PREMIUM").Select(c => c.Id).FirstAsync();
+        var wallets = await db.WalletBalances.Where(w => w.CurrencyTypeId == premiumId).ToListAsync();
+
+        Console.WriteLine($"Vai creditar {amount:0} premium em {wallets.Count} carteira(s).");
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+        try
+        {
+            var now = DateTime.UtcNow;
+            foreach (var w in wallets)
+            {
+                w.Amount += amount;
+                db.TransactionLogs.Add(new TransactionLog
+                {
+                    Type = TransactionType.AdminGrant,
+                    ToUserId = w.UserId,
+                    CurrencyTypeId = premiumId,
+                    Amount = amount,
+                    CreatedAt = now,
+                });
+            }
+            await db.SaveChangesAsync();
+            await tx.CommitAsync();
+            Console.WriteLine($"\n{wallets.Count} carteira(s) creditada(s) com {amount:0} premium cada.");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            await tx.RollbackAsync();
+            Console.WriteLine($"\nERRO, nada foi alterado (rollback): {ex.Message}");
+            return 1;
+        }
     }
     default:
         Console.WriteLine("Comando desconhecido. Use 'reset-password', 'list-users', 'check-cross-refs', 'delete-users' ou 'list-creatures'.");
