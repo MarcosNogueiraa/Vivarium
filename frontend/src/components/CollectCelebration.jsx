@@ -19,6 +19,13 @@ import { partSummary } from "../lib/format.js";
 // "breeding"`), só o FILHOTE em si passa pela revelação — os retratos dos
 // pais e a seção de despedida (se algum não sobreviveu) continuam visíveis
 // desde o início, já que eles não são o "mistério" do momento.
+/** Porcentagens pequenas (ex: 0.05%) precisam de mais casas pra não arredondar pra "0%". */
+function formatPct(pct) {
+  if (pct >= 1) return `${pct.toFixed(1)}%`;
+  if (pct >= 0.01) return `${pct.toFixed(2)}%`;
+  return "<0,01%";
+}
+
 const REVEAL_LABELS = [
   { key: "shimmer", label: "Corpo" },
   { key: "tail", label: "Cauda" },
@@ -108,12 +115,45 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
   // como bônus só no reveal final, já que dependem das 3 partes juntas).
   const breakdown = rarityBreakdownOf(creature);
   const pointsOf = (pred) => breakdown.factors.filter(pred).reduce((sum, f) => sum + f.points, 0);
+  // Chance conjunta do grupo: multiplica as probabilidades brutas (não soma) — pontos já são
+  // -log10(prob), então some pra pontos e multiplique pra probabilidade são equivalentes, mas
+  // probPct de fatores com peso (shimmerTier) não bate 1:1 com -log10, por isso não deriva da
+  // soma de pontos e sim multiplica probPct direto.
+  const probOf = (pred) => breakdown.factors.filter(pred).reduce((p, f) => p * (f.probPct != null ? f.probPct / 100 : 1), 1);
   const bonusPoints = pointsOf((f) => f.key === "samePattern" || f.key === "sameColor");
+  // De onde veio o atributo (só faz sentido pra filhote — pedido do usuário, 12/08/2026, pra
+  // esclarecer dúvida sobre herança vs. mutação): usa o fator "principal" do grupo (cor, ou o
+  // tier de brilho) como origem representativa — cor/padrão às vezes vêm de lados diferentes,
+  // mas mostrar 1 origem por grupo já resolve a dúvida mais comum ("por que saiu essa cor?").
+  const sourceOf = (pred) => breakdown.factors.find(pred)?.source ?? null;
+  const SOURCE_LABEL = {
+    parentA: "🧬 Herdado do Pai A", parentB: "🧬 Herdado do Pai B",
+    grandparentA1: "🧬 Herdado de um avô", grandparentA2: "🧬 Herdado de um avô",
+    grandparentB1: "🧬 Herdado de um avô", grandparentB2: "🧬 Herdado de um avô",
+    mutation: "🎲 Mutação (não veio de nenhum pai)",
+  };
   const attrLines = [
-    { key: "shimmer", label: "Corpo", value: traits.shimmerTier === "None" ? "Cinza, sem brilho" : `${PT.tier[traits.shimmerTier]} · ${PT.shimmer[traits.shimmerColor]}`, points: pointsOf((f) => f.key === "shimmerTier") },
-    { key: "tail", label: "Cauda", value: partSummary(traits.tail), points: pointsOf((f) => f.part === "tail") },
-    { key: "dorsal", label: "Nadadeira dorsal", value: partSummary(traits.dorsal), points: pointsOf((f) => f.part === "dorsal") },
-    { key: "pectoral", label: "Nadadeira peitoral", value: partSummary(traits.pectoral), points: pointsOf((f) => f.part === "pectoral" || f.part === "fin") },
+    {
+      key: "shimmer", label: "Corpo",
+      value: traits.shimmerTier === "None" ? "Cinza, sem brilho" : `${PT.tier[traits.shimmerTier]} · ${PT.shimmer[traits.shimmerColor]}`,
+      points: pointsOf((f) => f.key === "shimmerTier"), probPct: probOf((f) => f.key === "shimmerTier") * 100,
+      source: sourceOf((f) => f.key === "shimmerTier"),
+    },
+    {
+      key: "tail", label: "Cauda", value: partSummary(traits.tail),
+      points: pointsOf((f) => f.part === "tail"), probPct: probOf((f) => f.part === "tail") * 100,
+      source: sourceOf((f) => f.part === "tail" && f.key === "partColor"),
+    },
+    {
+      key: "dorsal", label: "Nadadeira dorsal", value: partSummary(traits.dorsal),
+      points: pointsOf((f) => f.part === "dorsal"), probPct: probOf((f) => f.part === "dorsal") * 100,
+      source: sourceOf((f) => f.part === "dorsal" && f.key === "partColor"),
+    },
+    {
+      key: "pectoral", label: "Nadadeira peitoral", value: partSummary(traits.pectoral),
+      points: pointsOf((f) => f.part === "pectoral" || f.part === "fin"), probPct: probOf((f) => f.part === "pectoral" || f.part === "fin") * 100,
+      source: sourceOf((f) => (f.part === "pectoral" || f.part === "fin") && f.key === "partColor"),
+    },
   ];
 
   // Hover mostra o preview (desktop); clique/toque FIXA o preview aberto — útil
@@ -160,7 +200,10 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
             <div className="reveal-attrs">
               {attrLines.slice(0, step).map((a) => (
                 <div className="reveal-attr" key={a.key}>
-                  <b>{a.label}:</b> {a.value} <span className="reveal-pts">+{a.points.toFixed(2)}</span>
+                  <b>{a.label}:</b> {a.value}
+                  {" "}<span className="reveal-chance mono">{formatPct(a.probPct)}</span>
+                  {isBreeding && a.source && <span className="reveal-source">{SOURCE_LABEL[a.source]}</span>}
+                  {" "}<span className="reveal-pts">+{a.points.toFixed(2)}</span>
                 </div>
               ))}
             </div>
@@ -173,7 +216,10 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
           <div className="reveal-attrs revealed">
             {attrLines.map((a) => (
               <div className="reveal-attr" key={a.key}>
-                <b>{a.label}:</b> {a.value} <span className="reveal-pts">+{a.points.toFixed(2)}</span>
+                <b>{a.label}:</b> {a.value}
+                {" "}<span className="reveal-chance mono">{formatPct(a.probPct)}</span>
+                {isBreeding && a.source && <span className="reveal-source">{SOURCE_LABEL[a.source]}</span>}
+                {" "}<span className="reveal-pts">+{a.points.toFixed(2)}</span>
               </div>
             ))}
             {bonusPoints > 0 && (

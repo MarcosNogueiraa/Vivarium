@@ -153,4 +153,34 @@ describe("Ninho — gestação ativa", () => {
     cy.wait("@collect");
     cy.get(".modal.celebrate").should("be.visible");
   });
+
+  it("mostra a chance e a origem (herdado/mutação) de cada atributo do filhote (12/08/2026)", () => {
+    // Filhote de verdade (isBred + seeds dos pais) — sem isso rarityBreakdownOf trata como
+    // peixe fresco e não calcula origem nenhuma (mesmo padrão de traitsOf em toda a base).
+    const bredParentA = { ...parentA, seed: "111111" };
+    const bredParentB = { ...parentB, seed: "222222" };
+    cy.intercept("GET", "/api/breeding", {
+      body: { active: true, slot: { parentA: bredParentA, parentB: bredParentB, readyAt: "2020-01-01T00:00:00Z", isReady: true, costPaid: 150, insuranceUsed: false, parentADeathChance: 0, parentBDeathChance: 0, rushCostPremium: 0 } },
+    }).as("status");
+    cy.intercept("GET", "/api/game/backpack", { body: { capacity: 50, creatures: [] } }).as("backpack");
+    login();
+    cy.wait(["@status", "@backpack"]);
+
+    const child = bredCreature(404, 444444, 8.5, 111111, 222222);
+    cy.intercept("POST", "/api/breeding/collect", { statusCode: 200, body: { child, parentADied: false, parentBDied: false } }).as("collect");
+    cy.intercept("GET", "/api/breeding", { body: { active: false, slot: null } }).as("statusAfter");
+    cy.intercept("GET", "/api/game/backpack", { body: { capacity: 50, creatures: [child] } }).as("backpackAfter");
+
+    cy.contains("button", "Coletar filhote").click();
+    cy.wait("@collect");
+    cy.get(".modal.celebrate").should("be.visible");
+
+    // Score 8.5 >= 7.5: revelação clique-a-clique — clica no peixe até revelar tudo.
+    for (let i = 0; i < 4; i++) cy.get(".celebrate-fish").click();
+
+    cy.get(".reveal-attr").should("have.length.at.least", 1);
+    cy.get(".reveal-chance").first().should("be.visible").invoke("text").should("match", /%/);
+    cy.get(".reveal-source").should("have.length.at.least", 1);
+    cy.get(".reveal-source").first().invoke("text").should("match", /Herdado|Mutação/);
+  });
 });

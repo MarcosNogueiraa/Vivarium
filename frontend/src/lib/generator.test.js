@@ -217,8 +217,11 @@ describe("chance de herdar traço de um avô (31/07/2026)", () => {
   // reach-back alcançaria, então observar só a cor final do filhote é ambíguo).
   it("sem avós, sempre retorna o próprio", () => {
     const own = generateTraits(1n);
-    for (let childSeed = 1n; childSeed <= 500n; childSeed++)
-      expect(effectiveParentTraits(childSeed, "salt", own, null, null, 1)).toEqual(own);
+    for (let childSeed = 1n; childSeed <= 500n; childSeed++) {
+      const result = effectiveParentTraits(childSeed, "salt", own, null, null, 1);
+      expect(result.traits).toEqual(own);
+      expect(result.source).toBe("own");
+    }
   });
 
   it("com avós, a fração que alcança um avô aproxima reachChance", () => {
@@ -231,7 +234,7 @@ describe("chance de herdar traço de um avô (31/07/2026)", () => {
     let reached = 0;
     for (let childSeed = 1n; childSeed <= BigInt(n); childSeed++) {
       const result = effectiveParentTraits(childSeed, "salt", own, grandparent1, grandparent2, reachChance);
-      if (result !== own) reached++;
+      if (result.traits !== own) reached++;
     }
     expect(reached / n).toBeGreaterThan(reachChance - 0.03);
     expect(reached / n).toBeLessThan(reachChance + 0.03);
@@ -241,8 +244,11 @@ describe("chance de herdar traço de um avô (31/07/2026)", () => {
     const own = generateTraits(1n);
     const grandparent1 = generateTraits(2n);
     const grandparent2 = generateTraits(3n);
-    for (let childSeed = 1n; childSeed <= 2000n; childSeed++)
-      expect(effectiveParentTraits(childSeed, "salt", own, grandparent1, grandparent2, 0)).toEqual(own);
+    for (let childSeed = 1n; childSeed <= 2000n; childSeed++) {
+      const result = effectiveParentTraits(childSeed, "salt", own, grandparent1, grandparent2, 0);
+      expect(result.traits).toEqual(own);
+      expect(result.source).toBe("own");
+    }
   });
 
   it("resolveOwnTraits: pai fresco usa generateTraits direto", () => {
