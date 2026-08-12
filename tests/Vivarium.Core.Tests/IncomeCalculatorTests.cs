@@ -30,6 +30,29 @@ public class IncomeCalculatorTests
     }
 
     [Fact]
+    public void Renda_TaperDoLendario_ComprimeVariacaoAcimaDoPiso()
+    {
+        double piso = IncomeCalculator.CoinsPerHour(14m, Cfg);       // início do Lendário
+        double meio = IncomeCalculator.CoinsPerHour(17m, Cfg);
+        double topoObservado = IncomeCalculator.CoinsPerHour(21m, Cfg); // ~máx observado (100k/1M seeds)
+
+        Assert.InRange(piso, 95, 105);            // piso intocado, ~100/h
+        Assert.True(meio > piso && topoObservado > meio); // ainda crescente, não achata de vez
+        Assert.True(topoObservado < 250);          // teto comprimido (era ~1958/h sem taper)
+        Assert.True(topoObservado / piso < 2.5);    // variação interna do Lendário: era 19.6x, agora <2.5x
+
+        // Contínuo no ponto de corte: sem salto ao cruzar o piso do taper.
+        double logoAbaixo = IncomeCalculator.CoinsPerHour(13.999m, Cfg);
+        double logoAcima = IncomeCalculator.CoinsPerHour(14.001m, Cfg);
+        Assert.True(Math.Abs(logoAcima - logoAbaixo) < 0.1);
+
+        // Abaixo do piso, comportamento idêntico ao de antes (não mexe em Épico pra baixo).
+        double epico = IncomeCalculator.CoinsPerHour(11m, Cfg);
+        double esperadoEpico = Cfg.IncomeBasePerHour * Math.Exp(Cfg.IncomeGrowth * (11.0 - Cfg.IncomeRefScore));
+        Assert.Equal(esperadoEpico, epico, 6);
+    }
+
+    [Fact]
     public void FatorAgua_Monotonico_EZeroQuandoSeca()
     {
         Assert.Equal(1.0, IncomeCalculator.WaterFactor(100m, Cfg), 3);

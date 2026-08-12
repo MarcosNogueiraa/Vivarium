@@ -101,7 +101,9 @@ export const CONFIG = {
     finAmpMin: 0.15, finAmpMax: 0.75,
   },
   // Renda por peixe — espelha IncomeCalculator/TickConfig (manter em sincronia)
-  income: { base: 1.5, growth: 0.42, ref: 4.0 },
+  // taperScore/taperGrowth (12/08/2026): acima do piso Lendário, crescimento reduzido e
+  // contínuo — espelha TickConfig.IncomeLegendaryTaperScore/Growth (manter em sincronia)
+  income: { base: 1.5, growth: 0.42, ref: 4.0, taperScore: 14.0, taperGrowth: 0.10 },
   synergy: { perMatch: 0.15, maxBonus: 0.80 },
   // Venda ao NPC (vendor, §8.12) — espelha VendorCalculator/TickConfig (manter em sincronia)
   vendor: { hoursEquivalent: 2.0, minPrice: 1 },
@@ -422,7 +424,10 @@ export function rarityBreakdownOf(creature) {
 /** Moedas/hora que o peixe rende a água cheia (espelha IncomeCalculator.CoinsPerHour). */
 export function coinsPerHourOf(rarityScore, synergyMult = 1) {
   const i = CONFIG.income;
-  return i.base * Math.exp(i.growth * (rarityScore - i.ref)) * synergyMult;
+  if (rarityScore <= i.taperScore)
+    return i.base * Math.exp(i.growth * (rarityScore - i.ref)) * synergyMult;
+  const floorAtTaper = i.base * Math.exp(i.growth * (i.taperScore - i.ref));
+  return floorAtTaper * Math.exp(i.taperGrowth * (rarityScore - i.taperScore)) * synergyMult;
 }
 
 /** Multiplicador de sinergia pra N peixes da mesma cor de cauda (espelha o servidor). */
