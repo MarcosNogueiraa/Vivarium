@@ -23,6 +23,12 @@ export function GameView({ onLogout }) {
   const { status: dailyReward, refresh: refreshDailyReward } = useDailyReward();
   const [tab, setTab] = useState("tank");
   const [rankingExitSignal, setRankingExitSignal] = useState(0);
+  // Efeito "cinema" (escurece tudo fora do aquário, §CSS `.cinema-dim`/`.tank-layout::before`)
+  // ficava sempre escuro no mobile — o :hover que clareia de volta no desktop não existe em
+  // telas de toque (pedido do usuário, 12/08/2026). Toggle persistido; ligado por padrão
+  // (preserva o comportamento de sempre pra quem não mexer).
+  const [cinemaEnabled, setCinemaEnabled] = useState(() => localStorage.getItem("cinemaEnabled") !== "false");
+  const toggleCinema = () => setCinemaEnabled((v) => { localStorage.setItem("cinemaEnabled", String(!v)); return !v; });
   const [claimingReward, setClaimingReward] = useState(false);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [showRarityGuide, setShowRarityGuide] = useState(false);
@@ -69,7 +75,7 @@ export function GameView({ onLogout }) {
   const premium = Number(tank.wallet?.PREMIUM ?? 0);
 
   return (
-    <div className={`app-shell${tab === "tank" ? " cinema-mode" : ""}`}>
+    <div className={`app-shell${tab === "tank" && cinemaEnabled ? " cinema-mode" : ""}`}>
       <header className="topbar">
         <div className="brand"><span className="dot" />Vivarium <small>aquário vivo</small></div>
         <span className="spacer" />
@@ -137,7 +143,10 @@ export function GameView({ onLogout }) {
       )}
 
       <main className="content">
-        {tab === "tank" && <TankView tank={tank} refresh={refreshTank} notify={notify} />}
+        {tab === "tank" && (
+          <TankView tank={tank} refresh={refreshTank} notify={notify}
+            cinemaEnabled={cinemaEnabled} toggleCinema={toggleCinema} />
+        )}
         {tab === "backpack" && <BackpackView refreshTank={refreshTank} notify={notify} />}
         {tab === "market" && <MarketView userId={userId} refreshTank={refreshTank} notify={notify} />}
         {tab === "store" && <StoreView tank={tank} refreshTank={refreshTank} notify={notify} />}

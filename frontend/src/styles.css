@@ -431,6 +431,11 @@ input:focus {
   content: ""; position: absolute; inset: -20px 0; z-index: -2; pointer-events: none;
   background: radial-gradient(ellipse 65% 55% at 50% 14%, transparent 0%, rgba(1, 6, 9, 0.5) 55%, rgba(0, 2, 3, 0.8) 100%);
 }
+/* Toggle do efeito cinema (12/08/2026, pedido do usuário — ficava sempre escuro no mobile,
+   sem o :hover que clareia de volta no desktop). `.cinema-off` some com a vinheta; o resto
+   (`.cinema-dim` nas seções, `.app-shell.cinema-mode`) já é condicional na hora de montar a
+   className em TankView.jsx/GameView.jsx, então não precisa de override aqui. */
+.tank-layout.cinema-off::before { display: none; }
 
 /* A auréola de luz ao redor do stage (1ª tentativa do cinema) virou o
    problema seguinte: com o fundo bem mais escuro, ela lia como "ainda tem
