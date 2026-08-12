@@ -706,6 +706,13 @@ input:focus {
 .store-locked-reason { color: var(--coral) !important; font-size: 0.8rem !important; flex: none !important; }
 .filter-status-card { background: rgba(84, 230, 209, 0.05); border-color: rgba(84, 230, 209, 0.25); }
 
+/* Slider do gatilho da Limpeza Automática (§8.18) — troca o botão "Comprar"
+   assim que o Sensor de Qualidade da Água é adquirido. */
+.water-sensor-control input[type="range"] {
+  width: 100%; margin: 6px 0 4px; accent-color: var(--glow);
+}
+.water-sensor-control .faint { display: block; margin-top: 2px; }
+
 /* Hierarquia visual da loja (08/08/2026): sem isso, um filtro de 20 soft e o
    Aquário Master de 12000 tinham o mesmo peso visual (feedback do usuário).
    Ícone por item + acento de cor pros produtos de maior faixa. */

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.js";
 import { Coin } from "../components/Coin.jsx";
 import { ConfirmModal } from "../components/ConfirmModal.jsx";
@@ -12,6 +12,7 @@ const DESCRIPTIONS = {
   tank_upgrade: "Abre mais 1 vaga no tanque (o preço sobe a cada compra). Só funciona dentro do aquário atual — pra crescer além do limite dele, é preciso trocar de aquário.",
   aquario_grande: "Troca para um aquário maior, com espaço para 5 a 10 peixes. Preço fixo e alto — é uma conquista de médio prazo, não um upgrade do dia a dia.",
   aquario_master: "Troca para o maior aquário do jogo, com espaço para 10 a 15 peixes. O investimento mais caro disponível.",
+  water_sensor: "Permanente, por aquário: dá controle sobre a Limpeza Automática de VIP (veja o card VIP acima) — sem ele, VIP só limpa a água quando ela zera; com ele, você escolhe a partir de qual % isso acontece. Preço sobe se você trocar pra um aquário maior antes de comprar.",
 };
 
 // Ícone + "peso" visual por item — sem isso todo card da loja tinha o mesmo
@@ -24,10 +25,45 @@ const ICONS = {
   tank_upgrade: "📐",
   aquario_grande: "🐳",
   aquario_master: "👑",
+  water_sensor: "🧪",
 };
 const TIERS = { aquario_grande: "rare", aquario_master: "premium" };
 
 const FILTER_KEYS = ["auto_filter", "auto_filter_2", "auto_filter_3"];
+
+/// Slider do gatilho da Limpeza Automática (§8.18) — só aparece depois de comprado o Sensor.
+/// Salva com debounce (400ms) pra não disparar 1 request por pixel arrastado.
+function WaterSensorSlider({ tank, notify, onSaved }) {
+  const [value, setValue] = useState(Number(tank?.autoCleanTriggerPercent ?? 0));
+  const timer = useRef(null);
+
+  useEffect(() => { setValue(Number(tank?.autoCleanTriggerPercent ?? 0)); }, [tank?.autoCleanTriggerPercent]);
+
+  function onChange(e) {
+    const next = Number(e.target.value);
+    setValue(next);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(async () => {
+      try { await api.setAutoCleanTrigger(next); await onSaved(); }
+      catch (err) { notify(err.message); }
+    }, 400);
+  }
+
+  const max = Number(tank?.waterSensorMaxTriggerPercent ?? 80);
+  return (
+    <div className="water-sensor-control">
+      <div className="card-row" style={{ justifyContent: "space-between" }}>
+        <span className="muted">Limpar automaticamente quando a água chegar a</span>
+        <b>{value}%</b>
+      </div>
+      <input
+        type="range" min={0} max={max} step={1} value={value} onChange={onChange}
+        aria-label="Gatilho da limpeza automática"
+      />
+      {!tank?.isVip && <p className="faint">Só tem efeito com VIP ativo — a configuração fica guardada até você assinar.</p>}
+    </div>
+  );
+}
 
 export function StoreView({ tank, refreshTank, notify }) {
   const [items, setItems] = useState(null);
@@ -86,9 +122,14 @@ export function StoreView({ tank, refreshTank, notify }) {
         <span className="store-card-icon">👑</span>
         <strong>VIP</strong>
         <p className="muted">
-          Coleta automática dos peixes prontos, mas só enquanto o tanque está online (trocar de aba
-          continua contando como online; fechar o navegador não). Pago em moeda premium, sem renovação
-          automática — expira sozinho, sem cobrança recorrente.
+          Coleta automática dos peixes prontos e Limpeza Automática da água (compra um Filtro sozinho
+          quando a água zera — grátis, sem precisar de item nenhum), mas só enquanto o tanque está
+          online (trocar de aba continua contando como online; fechar o navegador não). Pago em moeda
+          premium, sem renovação automática — expira sozinho, sem cobrança recorrente.
+        </p>
+        <p className="muted">
+          Quer que a limpeza aconteça antes da água zerar? O item <b>Sensor de Qualidade da Água</b>{" "}
+          (mais abaixo na loja) libera esse controle.
         </p>
         <p className="muted">
           {tank?.isVip
@@ -130,16 +171,20 @@ export function StoreView({ tank, refreshTank, notify }) {
           <strong>{item.name}</strong>
           <p className="muted">{DESCRIPTIONS[item.key] ?? ""}</p>
           {item.locked && <p className="muted store-locked-reason">🔒 {item.lockedReason}</p>}
-          <div className="card-row">
-            <span className="price"><Coin />{Number(item.price).toFixed(0)}</span>
-            {item.locked
-              ? <span className="owned">Bloqueado</span>
-              : item.owned
-                ? (item.key === activeFilterKey
-                  ? <span className="owned owned-active">Ativo ✓</span>
-                  : <span className="owned">{FILTER_KEYS.includes(item.key) ? "Possuído (nível anterior)" : "Adquirido ✓"}</span>)
-                : <button className="btn-primary" onClick={() => buy(item)}>Comprar</button>}
-          </div>
+          {item.key === "water_sensor" && item.owned
+            ? <WaterSensorSlider tank={tank} notify={notify} onSaved={refreshTank} />
+            : (
+              <div className="card-row">
+                <span className="price"><Coin />{Number(item.price).toFixed(0)}</span>
+                {item.locked
+                  ? <span className="owned">Bloqueado</span>
+                  : item.owned
+                    ? (item.key === activeFilterKey
+                      ? <span className="owned owned-active">Ativo ✓</span>
+                      : <span className="owned">{FILTER_KEYS.includes(item.key) ? "Possuído (nível anterior)" : "Adquirido ✓"}</span>)
+                    : <button className="btn-primary" onClick={() => buy(item)}>Comprar</button>}
+              </div>
+            )}
         </div>
         );
       })}

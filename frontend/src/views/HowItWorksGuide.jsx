@@ -76,6 +76,8 @@ const SECTIONS = [
       <>
         <p>VIP não muda a velocidade de nada — só troca a coleta manual da fila por <b>coleta automática</b>, enquanto a aba do jogo estiver aberta (trocar de aba ainda conta como "aberta"; fechar o navegador, não).</p>
         <p>Fechar o jogo por mais de ~3 minutos volta a exigir coleta manual ao retornar, até a próxima vez que a aba ficar aberta de novo.</p>
+        <p><b>Limpeza Automática:</b> qualquer VIP ativo também compra um Filtro sozinho quando a água chega a 0% — de graça, sem precisar de item nenhum. Isso garante que a água nunca fica travada suja pra sempre, mas por padrão ela pode oscilar bastante antes de ser limpa.</p>
+        <p>Quer que a limpeza aconteça mais cedo (água sempre mais alta, renda mais estável)? O item <b>Sensor de Qualidade da Água</b> (loja, preço por aquário) libera um controle pra escolher a partir de qual % isso acontece — até um teto de 80% (acima disso não aumenta mais a renda, só o número de filtros comprados). Vale calcular: um gatilho mais alto limpa com mais frequência (mais soft gasto em filtro), então o ponto ideal depende do quanto seu tanque rende.</p>
       </>
     ),
   },

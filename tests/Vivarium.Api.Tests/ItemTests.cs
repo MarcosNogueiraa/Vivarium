@@ -12,13 +12,13 @@ public class ItemTests : IClassFixture<VivariumApiFactory>
     public ItemTests(VivariumApiFactory factory) => _factory = factory;
 
     [Fact]
-    public async Task Catalogo_ListaOsSeteItensDoMvp()
+    public async Task Catalogo_ListaOsOitoItensDoMvp()
     {
         var (client, _) = await _factory.RegisterAsync("lojista1");
 
         var items = await client.GetFromJsonAsync<List<ItemDto>>("/api/items/");
 
-        Assert.Equal(7, items!.Count);
+        Assert.Equal(8, items!.Count);
         Assert.Contains(items, i => i.Key == "filter_basic" && i.Price == 20m);
         Assert.Contains(items, i => i.Key == "auto_filter" && i.Price == 500m && !i.Owned);
         Assert.Contains(items, i => i.Key == "auto_filter_2" && i.Price == 1200m && !i.Owned);
@@ -28,6 +28,8 @@ public class ItemTests : IClassFixture<VivariumApiFactory>
         // atual (3, recém-registrado) chegar no respectivo teto.
         Assert.Contains(items, i => i.Key == "aquario_grande" && i.Price == 4000m && i.Locked && !i.Owned);
         Assert.Contains(items, i => i.Key == "aquario_master" && i.Price == 12000m && i.Locked && !i.Owned);
+        // Sensor de Qualidade da Água (§8.18): preço por faixa (Aquário = 800), nunca bloqueado.
+        Assert.Contains(items, i => i.Key == "water_sensor" && i.Price == 800m && !i.Locked && !i.Owned);
     }
 
     [Fact]

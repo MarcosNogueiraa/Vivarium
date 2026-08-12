@@ -30,6 +30,19 @@ public class Habitat
     public DateTime LastTickAt { get; set; }
     public DateTime? LastHeartbeatAt { get; set; }
     public DateTime CreatedAt { get; set; }
+
+    /// <summary>
+    /// Sensor de Qualidade da Água (item permanente, por aquário — CLAUDE.md §8.18): habilita
+    /// configurar <see cref="AutoCleanTriggerPercent"/> acima de 0. Sem o sensor, a Limpeza
+    /// Automática de VIP (ver <c>GameService.ApplyAutoCleanAsync</c>) usa gatilho fixo em 0%.
+    /// </summary>
+    public bool HasWaterSensor { get; set; }
+    /// <summary>
+    /// Gatilho (0–<c>TickConfig.WaterSensorMaxTriggerPercent</c>) de água abaixo do qual a
+    /// Limpeza Automática de VIP compra um Filtro sozinha. Só tem efeito com
+    /// <see cref="HasWaterSensor"/> == true; por padrão fica em 0 (dormente).
+    /// </summary>
+    public decimal AutoCleanTriggerPercent { get; set; }
 }
 
 public class Species

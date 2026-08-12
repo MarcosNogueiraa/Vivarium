@@ -90,6 +90,14 @@ public sealed record TickConfig
     /// </summary>
     public double FilterTaperExponent { get; init; } = 1.0;
 
+    /// <summary>
+    /// Teto do gatilho configurável do Sensor de Qualidade da Água (CLAUDE.md §8.18) — igual a
+    /// <see cref="IncomeWaterPlateau"/> (em pontos, não fração: 80m). Acima desse valor a renda
+    /// média não sobe mais (o patamar já garante 100% de renda), só cresce a frequência (e o
+    /// custo) das compras automáticas de filtro — não há razão pra permitir configurar mais alto.
+    /// </summary>
+    public decimal WaterSensorMaxTriggerPercent { get; init; } = 80m;
+
     public static readonly TickConfig Default = new();
 }
 
@@ -104,6 +112,12 @@ public sealed record TickConfig
 /// dentro da faixa, pra exigir farm real de moedas em vez de ser só mais um passo incremental
 /// (08/08/2026, pedido do usuário). 0 na primeira faixa (Aquário — não tem "de onde vir").
 /// </param>
+/// <param name="WaterSensorPrice">
+/// Preço do Sensor de Qualidade da Água (CLAUDE.md §8.18) pra essa faixa — compra única por
+/// aquário, preço cresce com a faixa ("aquário maior, mais caro", pedido do usuário). Placeholder
+/// a calibrar via <c>Vivarium.Simulation</c>, mesmo processo já usado pros outros valores desta
+/// classe.
+/// </param>
 public sealed record CapacityBand(
     int MinCapacity,
     int MaxCapacity,
@@ -111,7 +125,8 @@ public sealed record CapacityBand(
     decimal PriceBase,
     double PriceGrowth,
     decimal DegradationBandFactor,
-    decimal TransitionCost = 0m);
+    decimal TransitionCost = 0m,
+    decimal WaterSensorPrice = 0m);
 
 /// <summary>
 /// As 3 faixas de capacidade do MVP (08/08/2026): "Aquário" (3-5), "Aquário Grande" (5-10),
@@ -121,9 +136,9 @@ public sealed record CapacityBand(
 /// </summary>
 public static class CapacityBands
 {
-    public static readonly CapacityBand Aquario = new(3, 5, "Aquário", PriceBase: 50m, PriceGrowth: 1.5, DegradationBandFactor: 1.0m);
-    public static readonly CapacityBand AquarioGrande = new(5, 10, "Aquário Grande", PriceBase: 140m, PriceGrowth: 1.45, DegradationBandFactor: 1.25m, TransitionCost: 4000m);
-    public static readonly CapacityBand AquarioMaster = new(10, 15, "Aquário Master", PriceBase: 400m, PriceGrowth: 1.4, DegradationBandFactor: 1.55m, TransitionCost: 12000m);
+    public static readonly CapacityBand Aquario = new(3, 5, "Aquário", PriceBase: 50m, PriceGrowth: 1.5, DegradationBandFactor: 1.0m, WaterSensorPrice: 800m);
+    public static readonly CapacityBand AquarioGrande = new(5, 10, "Aquário Grande", PriceBase: 140m, PriceGrowth: 1.45, DegradationBandFactor: 1.25m, TransitionCost: 4000m, WaterSensorPrice: 2000m);
+    public static readonly CapacityBand AquarioMaster = new(10, 15, "Aquário Master", PriceBase: 400m, PriceGrowth: 1.4, DegradationBandFactor: 1.55m, TransitionCost: 12000m, WaterSensorPrice: 4500m);
 
     public static readonly IReadOnlyList<CapacityBand> All = [Aquario, AquarioGrande, AquarioMaster];
 

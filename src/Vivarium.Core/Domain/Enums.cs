@@ -10,7 +10,7 @@ public enum TransactionType { MarketSale, DirectTransfer, CurrencyPurchase, Item
 
 public enum BreedingStatus { InProgress, Collected }
 
-public enum ItemCategory { Filter, AutoFilter, HabitatUpgrade }
+public enum ItemCategory { Filter, AutoFilter, HabitatUpgrade, WaterSensor }
 
 /// <summary>Partes configuráveis no TraitWeightConfig (inclui Body, diferente do PartType de renderização).</summary>
 public enum TraitPartType { Body, Tail, Dorsal, Pectoral }

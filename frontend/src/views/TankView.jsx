@@ -172,6 +172,13 @@ export function TankView({ tank, refresh, notify }) {
                 −{waterLossPerHour.toFixed(1)}<small>/h</small>
               </span>
             )}
+            {tank.isVip && (
+              <span className="capacity-chip" title={tank.hasWaterSensor
+                ? `Limpeza Automática (VIP): compra Filtro sozinho quando a água chega a ${Number(tank.autoCleanTriggerPercent).toFixed(0)}%.`
+                : "Limpeza Automática (VIP): compra Filtro sozinho quando a água zera. Compre o Sensor de Qualidade da Água na Loja pra escolher esse valor."}>
+                🤖 {tank.hasWaterSensor ? `${Number(tank.autoCleanTriggerPercent).toFixed(0)}%` : "0%"}
+              </span>
+            )}
             <button onClick={buyFilter} title="Restaura a qualidade da água pra 100">Filtro · 20</button>
           </div>
         )}

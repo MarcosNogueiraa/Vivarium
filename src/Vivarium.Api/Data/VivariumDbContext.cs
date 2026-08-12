@@ -86,6 +86,7 @@ public class VivariumDbContext(DbContextOptions<VivariumDbContext> options) : Db
             e.Property(h => h.CoinAccrual).HasPrecision(18, 6);
             e.Property(h => h.OnlineGenerationRate).HasPrecision(5, 2);
             e.Property(h => h.OfflineGenerationRate).HasPrecision(5, 2);
+            e.Property(h => h.AutoCleanTriggerPercent).HasPrecision(5, 2);
             e.HasIndex(h => h.UserId);
         });
 
@@ -179,6 +180,17 @@ public class VivariumDbContext(DbContextOptions<VivariumDbContext> options) : Db
                     Id = 7, Key = "aquario_master", Name = "Aquário Master",
                     Category = ItemCategory.HabitatUpgrade,
                     EffectJson = """{"capacityDelta":1}""", PriceSoft = 12000m,
+                },
+                new ItemDefinition
+                {
+                    // Sensor de Qualidade da Água (CLAUDE.md §8.18) — compra única por aquário,
+                    // libera o controle do gatilho da Limpeza Automática de VIP (0 até
+                    // TickConfig.WaterSensorMaxTriggerPercent). PriceSoft aqui é só placeholder de
+                    // catálogo: o preço real vem de CapacityBand.WaterSensorPrice (cresce com a
+                    // faixa do aquário), igual já acontece com aquario_grande/aquario_master.
+                    Id = 8, Key = "water_sensor", Name = "Sensor de Qualidade da Água",
+                    Category = ItemCategory.WaterSensor,
+                    EffectJson = "{}", PriceSoft = 800m,
                 });
         });
 
