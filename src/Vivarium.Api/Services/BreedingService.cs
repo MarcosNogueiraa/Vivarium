@@ -279,9 +279,18 @@ public class BreedingService(VivariumDbContext db, GameService game)
         int active = await db.CreatureInstances.CountAsync(c => c.HabitatId == mainHabitat.Id);
         int backpackCount = await game.CountBackpackAsync(userId);
 
+        // Exige espaço pro pior caso (filhote + os 2 pais sobrevivendo) ANTES de mexer em
+        // qualquer coisa — troca a estratégia antiga (deixar o pai sem lugar preso dentro do
+        // próprio Ninho, invisível pro jogador) por simplesmente não permitir a coleta até
+        // haver espaço de sobra. Mais conservador que o estritamente necessário (às vezes um
+        // pai morre e sobraria vaga), mas garante que ninguém fica preso sem aparecer em lugar
+        // nenhum — pedido do usuário, 12/08/2026, depois de um caso real assim.
+        int freeTank = Math.Max(0, mainHabitat.Capacity - active);
+        int freeBackpack = Math.Max(0, HabitatDefaults.BackpackCapacity - backpackCount);
+        if (freeTank + freeBackpack < 3)
+            return ServiceResult.Bad("Sem espaço suficiente pro filhote e os 2 pais — libere pelo menos 3 vagas (tanque + mochila) antes de coletar.");
+
         bool childToTank = active < mainHabitat.Capacity;
-        if (!childToTank && backpackCount >= HabitatDefaults.BackpackCapacity)
-            return ServiceResult.Bad("Tanque e mochila cheios — abra espaço antes de coletar.");
 
         long childSeed = CreatureCollector.NewRandomSeed();
         // Ancestralidade de cada pai: se ele mesmo é filhote, ParentASeed/BSeed (já carregados
@@ -361,6 +370,8 @@ public class BreedingService(VivariumDbContext db, GameService game)
 
         slot.Status = BreedingStatus.Collected;
         slot.ChildCreature = child; // navegação, não o Id cru: child ainda não tem Id gerado nesta transação
+        slot.ParentADied = parentADied;
+        slot.ParentBDied = parentBDied;
 
         try
         {
@@ -372,5 +383,30 @@ public class BreedingService(VivariumDbContext db, GameService game)
         }
 
         return ServiceResult.Success(new CollectBreedingResponse(CreatureDto.From(child), parentADied, parentBDied));
+    }
+
+    /// <summary>
+    /// Registro de cruzamentos do usuário — gestações já coletadas, mais recente primeiro.
+    /// Só leitura; serve tanto pro jogador consultar (§8.19) quanto pra investigar um relato
+    /// ("por que meu peixe nasceu assim") sem precisar de acesso direto ao banco.
+    /// </summary>
+    public async Task<ServiceResult> GetHistoryAsync(long userId, int take = 50)
+    {
+        var slots = await db.BreedingSlots
+            .Where(s => s.UserId == userId && s.Status == BreedingStatus.Collected)
+            .OrderByDescending(s => s.ReadyAt)
+            .Take(Math.Clamp(take, 1, 200))
+            .Include(s => s.ParentA)
+            .Include(s => s.ParentB)
+            .Include(s => s.ChildCreature)
+            .ToListAsync();
+
+        var entries = slots.Select(s => new BreedingHistoryEntryDto(
+            s.Id, CreatureDto.From(s.ParentA!), CreatureDto.From(s.ParentB!),
+            s.ChildCreature is null ? null : CreatureDto.From(s.ChildCreature),
+            s.StartedAt, s.ReadyAt, s.CostPaid,
+            s.ParentADied ?? false, s.ParentBDied ?? false, s.InsuranceUsed));
+
+        return ServiceResult.Success(entries);
     }
 }
