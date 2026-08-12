@@ -258,11 +258,16 @@ public class BreedTraitsTests
     {
         // Investigação (12/08/2026): usuário relatou que o FILHOTE REAL (não só a prévia, já
         // corrigida acima) nasceu sem o brilho lendário ao cruzar 2 pais filhotes com Lendário
-        // real. Medido: 83% de retenção com avós comuns (vs 92% pra pais "frescos", mesmo par) —
-        // o grandparentReachChance (15% por lado) reduz a retenção, mas não drasticamente, porque
-        // o viés de raridade ainda favorece fortemente o lado que continua Lendário quando o
-        // outro "escapa" pro avô. Perder o tier uma vez (~17% de chance) é variância normal, não
-        // um bug — mas fixa o número aqui pra virar alarme se um bug futuro mudar isso de verdade.
+        // real. Medido (na época, GrandparentReachChance=0.15): 83% de retenção com avós comuns
+        // (vs 92% pra pais "frescos", mesmo par).
+        // Reduzido pra 0.03 (mesmo dia, dois ajustes seguidos: 0.15→0.05→0.03 a pedido do
+        // usuário): a chance é sorteada 8x independentes por cruzamento (4 slots × 2 lados) —
+        // com 0.15, a chance de PELO MENOS UM traço vir de avô em qualquer cruzamento era
+        // ~72.8%, deixando a influência dos avós dominar a maioria dos cruzamentos (usuário
+        // relatou "resultados estranhos" olhando o histórico de uma conta real com múltiplas
+        // gerações). Com 0.03 cai pra ~21.6%. Efeito colateral esperado e correto: retenção de
+        // Lendário com avós comuns SOBE de 83%→~90% (menos chance de "escapar" pro avô
+        // não-lendário).
         long FindNoneSeed(long searchOffset) => ManySeeds(5_000).Select(s => s + searchOffset)
             .First(s => TraitGenerator.Generate(s).ShimmerTier == ShimmerTier.None);
         long grandparentA1 = FindNoneSeed(0);
@@ -308,7 +313,7 @@ public class BreedTraitsTests
         }
         double pctFresh = legendaryCountFresh / (double)n;
 
-        Assert.InRange(pct, 0.78, 0.88);
+        Assert.InRange(pct, 0.86, 0.94);
         Assert.InRange(pctFresh, 0.88, 0.96);
         Assert.True(pct < pctFresh,
             $"avós comuns deveriam reduzir um pouco a retenção ({pct:P1}) em relação a pais frescos ({pctFresh:P1})");
