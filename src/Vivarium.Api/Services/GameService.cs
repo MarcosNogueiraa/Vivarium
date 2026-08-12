@@ -76,12 +76,81 @@ public class GameService(VivariumDbContext db)
             }
         }
 
-        // Diferencial VIP: coleta automática, mas só enquanto o tanque está online
-        if (HabitatTicker.IsOnline(habitat.LastHeartbeatAt, nowUtc, TickConfig.Default)
-            && await HasActiveVipAsync(habitat.UserId, nowUtc))
+        // Diferencial VIP: coleta automática + Limpeza Automática (§8.18), mas só enquanto
+        // o tanque está online — hoisting do check pra não consultar HasActiveVipAsync 2x.
+        bool vipOnline = HabitatTicker.IsOnline(habitat.LastHeartbeatAt, nowUtc, TickConfig.Default)
+            && await HasActiveVipAsync(habitat.UserId, nowUtc);
+        if (vipOnline)
         {
             await CollectAllReadyAsync(habitat, nowUtc);
+            await ApplyAutoCleanAsync(habitat, nowUtc);
         }
+    }
+
+    /// <summary>
+    /// Limpeza Automática (VIP, §8.18): compra sozinha um Filtro quando a água cruza o gatilho
+    /// configurado (0% por padrão — grátis pra qualquer VIP; até <c>WaterSensorMaxTriggerPercent</c>
+    /// com o Sensor de Qualidade da Água comprado). Roda DEPOIS de <see cref="AccrueIncomeAsync"/>
+    /// (chamado em <see cref="ApplyTickAsync"/>) de propósito: a renda do intervalo que acabou de
+    /// passar já foi calculada em cima da água real (suja) daquele período — a limpeza só afeta o
+    /// tick seguinte, mesmo raciocínio causal já usado pra compra manual de filtro.
+    /// </summary>
+    private async Task ApplyAutoCleanAsync(Habitat habitat, DateTime nowUtc)
+    {
+        decimal trigger = habitat.HasWaterSensor ? habitat.AutoCleanTriggerPercent : 0m;
+        if (habitat.MaintenanceLevel > trigger)
+            return;
+
+        // Preço vem do ItemDefinition (nunca hardcodeado) — se o Filtro for rebalanceado,
+        // a limpeza automática acompanha sem precisar de mudança de código.
+        decimal price = await db.ItemDefinitions
+            .Where(i => i.Key == "filter_basic")
+            .Select(i => i.PriceSoft)
+            .FirstAsync();
+        int softId = await db.CurrencyTypes.Where(c => c.Code == "SOFT").Select(c => c.Id).FirstAsync();
+        var wallet = await db.WalletBalances
+            .FirstOrDefaultAsync(w => w.UserId == habitat.UserId && w.CurrencyTypeId == softId);
+        if (wallet is null || wallet.Amount < price)
+            return; // sem saldo: não compra, sem erro — a água continua baixa até o próximo tick
+
+        wallet.Amount -= price;
+        habitat.MaintenanceLevel = 100m;
+
+        db.TransactionLogs.Add(new TransactionLog
+        {
+            Type = TransactionType.ItemPurchase,
+            FromUserId = habitat.UserId,
+            CurrencyTypeId = softId,
+            Amount = price,
+            CreatedAt = nowUtc,
+        });
+    }
+
+    /// <summary>
+    /// Configura o gatilho da Limpeza Automática (§8.18) — exige o Sensor de Qualidade da Água já
+    /// comprado (<see cref="Habitat.HasWaterSensor"/>). Sem custo: é uma configuração, não compra.
+    /// </summary>
+    public async Task<ServiceResult> SetAutoCleanTriggerAsync(long userId, decimal percent)
+    {
+        var habitat = await FindHabitatAsync(userId);
+        if (habitat is null)
+            return ServiceResult.NotFound("Habitat não encontrado");
+        if (!habitat.HasWaterSensor)
+            return ServiceResult.Bad("Compre o Sensor de Qualidade da Água antes de configurar o gatilho.");
+        if (percent < 0m || percent > TickConfig.Default.WaterSensorMaxTriggerPercent)
+            return ServiceResult.Bad($"Gatilho precisa estar entre 0 e {TickConfig.Default.WaterSensorMaxTriggerPercent}.");
+
+        habitat.AutoCleanTriggerPercent = percent;
+
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return ServiceResult.Conflict("Tente de novo.");
+        }
+        return ServiceResult.Success(new { autoCleanTriggerPercent = habitat.AutoCleanTriggerPercent });
     }
 
     /// <summary>
@@ -461,7 +530,10 @@ public class GameService(VivariumDbContext db)
             CapacityBands.BandFor(habitat.Capacity).DegradationBandFactor,
             filterCapacity,
             vipSub is not null,
-            vipSub?.EndAt));
+            vipSub?.EndAt,
+            habitat.HasWaterSensor,
+            habitat.AutoCleanTriggerPercent,
+            TickConfig.Default.WaterSensorMaxTriggerPercent));
     }
 
     // Transferência direta entre contas (negociação externa é responsabilidade

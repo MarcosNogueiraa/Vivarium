@@ -30,6 +30,11 @@ public class ItemService(VivariumDbContext db, GameService game)
                     var (price, owned, locked, reason) = TankItemState(i.Key, habitat);
                     return new ItemDto(i.Key, i.Name, i.Category.ToString(), price, owned, locked, reason);
                 }
+                if (i.Category == ItemCategory.WaterSensor)
+                {
+                    var (price, owned, locked, reason) = WaterSensorState(habitat);
+                    return new ItemDto(i.Key, i.Name, i.Category.ToString(), price, owned, locked, reason);
+                }
                 return new ItemDto(i.Key, i.Name, i.Category.ToString(), i.PriceSoft, ownedIds.Contains(i.Id));
             })
             .ToList();
@@ -61,6 +66,12 @@ public class ItemService(VivariumDbContext db, GameService game)
             if (locked) return ServiceResult.Bad(reason ?? "Ainda não disponível");
             price = tankPrice;
         }
+        else if (item.Category == ItemCategory.WaterSensor)
+        {
+            var (sensorPrice, owned, _, _) = WaterSensorState(habitat);
+            if (owned) return ServiceResult.Bad("Você já tem o Sensor de Qualidade da Água");
+            price = sensorPrice;
+        }
         else
         {
             price = item.PriceSoft;
@@ -88,6 +99,9 @@ public class ItemService(VivariumDbContext db, GameService game)
                 break;
             case ItemCategory.HabitatUpgrade:
                 habitat.Capacity += 1;
+                break;
+            case ItemCategory.WaterSensor:
+                habitat.HasWaterSensor = true;
                 break;
         }
 
@@ -143,6 +157,16 @@ public class ItemService(VivariumDbContext db, GameService game)
             return (targetBand.TransitionCost, false, true, $"Disponível ao atingir capacidade {targetBand.MinCapacity}.");
         return (targetBand.TransitionCost, false, false, null); // no teto exato — comprável agora
     }
+
+    /// <summary>
+    /// Estado (preço/dono) do Sensor de Qualidade da Água (CLAUDE.md §8.18) — compra única por
+    /// aquário (armazenada em <see cref="Habitat.HasWaterSensor"/>, não em UserInventory, mesmo
+    /// motivo de <c>tank_upgrade</c>/<c>aquario_grande</c>: não faz sentido acumular quantidade).
+    /// Preço cresce com a faixa de capacidade atual ("aquário maior, mais caro") — nunca bloqueado
+    /// (diferente de aquario_grande/master, que exigem atingir uma capacidade mínima).
+    /// </summary>
+    private static (decimal Price, bool Owned, bool Locked, string? LockedReason) WaterSensorState(Habitat habitat)
+        => (CapacityBands.BandFor(habitat.Capacity).WaterSensorPrice, habitat.HasWaterSensor, false, null);
 
     private async Task<HashSet<int>> OwnedItemDefinitionIdsAsync(long userId)
         => (await db.UserInventories

@@ -85,7 +85,7 @@ describe("Loja", () => {
       statusCode: 400, body: { error: "Saldo de moeda soft insuficiente" },
     }).as("buyFail");
 
-    cy.contains(".card", "Filtro Automático").contains("button", "Comprar").click();
+    cy.contains("strong", "Filtro Automático").closest(".card").contains("button", "Comprar").click();
     cy.wait("@buyFail");
     cy.contains("Saldo de moeda soft insuficiente");
   });

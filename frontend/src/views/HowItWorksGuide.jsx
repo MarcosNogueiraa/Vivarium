@@ -19,7 +19,7 @@ const SECTIONS = [
         <p>Cada peixe no tanque suja a água continuamente (mais peixes = degrada mais rápido). Isso <b>não mata</b> ninguém nem some com nada — só reduz sua renda.</p>
         <p>De <b>80 a 100%</b> a água não tira nada da sua renda. Abaixo de 80%, a renda cai suavemente (não é um "penhasco"); com a água zerada, a renda também vai a zero.</p>
         <p>Abaixo de 40% a velocidade de geração cai pela metade; abaixo de 15%, itens novos da fila têm 10% de chance de nascer "doentes" (nascem com desvantagem no sorteio de raridade, não morrem).</p>
-        <p><b>Filtro</b> (soft) restaura a água pra 100%. <b>Filtro automático</b> (item permanente) reduz a degradação pela metade — mas não substitui o filtro manual, só desacelera a sujeira.</p>
+        <p><b>Filtro</b> (soft, uso único) restaura a água pra 100% na hora. <b>Filtro automático</b> (item permanente, com 3 níveis) limpa sozinho, sem precisar comprar filtro toda hora — cada nível cobre um tanque de até um certo número de peixes comuns (peixes raros contam mais); passar da cobertura não desliga o efeito de uma vez, só enfraquece aos poucos. Ele não substitui o filtro manual, só desacelera a sujeira.</p>
       </>
     ),
   },
@@ -76,6 +76,8 @@ const SECTIONS = [
       <>
         <p>VIP não muda a velocidade de nada — só troca a coleta manual da fila por <b>coleta automática</b>, enquanto a aba do jogo estiver aberta (trocar de aba ainda conta como "aberta"; fechar o navegador, não).</p>
         <p>Fechar o jogo por mais de ~3 minutos volta a exigir coleta manual ao retornar, até a próxima vez que a aba ficar aberta de novo.</p>
+        <p><b>Limpeza Automática:</b> qualquer VIP ativo também compra um Filtro sozinho quando a água chega a 0% — de graça, sem precisar de item nenhum. Isso garante que a água nunca fica travada suja pra sempre, mas por padrão ela pode oscilar bastante antes de ser limpa.</p>
+        <p>Quer que a limpeza aconteça mais cedo (água sempre mais alta, renda mais estável)? O item <b>Sensor de Qualidade da Água</b> (loja, preço por aquário) libera um controle pra escolher a partir de qual % isso acontece — até um teto de 80% (acima disso não aumenta mais a renda, só o número de filtros comprados). Vale calcular: um gatilho mais alto limpa com mais frequência (mais soft gasto em filtro), então o ponto ideal depende do quanto seu tanque rende.</p>
       </>
     ),
   },

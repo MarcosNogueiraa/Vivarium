@@ -76,4 +76,5 @@ export const api = {
   spectatorTank: (username) => request("GET", `/api/leaderboard/visit/${encodeURIComponent(username)}`),
   vipStatus: () => request("GET", "/api/vip"),
   subscribeVip: (days) => request("POST", "/api/vip/subscribe", { days }),
+  setAutoCleanTrigger: (percent) => request("POST", "/api/game/water-sensor/trigger", { percent }),
 };
