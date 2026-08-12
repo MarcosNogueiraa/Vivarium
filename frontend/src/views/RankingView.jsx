@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../lib/api.js";
 import { bandOf, decorTierOf, PART_HEX, PT } from "../lib/fishRenderer.js";
-import { tankFishSorted } from "../lib/tankMath.js";
+import { tankFishSorted, tankPotential } from "../lib/tankMath.js";
 import { AquariumCanvas } from "../components/AquariumCanvas.jsx";
 import { Coin } from "../components/Coin.jsx";
 import { FishCanvas } from "../components/FishCanvas.jsx";
@@ -52,6 +52,12 @@ export function RankingView({ notify, exitSpectatorSignal }) {
     const decorTier = decorTierOf(spectator.capacityBandName);
     const selected = spectator.creatures.find((c) => c.id === selectedId) ?? null;
     const listFish = tankFishSorted(spectator.creatures);
+    // Perda por água suja (mesmo indicador do próprio tanque, TankView.jsx §8.6) — a renda
+    // real já vem do servidor descontando a água; o "potencial" é recalculado client-side
+    // (água a 100%) só pra mostrar a diferença. Pedido do usuário, 12/08/2026.
+    const current = Number(spectator.coinsPerHour);
+    const potential = tankPotential(spectator.creatures);
+    const waterLossPerHour = Math.max(0, potential - current);
     return (
       <div className="ranking-spectator">
         <div className="spectator-header">
@@ -61,8 +67,23 @@ export function RankingView({ notify, exitSpectatorSignal }) {
         </div>
         <div className="spectator-stats">
           <span className="stat-chip">🏆 {Number(spectator.rarityTotal).toFixed(3)} <small>raridade total</small></span>
-          <span className="stat-chip"><Coin />{Number(spectator.coinsPerHour).toFixed(1)} <small>/h</small></span>
+          <span className="stat-chip" title={
+            waterLossPerHour > 0.05
+              ? `Produção real agora: ${current.toFixed(1)}/h (já descontando a água suja). Com a água a 100% seria ${potential.toFixed(1)}/h.`
+              : "Moedas por hora que o tanque farma"
+          }>
+            <Coin />{current.toFixed(1)} <small>/h</small>
+            {waterLossPerHour > 0.05 && <em className="of-potential"> de {potential.toFixed(0)}</em>}
+          </span>
           <span className="stat-chip">💧 {Number(spectator.maintenanceLevel).toFixed(0)} <small>água</small></span>
+          {waterLossPerHour > 0.05 && (
+            <span
+              className="water-loss"
+              title={`A água suja está custando ${waterLossPerHour.toFixed(1)}/h de renda pra ${spectator.username} — produziria ${potential.toFixed(1)}/h com a água a 100%.`}
+            >
+              −{waterLossPerHour.toFixed(1)}<small>/h</small>
+            </span>
+          )}
         </div>
         <AquariumCanvas
           creatures={spectator.creatures}

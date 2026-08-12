@@ -139,4 +139,42 @@ describe("Ranking", () => {
     cy.get(".collapse-btn").click();
     cy.get(".fish-row").should("have.length", 2);
   });
+
+  it("mostra a perda por água suja ao visitar um aquário com água abaixo do patamar (12/08/2026)", () => {
+    cy.intercept("GET", "/api/leaderboard/rarity", { body: rarityBoard }).as("rarity");
+    login();
+    cy.wait("@rarity");
+
+    cy.intercept("GET", "/api/leaderboard/visit/top1", {
+      body: {
+        username: "top1", capacityBandName: "Aquário Grande", maintenanceLevel: 40,
+        rarityTotal: 120.5, coinsPerHour: 8.2, // potencial (água cheia) do score 9.2 é ~13.3/h — 40% de água reduz bem abaixo disso
+        creatures: [spectatorCreature(502, 4002, 9.2)],
+      },
+    }).as("visitSujo");
+
+    cy.contains(".leaderboard-row", "top1").contains("button", "Visitar").click();
+    cy.wait("@visitSujo");
+
+    cy.get(".water-loss").should("be.visible").contains("/h");
+  });
+
+  it("não mostra perda por água suja quando a água está limpa", () => {
+    cy.intercept("GET", "/api/leaderboard/rarity", { body: rarityBoard }).as("rarity");
+    login();
+    cy.wait("@rarity");
+
+    cy.intercept("GET", "/api/leaderboard/visit/top1", {
+      body: {
+        username: "top1", capacityBandName: "Aquário Grande", maintenanceLevel: 100,
+        rarityTotal: 120.5, coinsPerHour: 13.33, // água cheia == potencial calculado client-side
+        creatures: [spectatorCreature(502, 4002, 9.2)],
+      },
+    }).as("visitLimpo");
+
+    cy.contains(".leaderboard-row", "top1").contains("button", "Visitar").click();
+    cy.wait("@visitLimpo");
+
+    cy.get(".water-loss").should("not.exist");
+  });
 });

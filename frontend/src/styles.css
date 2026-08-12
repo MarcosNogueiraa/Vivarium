@@ -808,6 +808,7 @@ input:focus {
   background: rgba(6, 26, 34, 0.78); border: 1px solid var(--line);
 }
 .income-chip .of-potential { color: var(--muted); font-weight: 500; font-size: 0.74rem; }
+.stat-chip .of-potential { color: var(--muted); font-weight: 500; font-size: 0.74rem; }
 
 /* Lista de peixes do tanque */
 .collapse-btn {
