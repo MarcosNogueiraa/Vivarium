@@ -116,7 +116,8 @@ export const CONFIG = {
   // Degradação da água (§8.2/8.6) — espelha TickConfig (DegradationPerMinute, DegradationPerFishFactor, manter em sincronia)
   degradation: { perMinute: 1 / 20, perFishFactor: 0.30, rarityRefScore: 5 },
   // Breeding — espelha BreedingDefaults (Gameplay/BreedingConfig.cs, manter em sincronia)
-  breeding: { mutationChance: 0.08, rarityBias: 0.15, grandparentReachChance: 0.15 },
+  // grandparentReachChance 0.03 (era 0.15, 12/08/2026) — espelha BreedingDefaults.GrandparentReachChance (manter em sincronia)
+  breeding: { mutationChance: 0.08, rarityBias: 0.15, grandparentReachChance: 0.03 },
   closestPartColor: {
     Gold: "Yellow", Silver: "PureWhite", Bluish: "Blue", Emerald: "Green",
     Purple: "Purple", Pink: "Red", Rainbow: "PureWhite", AbsoluteBlack: "Black",
