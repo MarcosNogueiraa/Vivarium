@@ -52,4 +52,44 @@ public class AdminTests : IClassFixture<VivariumApiFactory>
         // Outro já tinha coletado (fila vazia) — deve ganhar +1 (agora 1 na fila).
         Assert.Single(otherTankAfter!.Queue);
     }
+
+    private record TankWalletDto(Dictionary<string, decimal> Wallet);
+
+    [Fact]
+    public async Task NaoAdmin_GrantPremium_Retorna403()
+    {
+        var (client, _) = await _factory.RegisterAsync("naoadmin2");
+
+        var response = await client.PostAsJsonAsync("/api/admin/grant-premium-all", new { amount = 1000 });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_CreditaPremiumNaCarteiraDeTodoJogador()
+    {
+        var (adminClient, adminId) = await _factory.RegisterAsync("admin2");
+        await TornarAdmin(adminId);
+        var (otherClient, _) = await _factory.RegisterAsync("outro2");
+
+        var response = await adminClient.PostAsJsonAsync("/api/admin/grant-premium-all", new { amount = 1000 });
+        response.EnsureSuccessStatusCode();
+
+        var adminWallet = await adminClient.GetFromJsonAsync<TankWalletDto>("/api/game/tank");
+        var otherWallet = await otherClient.GetFromJsonAsync<TankWalletDto>("/api/game/tank");
+
+        Assert.Equal(1000, adminWallet!.Wallet["PREMIUM"]);
+        Assert.Equal(1000, otherWallet!.Wallet["PREMIUM"]);
+    }
+
+    [Fact]
+    public async Task Admin_GrantPremium_QuantiaNaoPositiva_Retorna400()
+    {
+        var (adminClient, adminId) = await _factory.RegisterAsync("admin3");
+        await TornarAdmin(adminId);
+
+        var response = await adminClient.PostAsJsonAsync("/api/admin/grant-premium-all", new { amount = 0 });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
 }

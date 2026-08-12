@@ -52,4 +52,40 @@ public class AdminService(VivariumDbContext db)
 
         return ServiceResult.Success(new { habitatsAffected = eligibleHabitats.Count });
     }
+
+    /// <summary>
+    /// Credita <paramref name="amount"/> de moeda premium na carteira de todo usuário (evento
+    /// pontual — pedido do usuário, 12/08/2026, pra testar uso/VIP em produção com jogadores
+    /// reais). Audita 1 TransactionLog.AdminGrant por usuário, mesmo padrão de toda transação
+    /// nomeada da economia. Idempotente só na intenção, não no efeito: rodar de novo credita
+    /// de novo (mesmo comportamento de "dar peixe a todos" — ferramenta manual, não um cupom).
+    /// </summary>
+    public async Task<ServiceResult> GrantPremiumToAllAsync(long requestingUserId, decimal amount, DateTime now)
+    {
+        if (!await IsAdminAsync(requestingUserId))
+            return ServiceResult.Forbidden("Só administradores podem fazer isso");
+        if (amount <= 0)
+            return ServiceResult.Bad("Quantia precisa ser positiva");
+
+        int premiumId = await db.CurrencyTypes.Where(c => c.Code == "PREMIUM").Select(c => c.Id).FirstAsync();
+
+        var wallets = await db.WalletBalances
+            .Where(w => w.CurrencyTypeId == premiumId)
+            .ToListAsync();
+
+        foreach (var wallet in wallets)
+        {
+            wallet.Amount += amount;
+            db.TransactionLogs.Add(new TransactionLog
+            {
+                Type = TransactionType.AdminGrant,
+                ToUserId = wallet.UserId,
+                CurrencyTypeId = premiumId,
+                Amount = amount,
+                CreatedAt = now,
+            });
+        }
+
+        return ServiceResult.Success(new { usersAffected = wallets.Count, amount });
+    }
 }
