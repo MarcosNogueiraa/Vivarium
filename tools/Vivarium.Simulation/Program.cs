@@ -19,6 +19,14 @@ if (args.Length >= 1 && args[0] == "dump")
     return;
 }
 
+if (args.Length >= 1 && args[0] == "best")
+{
+    int count = args.Length > 1 && int.TryParse(args[1], out var bcount) ? bcount : 5_000_000;
+    int top = args.Length > 2 && int.TryParse(args[2], out var bt) ? bt : 5;
+    BestSeeds(count, top);
+    return;
+}
+
 if (args.Length >= 1 && args[0] == "economy")
 {
     EconomyReport();
@@ -227,6 +235,38 @@ static void GrandparentDumpLine(long childSeed, long parentASeed, long? gpAA, lo
       .Append(';').Append(t.Movement.FinAmplitude.ToString("F6", inv));
     sb.Append(';').Append(t.RarityScore.ToString("F6", inv));
     Console.WriteLine(sb.ToString());
+}
+
+/// <summary>
+/// Busca o seed de maior RarityScore entre N seeds sorteados aleatoriamente — não é o
+/// "teoricamente perfeito" (nenhum seed real bate exatamente com isso, a chance conjunta é
+/// minúscula demais pra qualquer busca viável), é o melhor achado de fato dentro do
+/// orçamento de busca, mantendo o princípio de "tudo deriva de um seed real" (sem fabricar
+/// traits). Imprime a mesma linha canônica do `dump` pro seed vencedor, pra conferência.
+/// </summary>
+static void BestSeeds(int count, int top)
+{
+    var rng = new Random();
+    var best = new List<(long Seed, double Score)>();
+    for (int i = 0; i < count; i++)
+    {
+        long seed = rng.NextInt64();
+        var t = TraitGenerator.Generate(seed);
+        best.Add((seed, t.RarityScore));
+        if (best.Count > top * 4)
+        {
+            best = best.OrderByDescending(b => b.Score).Take(top).ToList();
+        }
+    }
+    best = best.OrderByDescending(b => b.Score).Take(top).ToList();
+
+    Console.WriteLine($"Melhor(es) seed(s) entre {count:N0} sorteados:\n");
+    foreach (var (seed, score) in best)
+    {
+        Console.WriteLine($"seed={seed}  RarityScore={score:0.0000}");
+        DumpLine(seed);
+        Console.WriteLine();
+    }
 }
 
 static void EconomyReport()

@@ -24,6 +24,27 @@ export function RarityGuide({ onClose }) {
         ))}
       </div>
 
+      <div className="eyebrow" style={{ marginTop: 22 }}>Raridade do brilho (corpo)</div>
+      <p className="muted guide-intro">
+        O corpo é sempre desenhado sobre a mesma base cinza — o que varia é uma camada de
+        brilho por cima. É o trait que mais pesa no score (2.5× o peso dos demais), então
+        raramente um peixe sem brilho chega perto de raro.
+      </p>
+      <div className="guide-bands">
+        {CONFIG.shimmerTiers.map(([key, weight]) => (
+          <div className="guide-band" key={key}>
+            <span className="gb-name">{PT.tier[key]}</span>
+            <span className="gb-range mono">{fmtWeight(weight)}%</span>
+          </div>
+        ))}
+      </div>
+      <p className="faint guide-foot">
+        Brilho vibrante, raro ou lendário puxa a cor mais parecida com o tom do brilho pra
+        cima nas 3 partes (cauda/dorsal/peitoral) — mas isso torna essa cor específica
+        <i> mais comum</i>, não mais rara, pra esse peixe; as demais cores ficam ainda mais
+        raras em compensação.
+      </p>
+
       <div className="eyebrow" style={{ marginTop: 22 }}>Raridade das cores</div>
       <p className="muted guide-intro">
         Cauda, nadadeira dorsal e nadadeira peitoral sorteiam a cor de forma independente, cada uma nesta
@@ -60,6 +81,39 @@ export function RarityGuide({ onClose }) {
       <p className="faint guide-foot">
         Quando há padrão, o tamanho e a opacidade também são sorteados — valores muito extremos (muito
         pequeno/grande, ou muito fraco/forte) contam como raros no cálculo.
+      </p>
+
+      <div className="eyebrow" style={{ marginTop: 22 }}>Bônus de conjunto</div>
+      <p className="muted guide-intro">
+        Peixes com as 3 partes combinando ganham pontos extras no score, direto — não é probabilidade,
+        é um bônus fixo por parecer um "conjunto" visualmente coeso.
+      </p>
+      <div className="guide-bands">
+        <div className="guide-band">
+          <span className="gb-name">Mesmo padrão em 2 partes</span>
+          <span className="gb-range mono">+{CONFIG.setBonus.samePattern2.toFixed(1)}</span>
+        </div>
+        <div className="guide-band">
+          <span className="gb-name">Mesmo padrão nas 3 partes</span>
+          <span className="gb-range mono">+{CONFIG.setBonus.samePattern3.toFixed(1)}</span>
+        </div>
+        <div className="guide-band">
+          <span className="gb-name">Mesma cor em 2 partes</span>
+          <span className="gb-range mono">+{CONFIG.setBonus.sameColor2.toFixed(1)}</span>
+        </div>
+        <div className="guide-band">
+          <span className="gb-name">Mesma cor nas 3 partes</span>
+          <span className="gb-range mono">+{CONFIG.setBonus.sameColor3.toFixed(1)}</span>
+        </div>
+      </div>
+
+      <div className="eyebrow" style={{ marginTop: 22 }}>Velocidade de nado</div>
+      <p className="muted guide-intro">
+        Velocidade de cauda e de nadadeira também são sorteadas — só os extremos (muito lenta ou muito
+        rápida, abaixo de {CONFIG.movement.speedExtremeLow.toFixed(0)} ou acima de{" "}
+        {CONFIG.movement.speedExtremeHigh.toFixed(0)}, numa escala de 0 a 100) entram no score, com peso
+        reduzido ({CONFIG.movement.scoreWeight.toFixed(1)}×). Cauda mais rápida também deixa o peixe
+        mais ágil no aquário — é o mesmo valor, não é só estética.
       </p>
 
       <p className="faint guide-foot">Abra qualquer peixe para ver o detalhamento “por que é raro”.</p>
