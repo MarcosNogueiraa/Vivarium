@@ -4,6 +4,11 @@ import { CONFIG } from "../lib/generator.js";
 import { RARITY_RANGES } from "../lib/format.js";
 
 const fmtWeight = (w) => (Number.isInteger(w) ? w.toFixed(0) : String(w));
+const GRADIENT_MIX_LABEL = {
+  BaseDominant: "Base predominante",
+  Even: "Equilibrado (50/50)",
+  PatternDominant: "Padrão predominante",
+};
 
 export function RarityGuide({ onClose }) {
   return (
@@ -81,6 +86,24 @@ export function RarityGuide({ onClose }) {
       <p className="faint guide-foot">
         Quando há padrão, o tamanho e a opacidade também são sorteados — valores muito extremos (muito
         pequeno/grande, ou muito fraco/forte) contam como raros no cálculo.
+      </p>
+
+      <div className="eyebrow" style={{ marginTop: 22 }}>Degradê — mistura de duas cores</div>
+      <p className="muted guide-intro">
+        O Degradê é especial: além de sortear a cor de base e a cor do padrão, ele também sorteia
+        <b> como as duas se misturam</b> visualmente na parte.
+      </p>
+      <div className="guide-bands">
+        {CONFIG.gradientMixRatios.map(([key, weight]) => (
+          <div className="guide-band" key={key}>
+            <span className="gb-name">{GRADIENT_MIX_LABEL[key]}</span>
+            <span className="gb-range mono">{fmtWeight(weight)}%</span>
+          </div>
+        ))}
+      </div>
+      <p className="faint guide-foot">
+        Quando uma cor domina a outra, só ela conta pra raridade — a minoritária fica de fora do
+        cálculo. No equilibrado (o mais raro dos três), as duas cores contam juntas.
       </p>
 
       <div className="eyebrow" style={{ marginTop: 22 }}>Bônus de conjunto</div>

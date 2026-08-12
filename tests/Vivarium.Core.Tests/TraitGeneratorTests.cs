@@ -210,6 +210,147 @@ public class TraitGeneratorTests
             v < TraitConfigV1.MovementSpeedExtremeLow || v > TraitConfigV1.MovementSpeedExtremeHigh;
     }
 
+    [Fact]
+    public void MixDoGradiente_SoExisteParaGradiente()
+    {
+        foreach (var traits in ManySeeds(50_000).Select(s => TraitGenerator.Generate(s)))
+        {
+            foreach (var part in AllParts(traits))
+            {
+                if (part.Pattern == PatternType.Gradient)
+                    Assert.NotNull(part.Mix);
+                else
+                    Assert.Null(part.Mix); // inclusive os outros 9 padrões != None, não só None
+            }
+        }
+    }
+
+    [Fact]
+    public void DistribuicaoDoMixDoGradiente_BateComOsPesos()
+    {
+        const int n = 800_000;
+        var counts = new Dictionary<GradientMix, int>();
+        int total = 0;
+        foreach (var traits in ManySeeds(n).Select(s => TraitGenerator.Generate(s)))
+        {
+            foreach (var part in AllParts(traits))
+            {
+                if (part.Mix is { } m)
+                {
+                    counts[m] = counts.GetValueOrDefault(m) + 1;
+                    total++;
+                }
+            }
+        }
+
+        Assert.True(total > 500, $"amostra pequena demais de Degradê pra validar distribuição: {total}");
+        // Tolerância folgada: valida a ordem de grandeza (Even bem mais raro), não o valor exato.
+        Assert.InRange(counts.GetValueOrDefault(GradientMix.BaseDominant) / (double)total, 0.32, 0.58);
+        Assert.InRange(counts.GetValueOrDefault(GradientMix.Even) / (double)total, 0.03, 0.19);
+        Assert.InRange(counts.GetValueOrDefault(GradientMix.PatternDominant) / (double)total, 0.32, 0.58);
+    }
+
+    [Fact]
+    public void GradienteEven_SomaAsDuasCores_ReconstroiOScoreExato()
+    {
+        var (_, t) = FindGradienteControlado(GradientMix.Even, seedBudget: 400_000);
+
+        double expected = ShimmerNoneContribution()
+            + ColorContribution(t.Tail.Color)
+            + PatternContribution(PatternType.Gradient)
+            + PatternColorContribution(t.Tail.Color, t.Tail.PatternColor!.Value)
+            + GradientMixContribution(GradientMix.Even)
+            + ColorContribution(t.Dorsal.Color) + PatternContribution(PatternType.None)
+            + ColorContribution(t.Pectoral.Color) + PatternContribution(PatternType.None);
+
+        Assert.Equal(expected, t.RarityScore, 9);
+    }
+
+    [Fact]
+    public void GradienteAssimetrico_SoContaACorDominante_ReconstroiOScoreExato()
+    {
+        foreach (var mix in new[] { GradientMix.BaseDominant, GradientMix.PatternDominant })
+        {
+            var (_, t) = FindGradienteControlado(mix, seedBudget: 200_000);
+
+            // Só a cor DOMINANTE conta — a minoritária (base se PatternDominant,
+            // padrão se BaseDominant) fica de fora da soma.
+            double dominantColorTerm = mix == GradientMix.BaseDominant
+                ? ColorContribution(t.Tail.Color)
+                : PatternColorContribution(t.Tail.Color, t.Tail.PatternColor!.Value);
+
+            double expected = ShimmerNoneContribution()
+                + dominantColorTerm
+                + PatternContribution(PatternType.Gradient)
+                + GradientMixContribution(mix)
+                + ColorContribution(t.Dorsal.Color) + PatternContribution(PatternType.None)
+                + ColorContribution(t.Pectoral.Color) + PatternContribution(PatternType.None);
+
+            Assert.Equal(expected, t.RarityScore, 9);
+        }
+    }
+
+    /// <summary>
+    /// Acha um seed com um peixe "isolado": sem brilho, só a cauda com Degradê (no
+    /// mix pedido) e tamanho/opacidade do padrão fora dos extremos, dorsal/peitoral
+    /// sem padrão, as 3 cores de base diferentes entre si (sem bônus de conjunto) e
+    /// movimento não-extremo — deixa o score fechado e conferível à mão.
+    /// </summary>
+    private static (long Seed, CreatureTraits Traits) FindGradienteControlado(GradientMix mix, int seedBudget)
+    {
+        bool NaoExtremo(double v) => v > TraitConfigV1.MovementSpeedExtremeLow && v < TraitConfigV1.MovementSpeedExtremeHigh;
+        return ManySeeds(seedBudget)
+            .Select(s => (s, t: TraitGenerator.Generate(s)))
+            .First(x =>
+                x.t.ShimmerTier == ShimmerTier.None
+                && x.t.Tail.Pattern == PatternType.Gradient && x.t.Tail.Mix == mix
+                && x.t.Tail.PatternSize!.Value > TraitConfigV1.PatternSizeExtremeLow
+                && x.t.Tail.PatternSize!.Value < TraitConfigV1.PatternSizeExtremeHigh
+                && x.t.Tail.PatternOpacity!.Value > TraitConfigV1.PatternOpacityExtremeLow
+                && x.t.Tail.PatternOpacity!.Value < TraitConfigV1.PatternOpacityExtremeHigh
+                && x.t.Dorsal.Pattern == PatternType.None
+                && x.t.Pectoral.Pattern == PatternType.None
+                && x.t.Tail.Color != x.t.Dorsal.Color
+                && x.t.Dorsal.Color != x.t.Pectoral.Color
+                && x.t.Tail.Color != x.t.Pectoral.Color
+                && NaoExtremo(x.t.Movement.TailSpeed) && NaoExtremo(x.t.Movement.FinSpeed));
+    }
+
+    private static double ShimmerNoneContribution()
+    {
+        double p = TraitConfigV1.ShimmerTiers.First(e => e.Value == ShimmerTier.None).Weight
+            / TraitConfigV1.ShimmerTiers.Sum(e => e.Weight);
+        return TraitConfigV1.ShimmerScoreWeight * -Math.Log10(p);
+    }
+
+    private static double ColorContribution(PartColor c)
+    {
+        double p = TraitConfigV1.PartColors.First(e => e.Value == c).Weight
+            / TraitConfigV1.PartColors.Sum(e => e.Weight);
+        return -Math.Log10(p);
+    }
+
+    private static double PatternContribution(PatternType pattern)
+    {
+        double p = TraitConfigV1.PatternTypes.First(e => e.Value == pattern).Weight
+            / TraitConfigV1.PatternTypes.Sum(e => e.Weight);
+        return -Math.Log10(p);
+    }
+
+    private static double PatternColorContribution(PartColor baseColor, PartColor patternColor)
+    {
+        var palette = TraitConfigV1.PartColors.Where(e => e.Value != baseColor).ToArray();
+        double p = palette.First(e => e.Value == patternColor).Weight / palette.Sum(e => e.Weight);
+        return -Math.Log10(p);
+    }
+
+    private static double GradientMixContribution(GradientMix mix)
+    {
+        double p = TraitConfigV1.GradientMixRatios.First(e => e.Value == mix).Weight
+            / TraitConfigV1.GradientMixRatios.Sum(e => e.Weight);
+        return -Math.Log10(p);
+    }
+
     private static IEnumerable<long> ManySeeds(int count = 5_000)
         => Enumerable.Range(1, count).Select(i => (long)i * 7919);
 

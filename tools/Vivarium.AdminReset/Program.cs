@@ -191,18 +191,23 @@ switch (args[0])
             if (c is null) { Console.WriteLine($"#{id}: não encontrada"); continue; }
 
             Vivarium.Core.Generation.CreatureTraits traits;
+            // Recalcula sempre com a versão ATUAL do motor (TraitConfigV1.Version), nunca
+            // com c.TraitConfigVersion — esse campo fica gravado com o valor de quando a
+            // criatura nasceu, e Generate/BreedTraits lançam exceção se a versão passada não
+            // bater com a versão atual. Bug real exposto no primeiro bump de Version (1->2,
+            // 12/08/2026, Degradê) — ver fix-scores abaixo pra correção completa.
             if (c.ParentASeed is { } pa && c.ParentBSeed is { } pb)
             {
                 var ancestryA = new Vivarium.Core.Generation.TraitGenerator.ParentAncestry(pa, c.ParentAGrandparentASeed, c.ParentAGrandparentBSeed);
                 var ancestryB = new Vivarium.Core.Generation.TraitGenerator.ParentAncestry(pb, c.ParentBGrandparentASeed, c.ParentBGrandparentBSeed);
                 traits = Vivarium.Core.Generation.TraitGenerator.BreedTraits(
-                    c.Seed, ancestryA, ancestryB, c.TraitConfigVersion,
+                    c.Seed, ancestryA, ancestryB, Vivarium.Core.Generation.TraitConfigV1.Version,
                     BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance);
                 Console.WriteLine($"#{c.Id} (FILHOTE) Seed={c.Seed} ParentASeed={pa} ParentBSeed={pb} ParentAGpA={c.ParentAGrandparentASeed} ParentAGpB={c.ParentAGrandparentBSeed} ParentBGpA={c.ParentBGrandparentASeed} ParentBGpB={c.ParentBGrandparentBSeed}");
             }
             else
             {
-                traits = Vivarium.Core.Generation.TraitGenerator.Generate(c.Seed, c.TraitConfigVersion);
+                traits = Vivarium.Core.Generation.TraitGenerator.Generate(c.Seed, Vivarium.Core.Generation.TraitConfigV1.Version);
                 Console.WriteLine($"#{c.Id} (normal) Seed={c.Seed}");
             }
             Console.WriteLine($"    RarityScore no banco={c.RarityScore}  Recalculado agora={traits.RarityScore}");
@@ -239,17 +244,19 @@ switch (args[0])
         foreach (var c in all)
         {
             double recalculated;
+            // Sempre com a versão ATUAL do motor, não c.TraitConfigVersion — mesmo motivo
+            // documentado em dump-traits acima.
             if (c.ParentASeed is { } pa && c.ParentBSeed is { } pb)
             {
                 var ancestryA = new Vivarium.Core.Generation.TraitGenerator.ParentAncestry(pa, c.ParentAGrandparentASeed, c.ParentAGrandparentBSeed);
                 var ancestryB = new Vivarium.Core.Generation.TraitGenerator.ParentAncestry(pb, c.ParentBGrandparentASeed, c.ParentBGrandparentBSeed);
                 recalculated = Vivarium.Core.Generation.TraitGenerator.BreedTraits(
-                    c.Seed, ancestryA, ancestryB, c.TraitConfigVersion,
+                    c.Seed, ancestryA, ancestryB, Vivarium.Core.Generation.TraitConfigV1.Version,
                     BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance).RarityScore;
             }
             else
             {
-                recalculated = Vivarium.Core.Generation.TraitGenerator.Generate(c.Seed, c.TraitConfigVersion).RarityScore;
+                recalculated = Vivarium.Core.Generation.TraitGenerator.Generate(c.Seed, Vivarium.Core.Generation.TraitConfigV1.Version).RarityScore;
             }
             decimal delta = (decimal)recalculated - c.RarityScore;
             if (Math.Abs((double)delta) > 0.05)
@@ -279,6 +286,14 @@ switch (args[0])
         // motor ATUAL e sobrescreve o campo gravado pra TODA criatura viva (não vendida, não
         // morta) cujo score divergir. Não muda Seed/traits/ancestralidade — só sincroniza o
         // número com o que já está sendo renderizado/usado ao vivo. Dentro de uma transação.
+        //
+        // Bug corrigido junto (12/08/2026, exposto no primeiro bump real de Version): recalculava
+        // passando c.TraitConfigVersion (o valor já GRAVADO na linha, sempre 1 até agora) — como
+        // Generate/BreedTraits lançam exceção se a versão não bater com TraitConfigV1.Version
+        // atual, isso quebrava na primeira linha assim que Version saísse de 1. Corrigido pra
+        // sempre usar a versão ATUAL do motor, e agora também grava c.TraitConfigVersion (antes só
+        // o RarityScore era atualizado, deixando o campo permanentemente desatualizado e expondo
+        // o mesmo bug de novo na próxima mudança de peso).
         var all = await db.CreatureInstances.Where(c => !c.IsDead && c.SoldAt == null).ToListAsync();
         int fixedCount = 0;
         decimal totalDelta = 0;
@@ -290,18 +305,19 @@ switch (args[0])
                 var ancestryA = new Vivarium.Core.Generation.TraitGenerator.ParentAncestry(pa, c.ParentAGrandparentASeed, c.ParentAGrandparentBSeed);
                 var ancestryB = new Vivarium.Core.Generation.TraitGenerator.ParentAncestry(pb, c.ParentBGrandparentASeed, c.ParentBGrandparentBSeed);
                 recalculated = Vivarium.Core.Generation.TraitGenerator.BreedTraits(
-                    c.Seed, ancestryA, ancestryB, c.TraitConfigVersion,
+                    c.Seed, ancestryA, ancestryB, Vivarium.Core.Generation.TraitConfigV1.Version,
                     BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance).RarityScore;
             }
             else
             {
-                recalculated = Vivarium.Core.Generation.TraitGenerator.Generate(c.Seed, c.TraitConfigVersion).RarityScore;
+                recalculated = Vivarium.Core.Generation.TraitGenerator.Generate(c.Seed, Vivarium.Core.Generation.TraitConfigV1.Version).RarityScore;
             }
             decimal delta = (decimal)recalculated - c.RarityScore;
-            if (Math.Abs((double)delta) > 0.05)
+            if (Math.Abs((double)delta) > 0.05 || c.TraitConfigVersion != Vivarium.Core.Generation.TraitConfigV1.Version)
             {
-                Console.WriteLine($"  #{c.Id,-5} {c.RarityScore,7:0.00} -> {(decimal)recalculated,7:0.00}  (delta {delta,7:+0.00;-0.00})");
+                Console.WriteLine($"  #{c.Id,-5} {c.RarityScore,7:0.00} -> {(decimal)recalculated,7:0.00}  (delta {delta,7:+0.00;-0.00})  TraitConfigVersion {c.TraitConfigVersion} -> {Vivarium.Core.Generation.TraitConfigV1.Version}");
                 c.RarityScore = (decimal)recalculated;
+                c.TraitConfigVersion = Vivarium.Core.Generation.TraitConfigV1.Version;
                 fixedCount++;
                 totalDelta += delta;
             }

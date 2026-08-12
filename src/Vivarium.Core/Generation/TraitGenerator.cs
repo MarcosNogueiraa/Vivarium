@@ -9,7 +9,13 @@ public static class TraitGenerator
 {
     public static CreatureTraits Generate(long seed, int configVersion = TraitConfigV1.Version)
     {
-        if (configVersion != TraitConfigV1.Version)
+        // Só lança pra uma versão MAIOR que a atual (dado corrompido/impossível — não pode vir
+        // "do futuro"). Versão igual ou anterior sempre usa a config atual, sem erro: só existe
+        // uma TraitConfigV1 hardcoded, nunca houve suporte real a múltiplas versões — travar em
+        // qualquer mismatch (como era antes, 12/08/2026) vira uma mina que detona TODA criatura
+        // já existente (TraitConfigVersion desatualizado no banco) assim que Version subir, até
+        // alguém rodar fix-scores — outage real, não só na ferramenta admin.
+        if (configVersion > TraitConfigV1.Version)
             throw new ArgumentException($"Versão de config desconhecida: {configVersion}", nameof(configVersion));
 
         // Acumula -log10(P) de cada trait sorteado; soma final = RarityScore.
@@ -108,7 +114,8 @@ public static class TraitGenerator
         long childSeed, ParentAncestry parentA, ParentAncestry parentB,
         int configVersion, double mutationChance, double rarityBias, double grandparentReachChance)
     {
-        if (configVersion != TraitConfigV1.Version)
+        // Mesmo relaxamento de Generate acima — só bloqueia versão maior que a atual.
+        if (configVersion > TraitConfigV1.Version)
             throw new ArgumentException($"Versão de config desconhecida: {configVersion}", nameof(configVersion));
 
         // Traits REAIS de cada pai: se ele é filhote (avós conhecidos), recomputa via a
@@ -305,11 +312,13 @@ public static class TraitGenerator
         PartColor patternColor;
         double patternSize;
         double patternOpacity;
+        GradientMix? mix;
         if (subtraitsFromSource)
         {
             patternColor = patternSource.PatternColor!.Value;
             patternSize = patternSource.PatternSize!.Value;
             patternOpacity = patternSource.PatternOpacity!.Value;
+            mix = patternSource.Mix; // não-nulo quando o padrão herdado é Gradient, senão null
         }
         else
         {
@@ -320,14 +329,34 @@ public static class TraitGenerator
             patternOpacity = TraitConfigV1.PatternOpacityMin
                 + DeterministicHash.Roll01(childSeed, partSalt + "_pattern_opacity")
                 * (TraitConfigV1.PatternOpacityMax - TraitConfigV1.PatternOpacityMin);
+            mix = pattern == PatternType.Gradient
+                ? WeightedTable.Pick(TraitConfigV1.GradientMixRatios, DeterministicHash.Roll01(childSeed, partSalt + "_pattern_mix")).Value
+                : null;
         }
 
         var scoringPalette = TraitConfigV1.PartColors.Where(e => e.Value != color).ToArray();
-        score += SelfInformation(WeightedTable.ProbabilityOf(scoringPalette, patternColor));
+        double patternColorP = WeightedTable.ProbabilityOf(scoringPalette, patternColor);
+        score += SelfInformation(patternColorP);
         score += PatternSizeExtremeInfo(patternSize);
         score += PatternOpacityExtremeInfo(patternOpacity);
 
-        return new PartTraits(color, pattern, patternColor, patternSize, patternOpacity);
+        // Score do mix (e a subtração da cor minoritária) sempre recalculado do
+        // valor FINAL (herdado ou mutado), nunca copiado — mesmo princípio já
+        // usado pros outros subtraits acima (patternColor/size/opacity).
+        if (mix is { } m)
+        {
+            // Mesma ordem de operações de RollGradientMix (delta calculado à parte,
+            // UMA soma só em `score`) — importa pra bater bit a bit com GeneratePart
+            // quando mutationChance=1.0 (ponto flutuante não é associativo).
+            double delta = SelfInformation(WeightedTable.ProbabilityOf(TraitConfigV1.GradientMixRatios, m));
+            if (m == GradientMix.PatternDominant)
+                delta -= SelfInformation(colorPick.Probability);
+            else if (m == GradientMix.BaseDominant)
+                delta -= SelfInformation(patternColorP);
+            score += delta;
+        }
+
+        return new PartTraits(color, pattern, patternColor, patternSize, patternOpacity, mix);
     }
 
     private static double PatternSizeExtremeInfo(double size)
@@ -398,7 +427,36 @@ public static class TraitGenerator
         else if (opacity > TraitConfigV1.PatternOpacityExtremeHigh)
             score += SelfInformation((TraitConfigV1.PatternOpacityMax - TraitConfigV1.PatternOpacityExtremeHigh) / opacityRange);
 
-        return new PartTraits(color, pattern, patternColor, size, opacity);
+        GradientMix? mix = null;
+        if (pattern == PatternType.Gradient)
+        {
+            var (m, delta) = RollGradientMix(seed, partSalt, colorP, patternColorP);
+            mix = m;
+            score += delta;
+        }
+
+        return new PartTraits(color, pattern, patternColor, size, opacity, mix);
+    }
+
+    /// <summary>
+    /// Sorteia a proporção de mistura do Degradê e devolve o ajuste de score: a
+    /// probabilidade do mix em si sempre soma (é um trait novo, como qualquer
+    /// outro), e — só quando o mix é assimétrico — a cor MINORITÁRIA é subtraída
+    /// do score depois de já ter sido somada mais cedo (`colorP`/`patternColorP`
+    /// já entraram incondicionalmente antes do padrão ser conhecido), deixando só
+    /// a cor dominante (>50%) contando. Em Even (50/50) nenhuma correção é feita —
+    /// as duas cores já contam normalmente, igual a qualquer outro padrão hoje.
+    /// </summary>
+    private static (GradientMix Mix, double ScoreDelta) RollGradientMix(
+        long seed, string partSalt, double colorP, double patternColorP)
+    {
+        var (mix, mixP) = WeightedTable.Pick(TraitConfigV1.GradientMixRatios, DeterministicHash.Roll01(seed, partSalt + "_pattern_mix"));
+        double delta = SelfInformation(mixP);
+        if (mix == GradientMix.PatternDominant)
+            delta -= SelfInformation(colorP);          // cor de base é a minoritária aqui
+        else if (mix == GradientMix.BaseDominant)
+            delta -= SelfInformation(patternColorP);    // cor do padrão é a minoritária aqui
+        return (mix, delta);
     }
 
     /// <summary>Bônus por conjunto coeso: mesmo padrão (≠None) ou mesma cor de base entre as 3 partes.</summary>

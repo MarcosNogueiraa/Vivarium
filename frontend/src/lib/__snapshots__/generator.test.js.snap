@@ -4,6 +4,7 @@ exports[`generateTraits > seeds fixos batem com o snapshot salvo (regressão do 
 {
   "dorsal": {
     "color": "Yellow",
+    "mix": null,
     "pattern": "None",
     "patternColor": null,
     "patternOpacity": null,
@@ -17,6 +18,7 @@ exports[`generateTraits > seeds fixos batem com o snapshot salvo (regressão do 
   },
   "pectoral": {
     "color": "Yellow",
+    "mix": null,
     "pattern": "None",
     "patternColor": null,
     "patternOpacity": null,
@@ -27,6 +29,7 @@ exports[`generateTraits > seeds fixos batem com o snapshot salvo (regressão do 
   "shimmerTier": "None",
   "tail": {
     "color": "Red",
+    "mix": null,
     "pattern": "None",
     "patternColor": null,
     "patternOpacity": null,
@@ -39,6 +42,7 @@ exports[`generateTraits > seeds fixos batem com o snapshot salvo (regressão do 
 {
   "dorsal": {
     "color": "Blue",
+    "mix": null,
     "pattern": "None",
     "patternColor": null,
     "patternOpacity": null,
@@ -52,6 +56,7 @@ exports[`generateTraits > seeds fixos batem com o snapshot salvo (regressão do 
   },
   "pectoral": {
     "color": "Blue",
+    "mix": null,
     "pattern": "None",
     "patternColor": null,
     "patternOpacity": null,
@@ -62,6 +67,7 @@ exports[`generateTraits > seeds fixos batem com o snapshot salvo (regressão do 
   "shimmerTier": "Subtle",
   "tail": {
     "color": "Blue",
+    "mix": null,
     "pattern": "None",
     "patternColor": null,
     "patternOpacity": null,

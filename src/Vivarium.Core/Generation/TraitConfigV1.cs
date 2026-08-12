@@ -7,7 +7,13 @@ namespace Vivarium.Core.Generation;
 /// </summary>
 public static class TraitConfigV1
 {
-    public const int Version = 1;
+    // 1 -> 2 (12/08/2026): Degradê ganhou o subtrait GradientMix e a regra de score
+    // assimétrica (só a cor dominante conta fora do Even) — muda o algoritmo de um
+    // trait já existente, primeiro bump real da história do projeto. Depois do
+    // deploy, rodar `Vivarium.AdminReset -- diff-scores` (auditoria) e `fix-scores`
+    // (agora corrigido pra usar a versão atual do motor, não a gravada na linha —
+    // ver AdminReset/Program.cs) em produção.
+    public const int Version = 2;
 
     public static readonly IReadOnlyList<WeightedValue<ShimmerTier>> ShimmerTiers =
     [
@@ -50,19 +56,33 @@ public static class TraitConfigV1
 
     // Padrões mais raros no geral (None domina mais); novos padrões com pesos
     // baixos (raros = valiosos). Ocelo/Mármore são a caça top.
+    // Gradient: peso reduzido de 0.6 -> 0.4 (12/08/2026, calibração em andamento —
+    // ver GradientMixRatios abaixo), delta de 0.2pp somado em None (não nos outros
+    // padrões raros, pra não baratear Mármore/Ocelo sem querer).
     public static readonly IReadOnlyList<WeightedValue<PatternType>> PatternTypes =
     [
-        new(PatternType.None, 76.0),
+        new(PatternType.None, 76.2),
         new(PatternType.Stripe, 8.0),
         new(PatternType.Dot, 8.0),
         new(PatternType.Scales, 3.0),
         new(PatternType.Rays, 1.6),
         new(PatternType.Chevron, 1.2),
         new(PatternType.Net, 0.9),
-        new(PatternType.Gradient, 0.6),
+        new(PatternType.Gradient, 0.4),
         new(PatternType.Mottled, 0.35),
         new(PatternType.Ocellus, 0.2),
         new(PatternType.Marble, 0.05),
+    ];
+
+    // Mistura de cores do Degradê (12/08/2026): 3 subtipos por proporção
+    // base/padrão. Even (50/50) é o mais raro — as duas cores contam pro score
+    // nesse caso; nos assimétricos, só a cor dominante conta (ver TraitGenerator).
+    // Candidato inicial pra calibração via Vivarium.Simulation — não travado ainda.
+    public static readonly IReadOnlyList<WeightedValue<GradientMix>> GradientMixRatios =
+    [
+        new(GradientMix.BaseDominant, 45.0),
+        new(GradientMix.Even, 10.0),
+        new(GradientMix.PatternDominant, 45.0),
     ];
 
     /// <summary>Corpo (shimmer) é a área de destaque: sua contribuição no score é multiplicada.</summary>

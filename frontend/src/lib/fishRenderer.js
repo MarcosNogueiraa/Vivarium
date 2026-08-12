@@ -144,10 +144,18 @@ function drawPattern(ctx, seed, part, path, bbox) {
       }
     }
   } else if (part.pattern === "Gradient") {
+    // patternSize controla a suavidade da transição (banda estreita = borda dura,
+    // larga = fade suave); mix (12/08/2026) controla ONDE o corte fica — base
+    // dominante (75/25) deixa o corte mais pra baixo, padrão dominante (25/75)
+    // mais pra cima, Even (50/50) centralizado.
     const extent = 0.35 + (size / 100) * 0.65;
-    const grad = ctx.createLinearGradient(0, by, 0, by + bh / extent);
-    grad.addColorStop(0, color + "00");
-    grad.addColorStop(1, color);
+    const t = part.mix === "BaseDominant" ? 0.75 : part.mix === "PatternDominant" ? 0.25 : 0.5;
+    const halfWidth = extent * 0.5;
+    const stop0 = Math.max(0, t - halfWidth);
+    const stop1 = Math.min(1, t + halfWidth);
+    const grad = ctx.createLinearGradient(0, by, 0, by + bh);
+    grad.addColorStop(stop0, color + "00");
+    grad.addColorStop(stop1, color);
     ctx.fillStyle = grad;
     ctx.fillRect(bx, by, bw, bh);
   } else if (part.pattern === "Mottled") {
