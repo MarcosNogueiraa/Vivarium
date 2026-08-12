@@ -60,6 +60,28 @@ public sealed record TickConfig
     public double IncomeGrowth { get; init; } = 0.42;
     public double IncomeRefScore { get; init; } = 4.0;
     /// <summary>
+    /// Taper do Lendário (12/08/2026): acima desse score, a renda troca do crescimento
+    /// exponencial normal (<see cref="IncomeGrowth"/>) pra um crescimento bem mais suave
+    /// (<see cref="IncomeLegendaryTaperGrowth"/>), contínuo no ponto de corte (sem salto).
+    /// Igual ao piso do tier Lendário (14.0) — o piso (~100/h) fica intocado, só o topo
+    /// da cauda é comprimido. Ver CLAUDE.md 8.6.
+    /// </summary>
+    public double IncomeLegendaryTaperScore { get; init; } = 14.0;
+    /// <summary>
+    /// 0.10 (12/08/2026, conservador — usuário pediu a opção que evita disparos de farm de
+    /// soft): com growth normal (0.42) sem teto, o próprio Lendário tinha 19.6x de variação
+    /// interna (piso 100/h, mas a cauda extrema — medida numa amostra de 1M seeds, além dos
+    /// 100k já documentados em CLAUDE.md §5 — chegava a ~1958/h no score máximo observado,
+    /// ~21). Acima do piso (14.0), a renda passa a crescer só com este growth reduzido —
+    /// comprime a variação interna do Lendário pra ~2x (piso 100/h, teto ~203/h no score
+    /// máximo observado). Não afeta Comum/Incomum/Raro/Épico (intocados abaixo de 14.0,
+    /// mesmo princípio cirúrgico do ajuste de growth de 06/08/2026). Contínuo no corte (sem
+    /// penhasco), mesma filosofia de <see cref="IncomeWaterPlateau"/>/<see cref="FilterTaperExponent"/>.
+    /// Validado com `Vivarium.Simulation economy`/`simulate`: economia continua saudável nos
+    /// 3 perfis em 120 dias.
+    /// </summary>
+    public double IncomeLegendaryTaperGrowth { get; init; } = 0.10;
+    /// <summary>
     /// Água 80-100%: sem perda de renda (o jogador não é punido por "quase perfeito" —
     /// só abaixo do patamar a água começa a doer). Abaixo disso, mesma curva de antes
     /// (potência IncomeWaterExp), só reescalada pra o patamar em vez de 100 — cai suave,

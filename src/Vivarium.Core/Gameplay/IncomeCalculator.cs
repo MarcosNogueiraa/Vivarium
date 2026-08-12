@@ -12,10 +12,21 @@ public readonly record struct FishIncome(decimal RarityScore, PartColor TailColo
 /// </summary>
 public static class IncomeCalculator
 {
-    /// <summary>Moedas por hora que um peixe rende (base), exponencial na raridade.</summary>
+    /// <summary>
+    /// Moedas por hora que um peixe rende (base), exponencial na raridade até o piso do
+    /// Lendário; acima disso, taper (crescimento reduzido, contínuo) — ver
+    /// <see cref="TickConfig.IncomeLegendaryTaperScore"/>.
+    /// </summary>
     public static double CoinsPerHour(decimal rarityScore, TickConfig config)
-        => config.IncomeBasePerHour
-           * Math.Exp(config.IncomeGrowth * ((double)rarityScore - config.IncomeRefScore));
+    {
+        double score = (double)rarityScore;
+        double taperScore = config.IncomeLegendaryTaperScore;
+        if (score <= taperScore)
+            return config.IncomeBasePerHour * Math.Exp(config.IncomeGrowth * (score - config.IncomeRefScore));
+
+        double floorAtTaper = config.IncomeBasePerHour * Math.Exp(config.IncomeGrowth * (taperScore - config.IncomeRefScore));
+        return floorAtTaper * Math.Exp(config.IncomeLegendaryTaperGrowth * (score - taperScore));
+    }
 
     /// <summary>
     /// Fator da água na renda (0–1): sem perda de IncomeWaterPlateau a 100% (água "quase

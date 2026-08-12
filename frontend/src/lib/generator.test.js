@@ -122,6 +122,16 @@ describe("coinsPerHourOf", () => {
     const comSinergia = coinsPerHourOf(5, 1.5);
     expect(comSinergia).toBeCloseTo(base * 1.5, 10);
   });
+
+  it("taper do Lendário comprime a variação acima do piso (12/08/2026)", () => {
+    const piso = coinsPerHourOf(14);
+    const topoObservado = coinsPerHourOf(21);
+    expect(piso).toBeGreaterThan(95);
+    expect(piso).toBeLessThan(105);
+    expect(topoObservado / piso).toBeLessThan(2.5);
+    // contínuo no corte, sem salto
+    expect(Math.abs(coinsPerHourOf(14.001) - coinsPerHourOf(13.999))).toBeLessThan(0.1);
+  });
 });
 
 describe("vendorPriceOf", () => {
