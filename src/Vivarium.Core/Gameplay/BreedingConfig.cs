@@ -37,7 +37,7 @@ public static class BreedingDefaults
     public const double MinGestationHours = 1.0;
     /// <summary>Teto TEMPORÁRIO em 1h — ver BaseGestationHours (reverter pra 240h no lançamento).</summary>
     public const double MaxGestationHours = 1.0;
-    public const double MutationChance = 0.08;
+    public const double MutationChance = 0.04;
 
     /// <summary>
     /// Viés de raridade na herança do tier de brilho (0 = 50/50 puro, 1 = pesa
@@ -63,7 +63,7 @@ public static class BreedingDefaults
     /// existindo (não foi zerada), só deixa de ser o caso comum. Validado com
     /// `Vivarium.Simulation breed`.
     /// </summary>
-    public const double GrandparentReachChance = 0.03;
+    public const double GrandparentReachChance = 0.01;
 
     // --- Custo dinâmico (soft) ---
     // O tempo de gestação já é o sink principal pra pares raros (um lendário
