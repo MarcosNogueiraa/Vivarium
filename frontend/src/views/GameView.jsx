@@ -22,6 +22,7 @@ export function GameView({ onLogout }) {
   const { toast, notify, dismiss: dismissToast } = useToast();
   const { status: dailyReward, refresh: refreshDailyReward } = useDailyReward();
   const [tab, setTab] = useState("tank");
+  const [rankingExitSignal, setRankingExitSignal] = useState(0);
   const [claimingReward, setClaimingReward] = useState(false);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [showRarityGuide, setShowRarityGuide] = useState(false);
@@ -84,7 +85,12 @@ export function GameView({ onLogout }) {
             <button data-tab="market" className={tab === "market" ? "active" : ""} onClick={() => setTab("market")}>Mercado</button>
             <button data-tab="store" className={tab === "store" ? "active" : ""} onClick={() => setTab("store")}>Loja</button>
             <button data-tab="breeding" className={tab === "breeding" ? "active" : ""} onClick={() => setTab("breeding")}>Ninho</button>
-            <button data-tab="ranking" className={tab === "ranking" ? "active" : ""} onClick={() => setTab("ranking")}>🏆 Ranking</button>
+            <button data-tab="ranking" className={tab === "ranking" ? "active" : ""} onClick={() => {
+              // Já na aba Ranking (ex: visitando um aquário)? Clicar de novo volta pra lista
+              // direto, sem precisar do botão "Voltar" (pedido do usuário, 12/08/2026).
+              if (tab === "ranking") setRankingExitSignal((s) => s + 1);
+              setTab("ranking");
+            }}>🏆 Ranking</button>
           </nav>
           <button className="guide-btn" onClick={() => setShowHowItWorks(true)} title="Como o jogo funciona">?</button>
         </div>
@@ -136,7 +142,7 @@ export function GameView({ onLogout }) {
         {tab === "market" && <MarketView userId={userId} refreshTank={refreshTank} notify={notify} />}
         {tab === "store" && <StoreView tank={tank} refreshTank={refreshTank} notify={notify} />}
         {tab === "breeding" && <BreedingView tank={tank} refreshTank={refreshTank} notify={notify} />}
-        {tab === "ranking" && <RankingView notify={notify} />}
+        {tab === "ranking" && <RankingView notify={notify} exitSpectatorSignal={rankingExitSignal} />}
       </main>
 
       <Toast message={toast} onDismiss={dismissToast} />
