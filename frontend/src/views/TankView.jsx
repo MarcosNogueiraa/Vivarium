@@ -12,7 +12,8 @@ import { vendorPriceOf } from "../lib/generator.js";
 import { FishDetail } from "./FishDetail.jsx";
 import { RarityGuide } from "./RarityGuide.jsx";
 
-export function TankView({ tank, refresh, notify }) {
+export function TankView({ tank, refresh, notify, cinemaEnabled = true, toggleCinema }) {
+  const dim = cinemaEnabled ? " cinema-dim" : "";
   const [selectedId, setSelectedId] = useState(null);
   const [showGuide, setShowGuide] = useState(false);
   const [prompt, setPrompt] = useState(null);       // { kind: "sell"|"transfer"|"vendor"|"filter-warn", creature? }
@@ -124,7 +125,7 @@ export function TankView({ tank, refresh, notify }) {
   }
 
   return (
-    <div className="tank-layout">
+    <div className={`tank-layout${cinemaEnabled ? "" : " cinema-off"}`}>
       {!onboardDone && !aquariumMode && (
         <div className="onboard glass">
           <div className="onboard-body">
@@ -203,6 +204,12 @@ export function TankView({ tank, refresh, notify }) {
               📺
             </button>
           )}
+          {toggleCinema && (
+            <button className={`tool-btn${cinemaEnabled ? " active" : ""}`} onClick={toggleCinema}
+              title={cinemaEnabled ? "Desligar o efeito cinema (deixa o resto da tela mais claro)" : "Ligar o efeito cinema"}>
+              {cinemaEnabled ? "🎬" : "💡"}
+            </button>
+          )}
         </div>
 
         {tank.creatures.length === 0 && !aquariumMode && (
@@ -215,7 +222,7 @@ export function TankView({ tank, refresh, notify }) {
       </div>
 
       {!aquariumMode && synergy.length > 0 && (
-        <div className="synergy-bar glass cinema-dim">
+        <div className={`synergy-bar glass${dim}`}>
           <span className="eyebrow">Sinergia de cor</span>
           {synergy.map((g) => (
             <span key={g.color} className="synergy-chip" style={{ "--tier": PART_HEX[g.color] }}>
@@ -225,7 +232,7 @@ export function TankView({ tank, refresh, notify }) {
         </div>
       )}
       {!aquariumMode && tank.creatures.length > 0 && !selected && (
-        <p className="hint cinema-dim">Clique num peixe para ver os detalhes, guardar, vender ou transferir.</p>
+        <p className={`hint${dim}`}>Clique num peixe para ver os detalhes, guardar, vender ou transferir.</p>
       )}
       {selected && (
         <FishDetail creature={selected} onClose={() => setSelectedId(null)} inTank
@@ -270,7 +277,7 @@ export function TankView({ tank, refresh, notify }) {
       {celebrate && <CollectCelebration creature={celebrate} onClose={() => setCelebrate(null)} />}
 
       {!aquariumMode && tank.creatures.length > 0 && (
-        <section className="cinema-dim">
+        <section className={`${dim.trim()}`}>
           <div className="section-head">
             <button className="collapse-btn" onClick={toggleList} aria-expanded={listOpen}
               title={listOpen ? "Recolher lista" : "Expandir lista"}>
@@ -315,7 +322,7 @@ export function TankView({ tank, refresh, notify }) {
       )}
 
       {!aquariumMode && (
-      <section className="cinema-dim">
+      <section className={`${dim.trim()}`}>
         <div className="section-head">
           <span className="eyebrow">Fila de criação</span>
           <span className="count">{tank.queue.length}/{tank.queueCap}</span>
