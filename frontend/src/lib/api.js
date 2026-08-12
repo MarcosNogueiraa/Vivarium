@@ -70,6 +70,7 @@ export const api = {
   startBreeding: (parentAId, parentBId, { useStabilizer = false, useInsurance = false } = {}) =>
     request("POST", "/api/breeding/start", { parentAId, parentBId, useStabilizer, useInsurance }),
   collectBreeding: () => request("POST", "/api/breeding/collect"),
+  breedingHistory: () => request("GET", "/api/breeding/history"),
   devFinishBreeding: () => request("POST", "/api/dev/breeding/finish"),
   dailyRewardStatus: () => request("GET", "/api/game/daily-reward"),
   claimDailyReward: () => request("POST", "/api/game/daily-reward/claim"),

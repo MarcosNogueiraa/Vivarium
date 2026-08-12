@@ -10,6 +10,7 @@ import { Coin } from "../components/Coin.jsx";
 import { Select } from "../components/Select.jsx";
 import { CollectCelebration } from "../components/CollectCelebration.jsx";
 import { PeekPanel } from "../components/PeekPanel.jsx";
+import { BreedingHistory } from "../components/BreedingHistory.jsx";
 import { bandOf, BANDS, PART_HEX, PT } from "../lib/fishRenderer.js";
 import { breedingPreview, coinsPerHourOf, traitsOf } from "../lib/generator.js";
 import { PART_PT, partSummary } from "../lib/format.js";
@@ -86,6 +87,7 @@ export function BreedingView({ tank, refreshTank, notify }) {
   const [celebrate, setCelebrate] = useState(null); // { child, parentLosses }
   const [peekId, setPeekId] = useState(null); // id do peixe com o painel de detalhes aberto (pairar 1s)
   const [confirmRush, setConfirmRush] = useState(false); // pede confirmação antes de gastar premium
+  const [showHistory, setShowHistory] = useState(false);
   const peekTimer = useRef(null);
   const [, forceTick] = useState(0);
   const [sortBy, setSortBy] = useState("rarity-desc");
@@ -214,6 +216,8 @@ export function BreedingView({ tank, refreshTank, notify }) {
       <div className="section-head">
         <span className="eyebrow">Ninho</span>
         <span className="count">{status.slot.isReady ? "pronto!" : timeLeft(status.slot.readyAt)}</span>
+        <span className="spacer" />
+        <button className="guide-btn" onClick={() => setShowHistory(true)} title="Registro de cruzamentos">📜</button>
       </div>
       <AquariumCanvas
         creatures={[status.slot.parentA, status.slot.parentB]}
@@ -256,6 +260,8 @@ export function BreedingView({ tank, refreshTank, notify }) {
     <>
       <div className="section-head">
         <span className="eyebrow">Ninho</span>
+        <span className="spacer" />
+        <button className="guide-btn" onClick={() => setShowHistory(true)} title="Registro de cruzamentos">📜</button>
       </div>
       {candidates.length < 2 ? (
         <p className="hint">Você precisa de pelo menos 2 peixes (no tanque ou na mochila) pra tentar cruzar.</p>
@@ -480,6 +486,8 @@ export function BreedingView({ tank, refreshTank, notify }) {
           onClose={() => setCelebrate(null)}
         />
       )}
+
+      {showHistory && <BreedingHistory onClose={() => setShowHistory(false)} />}
 
       {confirmRush && status.active && (
         <ConfirmModal
