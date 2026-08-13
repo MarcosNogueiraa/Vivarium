@@ -5,7 +5,7 @@ import { Coin } from "./Coin.jsx";
 import { PeekAnchor } from "./PeekPanel.jsx";
 import { coinsPerHourOf, rarityBreakdownOf, traitsOf } from "../lib/generator.js";
 import { bandOf, PT } from "../lib/fishRenderer.js";
-import { partSummary } from "../lib/format.js";
+import { partSummary, PART_PT } from "../lib/format.js";
 
 // Revelação suspense (08/08/2026, pedido do usuário; estendida a Raro+ e ao
 // Ninho no mesmo dia; depois trocada de automática pra CLIQUE-A-CLIQUE, a
@@ -19,18 +19,11 @@ import { partSummary } from "../lib/format.js";
 // "breeding"`), só o FILHOTE em si passa pela revelação — os retratos dos
 // pais e a seção de despedida (se algum não sobreviveu) continuam visíveis
 // desde o início, já que eles não são o "mistério" do momento.
-/** Porcentagens pequenas (ex: 0.05%) precisam de mais casas pra não arredondar pra "0%". */
-function formatPct(pct) {
-  if (pct >= 1) return `${pct.toFixed(1)}%`;
-  if (pct >= 0.01) return `${pct.toFixed(2)}%`;
-  return "<0,01%";
-}
-
 const REVEAL_LABELS = [
   { key: "shimmer", label: "Corpo" },
-  { key: "tail", label: "Cauda" },
-  { key: "dorsal", label: "Nadadeira dorsal" },
-  { key: "pectoral", label: "Nadadeira peitoral" },
+  { key: "tail", label: PART_PT.tail },
+  { key: "dorsal", label: PART_PT.dorsal },
+  { key: "pectoral", label: PART_PT.pectoral },
 ];
 
 /** Um pai que não sobreviveu à gestação — retrato + mensagem de despedida. */
@@ -116,11 +109,6 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
   // como bônus só no reveal final, já que dependem das 3 partes juntas).
   const breakdown = rarityBreakdownOf(creature);
   const pointsOf = (pred) => breakdown.factors.filter(pred).reduce((sum, f) => sum + f.points, 0);
-  // Chance conjunta do grupo: multiplica as probabilidades brutas (não soma) — pontos já são
-  // -log10(prob), então some pra pontos e multiplique pra probabilidade são equivalentes, mas
-  // probPct de fatores com peso (shimmerTier) não bate 1:1 com -log10, por isso não deriva da
-  // soma de pontos e sim multiplica probPct direto.
-  const probOf = (pred) => breakdown.factors.filter(pred).reduce((p, f) => p * (f.probPct != null ? f.probPct / 100 : 1), 1);
   const bonusPoints = pointsOf((f) => f.key === "samePattern" || f.key === "sameColor");
   // De onde veio o atributo (só faz sentido pra filhote — pedido do usuário, 12/08/2026, pra
   // esclarecer dúvida sobre herança vs. mutação): usa o fator "principal" do grupo (cor, ou o
@@ -135,22 +123,22 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
     {
       key: "shimmer", label: "Corpo",
       value: traits.shimmerTier === "None" ? "Cinza, sem brilho" : `${PT.tier[traits.shimmerTier]} · ${PT.shimmer[traits.shimmerColor]}`,
-      points: pointsOf((f) => f.key === "shimmerTier"), probPct: probOf((f) => f.key === "shimmerTier") * 100,
+      points: pointsOf((f) => f.key === "shimmerTier"),
       source: sourceOf((f) => f.key === "shimmerTier"),
     },
     {
-      key: "tail", label: "Cauda", value: partSummary(traits.tail),
-      points: pointsOf((f) => f.part === "tail"), probPct: probOf((f) => f.part === "tail") * 100,
+      key: "tail", label: PART_PT.tail, value: partSummary(traits.tail),
+      points: pointsOf((f) => f.part === "tail"),
       source: sourceOf((f) => f.part === "tail" && f.key === "partColor"),
     },
     {
-      key: "dorsal", label: "Nadadeira dorsal", value: partSummary(traits.dorsal),
-      points: pointsOf((f) => f.part === "dorsal"), probPct: probOf((f) => f.part === "dorsal") * 100,
+      key: "dorsal", label: PART_PT.dorsal, value: partSummary(traits.dorsal),
+      points: pointsOf((f) => f.part === "dorsal"),
       source: sourceOf((f) => f.part === "dorsal" && f.key === "partColor"),
     },
     {
-      key: "pectoral", label: "Nadadeira peitoral", value: partSummary(traits.pectoral),
-      points: pointsOf((f) => f.part === "pectoral" || f.part === "fin"), probPct: probOf((f) => f.part === "pectoral" || f.part === "fin") * 100,
+      key: "pectoral", label: PART_PT.pectoral, value: partSummary(traits.pectoral),
+      points: pointsOf((f) => f.part === "pectoral" || f.part === "fin"),
       source: sourceOf((f) => (f.part === "pectoral" || f.part === "fin") && f.key === "partColor"),
     },
   ];
@@ -194,7 +182,6 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
               {attrLines.slice(0, step).map((a) => (
                 <div className="reveal-attr" key={a.key}>
                   <b>{a.label}:</b> {a.value}
-                  {" "}<span className="reveal-chance mono">{formatPct(a.probPct)}</span>
                   {isBreeding && a.source && <span className="reveal-source">{SOURCE_LABEL[a.source]}</span>}
                   {" "}<span className="reveal-pts">+{a.points.toFixed(2)}</span>
                 </div>
@@ -210,7 +197,6 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
             {attrLines.map((a) => (
               <div className="reveal-attr" key={a.key}>
                 <b>{a.label}:</b> {a.value}
-                {" "}<span className="reveal-chance mono">{formatPct(a.probPct)}</span>
                 {isBreeding && a.source && <span className="reveal-source">{SOURCE_LABEL[a.source]}</span>}
                 {" "}<span className="reveal-pts">+{a.points.toFixed(2)}</span>
               </div>

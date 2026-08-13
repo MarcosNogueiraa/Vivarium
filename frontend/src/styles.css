@@ -371,6 +371,10 @@ input:focus {
 .filter-toggle input { width: 16px; height: 16px; padding: 0; flex: 0 0 auto; accent-color: var(--glow); }
 .backpack-toolbar .spacer { flex: 1; }
 
+.appearance-filter-group { display: flex; flex-direction: column; gap: 12px; }
+.appearance-filter-part { display: flex; flex-direction: column; gap: 6px; }
+.appearance-filter-part strong { font-size: 0.82rem; color: var(--muted); }
+
 /* Seleção em massa na Mochila (08/08/2026) — vender vários peixes ao NPC de
    uma vez, sem precisar confirmar um por um. Mesmo padrão visual do picker
    de cruzamento do Ninho (borda/sombra na cor do tier quando selecionado). */
@@ -997,9 +1001,9 @@ input:focus {
 .breakdown { display: flex; flex-direction: column; gap: 7px; }
 .bd-row {
   display: grid; grid-template-columns: minmax(110px, 1.3fr) 2fr auto auto;
-  gap: 10px; align-items: center; font-size: 0.83rem;
+  gap: 10px; align-items: start; font-size: 0.83rem;
 }
-.bd-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bd-label { white-space: normal; overflow-wrap: break-word; line-height: 1.3; }
 .bd-bar { height: 7px; border-radius: 999px; overflow: hidden; background: rgba(255, 255, 255, 0.10); box-shadow: inset 0 0 0 1px var(--line); }
 .bd-bar > span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--glow-2), var(--glow)); }
 .bd-prob { color: var(--muted); text-align: right; min-width: 40px; }
@@ -1160,7 +1164,6 @@ input:focus {
 }
 .reveal-attr b { color: var(--muted); font-weight: 600; margin-right: 4px; }
 .reveal-pts { color: var(--glow); font-weight: 700; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
-.reveal-chance { color: var(--muted); font-size: 0.78rem; margin-left: 2px; }
 .reveal-source { color: var(--faint); font-size: 0.74rem; margin-left: 6px; font-style: italic; }
 .reveal-total { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 6px; }
 .reveal-total b { color: var(--ink); }

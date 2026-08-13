@@ -1,25 +1,12 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Modal } from "../components/Modal.jsx";
 import { FishCanvas } from "../components/FishCanvas.jsx";
 import { Coin } from "../components/Coin.jsx";
 import { TraitRow } from "../components/TraitRow.jsx";
+import { CollapsibleSection } from "../components/CollapsibleSection.jsx";
 import { coinsPerHourOf, rarityBreakdownOf, traitsOf, waterDegradationPerFishPerHour } from "../lib/generator.js";
 import { bandOf, PT, swimSpeedOf } from "../lib/fishRenderer.js";
-import { ageOf, factorLabel, partSummary, speedWord } from "../lib/format.js";
-
-/** Seção recolhível (nasce fechada) — reaproveita o visual do .eyebrow, só some o corpo até o clique. */
-function CollapsibleSection({ title, children }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="detail-section">
-      <button className="detail-section-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        <span className="eyebrow">{title}</span>
-        <span className={`chevron${open ? " open" : ""}`}>▾</span>
-      </button>
-      {open && children}
-    </div>
-  );
-}
+import { ageOf, factorLabel, partSummary, speedWord, PART_PT } from "../lib/format.js";
 
 export function FishDetail({ creature, onClose, children, inTank = false, bandFactor = 1 }) {
   const seed = creature.seed;
@@ -57,9 +44,9 @@ export function FishDetail({ creature, onClose, children, inTank = false, bandFa
         <TraitRow label="Corpo" value={traits.shimmerTier === "None"
           ? "Cinza, sem brilho"
           : `${PT.tier[traits.shimmerTier]} · ${PT.shimmer[traits.shimmerColor]} ${traits.shimmerOpacity.toFixed(0)}%`} />
-        <TraitRow label="Cauda" value={partSummary(traits.tail)} />
-        <TraitRow label="Nadadeira dorsal" value={partSummary(traits.dorsal)} />
-        <TraitRow label="Nadadeira peitoral" value={partSummary(traits.pectoral)} />
+        <TraitRow label={PART_PT.tail} value={partSummary(traits.tail)} />
+        <TraitRow label={PART_PT.dorsal} value={partSummary(traits.dorsal)} />
+        <TraitRow label={PART_PT.pectoral} value={partSummary(traits.pectoral)} />
         <TraitRow label="Movimento" value={`cauda ${speedWord(traits.movement.tailSpeed)}, `
           + `nadadeira ${speedWord(traits.movement.finSpeed)} · nado ${swimSpeedOf(traits).toFixed(0)} px/s`} />
       </CollapsibleSection>

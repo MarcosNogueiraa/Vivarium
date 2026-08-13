@@ -34,9 +34,9 @@ function ParentPreviewCard({ label, creature, traits }) {
       <div className="peek-row">
         {traits.shimmerTier === "None" ? "Corpo sem brilho" : `${PT.tier[traits.shimmerTier]} · ${PT.shimmer[traits.shimmerColor]}`}
       </div>
-      <div className="peek-row">Cauda: {partSummary(traits.tail)}</div>
-      <div className="peek-row">Dorsal: {partSummary(traits.dorsal)}</div>
-      <div className="peek-row">Nadadeira peitoral: {partSummary(traits.pectoral)}</div>
+      <div className="peek-row">{PART_PT.tail}: {partSummary(traits.tail)}</div>
+      <div className="peek-row">{PART_PT.dorsal}: {partSummary(traits.dorsal)}</div>
+      <div className="peek-row">{PART_PT.pectoral}: {partSummary(traits.pectoral)}</div>
     </div>
   );
 }

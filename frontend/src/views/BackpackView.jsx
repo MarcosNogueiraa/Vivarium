@@ -1,14 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api.js";
-import { coinsPerHourOf, traitsOf, vendorPriceOf } from "../lib/generator.js";
+import { CONFIG, coinsPerHourOf, traitsOf, vendorPriceOf } from "../lib/generator.js";
 import { bandOf, BANDS, PART_HEX, PT } from "../lib/fishRenderer.js";
+import { PART_PT } from "../lib/format.js";
 import { RarityBadge } from "../components/RarityBadge.jsx";
 import { FishCanvas } from "../components/FishCanvas.jsx";
 import { Select } from "../components/Select.jsx";
 import { PromptModal } from "../components/PromptModal.jsx";
 import { ConfirmModal } from "../components/ConfirmModal.jsx";
+import { CollapsibleSection } from "../components/CollapsibleSection.jsx";
 import { CollectCelebration } from "../components/CollectCelebration.jsx";
 import { FishDetail } from "./FishDetail.jsx";
+
+const PARTS = ["tail", "dorsal", "pectoral"];
+const PATTERN_VALUES = CONFIG.patternTypes.map(([v]) => v);
+const emptyPartFilter = { color: "all", pattern: "all" };
 
 const SORTS = {
   "rarity-desc": { label: "Raridade (maior primeiro)", cmp: (a, b) => Number(b.rarityScore) - Number(a.rarityScore) },
@@ -26,11 +32,14 @@ export function BackpackView({ refreshTank, notify }) {
   const [prompt, setPrompt] = useState(null); // { kind: "sell"|"transfer"|"vendor", creature }
   const [sortBy, setSortBy] = useState("rarity-desc");
   const [bandFilter, setBandFilter] = useState("all");
-  const [colorFilter, setColorFilter] = useState("all");
+  const [partFilters, setPartFilters] = useState({
+    tail: { ...emptyPartFilter }, dorsal: { ...emptyPartFilter }, pectoral: { ...emptyPartFilter },
+  });
   const [onlyBred, setOnlyBred] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
   const [bulkConfirm, setBulkConfirm] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState(null); // { done, total } | null
 
   const refresh = useCallback(async () => { setData(await api.backpack()); }, []);
   useEffect(() => { refresh().catch((e) => notify(e.message)); }, [refresh, notify]);
@@ -97,18 +106,36 @@ export function BackpackView({ refreshTank, notify }) {
     }
   }
 
+  const activeAppearanceFilters = PARTS.reduce(
+    (n, part) => n + (partFilters[part].color !== "all" ? 1 : 0) + (partFilters[part].pattern !== "all" ? 1 : 0),
+    0
+  );
+
   const visible = useMemo(() => {
     if (!data) return [];
     return data.creatures
       .filter((c) => bandFilter === "all" || bandOf(Number(c.rarityScore)).name === bandFilter)
-      // Cor = cor da cauda, mesma convenção usada em tankMath.js (sinergia de cor, §8.6).
-      .filter((c) => colorFilter === "all" || traitsOf(c).tail.color === colorFilter)
+      .filter((c) => {
+        const t = traitsOf(c);
+        return PARTS.every((part) => {
+          const f = partFilters[part];
+          return (f.color === "all" || t[part].color === f.color)
+            && (f.pattern === "all" || t[part].pattern === f.pattern);
+        });
+      })
       .filter((c) => !onlyBred || c.isBred)
       // Peixe novo (ainda não revelado) sempre primeiro, não importa a ordenação escolhida —
       // senão ele podia ficar perdido no meio da lista, escondido atrás de "???" sem chamar
       // atenção. Dentro de cada grupo (novo/já visto), mantém a ordenação normal.
       .sort((a, b) => (b.isNew - a.isNew) || SORTS[sortBy].cmp(a, b));
-  }, [data, sortBy, bandFilter, colorFilter, onlyBred]);
+  }, [data, sortBy, bandFilter, partFilters, onlyBred]);
+
+  function setPartColor(part, color) {
+    setPartFilters((prev) => ({ ...prev, [part]: { ...prev[part], color } }));
+  }
+  function setPartPattern(part, pattern) {
+    setPartFilters((prev) => ({ ...prev, [part]: { ...prev[part], pattern } }));
+  }
 
   const selectedCreatures = visible.filter((c) => selected.has(c.id));
   const selectedTotal = selectedCreatures.reduce((sum, c) => sum + vendorPriceOf(Number(c.rarityScore)), 0);
@@ -118,6 +145,7 @@ export function BackpackView({ refreshTank, notify }) {
 
   async function confirmBulkSellVendor() {
     const ids = [...selected];
+    setBulkProgress({ done: 0, total: ids.length });
     // Sequencial, não Promise.all: o Habitat usa concorrência otimista (xmin,
     // CLAUDE.md 12.1) — vários pedidos em paralelo tentando atualizar a mesma
     // linha (o tick roda antes de cada venda) colidem e voltam 409 na maioria.
@@ -130,9 +158,11 @@ export function BackpackView({ refreshTank, notify }) {
         okCount++;
         total += Number(price);
       } catch { /* segue pro próximo; contabilizado como falha abaixo */ }
+      setBulkProgress((p) => (p ? { ...p, done: p.done + 1 } : p));
     }
     const failCount = ids.length - okCount;
     setBulkConfirm(false);
+    setBulkProgress(null);
     setSelectMode(false);
     setSelected(new Set());
     notify(
@@ -175,22 +205,6 @@ export function BackpackView({ refreshTank, notify }) {
                 </button>
               ))}
             </div>
-            <div className="filter-chips">
-              <button className={`filter-chip${colorFilter === "all" ? " active" : ""}`} onClick={() => setColorFilter("all")}>
-                Toda cor
-              </button>
-              {Object.keys(PART_HEX).map((color) => (
-                <button
-                  key={color}
-                  className={`filter-chip color-chip${colorFilter === color ? " active" : ""}`}
-                  style={{ "--tier": PART_HEX[color] }}
-                  title={PT.color[color]}
-                  onClick={() => setColorFilter(color)}
-                >
-                  <span className="dot-color" style={{ background: PART_HEX[color] }} />
-                </button>
-              ))}
-            </div>
             <label className="filter-toggle">
               <input type="checkbox" checked={onlyBred} onChange={(e) => setOnlyBred(e.target.checked)} />
               Só filhotes 🐣
@@ -201,6 +215,51 @@ export function BackpackView({ refreshTank, notify }) {
               {selectMode ? "✕ Cancelar seleção" : "☑️ Selecionar"}
             </button>
           </div>
+          <CollapsibleSection title={`Filtros avançados${activeAppearanceFilters > 0 ? ` (${activeAppearanceFilters})` : ""}`}>
+            <div className="appearance-filter-group">
+              {PARTS.map((part) => (
+                <div className="appearance-filter-part" key={part}>
+                  <strong>{PART_PT[part]}</strong>
+                  <div className="filter-chips">
+                    <button
+                      className={`filter-chip${partFilters[part].color === "all" ? " active" : ""}`}
+                      onClick={() => setPartColor(part, "all")}
+                    >
+                      Toda cor
+                    </button>
+                    {Object.keys(PART_HEX).map((color) => (
+                      <button
+                        key={color}
+                        className={`filter-chip color-chip${partFilters[part].color === color ? " active" : ""}`}
+                        style={{ "--tier": PART_HEX[color] }}
+                        title={PT.color[color]}
+                        onClick={() => setPartColor(part, color)}
+                      >
+                        <span className="dot-color" style={{ background: PART_HEX[color] }} />
+                      </button>
+                    ))}
+                  </div>
+                  <div className="filter-chips">
+                    <button
+                      className={`filter-chip${partFilters[part].pattern === "all" ? " active" : ""}`}
+                      onClick={() => setPartPattern(part, "all")}
+                    >
+                      Todo padrão
+                    </button>
+                    {PATTERN_VALUES.map((pattern) => (
+                      <button
+                        key={pattern}
+                        className={`filter-chip${partFilters[part].pattern === pattern ? " active" : ""}`}
+                        onClick={() => setPartPattern(part, pattern)}
+                      >
+                        {PT.pattern[pattern]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CollapsibleSection>
           {selectMode && (
             <div className="select-toolbar">
               <span className="muted">{selected.size} selecionado(s)</span>
@@ -313,7 +372,9 @@ export function BackpackView({ refreshTank, notify }) {
       {bulkConfirm && (
         <ConfirmModal
           title="Vender ao NPC"
-          message={`Venda instantânea de ${selected.size} peixe(s) por ${selectedTotal.toFixed(0)} moedas soft no total — bem abaixo do mercado, mas na hora. Essa ação não pode ser desfeita.`}
+          message={bulkProgress
+            ? `Vendendo ${bulkProgress.done} de ${bulkProgress.total}...`
+            : `Venda instantânea de ${selected.size} peixe(s) por ${selectedTotal.toFixed(0)} moedas soft no total — bem abaixo do mercado, mas na hora. Essa ação não pode ser desfeita.`}
           confirmLabel="Vender agora" danger
           onConfirm={confirmBulkSellVendor} onClose={() => setBulkConfirm(false)}
         />

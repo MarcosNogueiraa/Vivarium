@@ -203,7 +203,6 @@ describe("Ninho — gestação ativa", () => {
     for (let i = 0; i < 4; i++) cy.get(".celebrate-fish").click();
 
     cy.get(".reveal-attr").should("have.length.at.least", 1);
-    cy.get(".reveal-chance").first().should("be.visible").invoke("text").should("match", /%/);
     cy.get(".reveal-source").should("have.length.at.least", 1);
     cy.get(".reveal-source").first().invoke("text").should("match", /Herdado|Mutação/);
   });

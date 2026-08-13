@@ -134,6 +134,42 @@ describe("Mochila", () => {
     cy.contains(".card", "Lendário");
   });
 
+  it("filtros avançados por parte (cor/padrão independentes) combinam corretamente", () => {
+    // Dois peixes: um com cauda Azul + padrão Estria, outro com cauda Laranja sem padrão —
+    // filtrar por "cauda Azul" deve esconder o segundo; "cauda Azul + Estria" mantém só o primeiro.
+    const bluePart = { color: "Blue", pattern: "Stripe", patternColor: "Black", patternSize: 50, patternOpacity: 50, mix: null };
+    const orangePart = { color: "Orange", pattern: "None", patternColor: null, patternSize: null, patternOpacity: null, mix: null };
+    const withPattern = {
+      id: 320, speciesId: 1, seed: "1234", traitConfigVersion: 1, rarityScore: 5.0,
+      traits: { shimmerTier: "None", shimmerColor: null, shimmerOpacity: 0, tail: bluePart, dorsal: orangePart, pectoral: orangePart, movement: { tailSpeed: 50, tailAmplitude: 0.4, finSpeed: 50, finAmplitude: 0.3 } },
+      breedingSource: null, createdAt: "2026-01-01T00:00:00Z", isBred: false, parentASeed: null, parentBSeed: null, breedCount: 0, isNew: false,
+    };
+    const plain = creature(321, 5678, 5.0);
+    cy.intercept("GET", "/api/game/backpack", { body: { capacity: 50, creatures: [withPattern, plain] } }).as("backpack");
+    login();
+    cy.wait("@backpack");
+
+    cy.get(".card").should("have.length", 2);
+    cy.contains("button.detail-section-head", "Filtros avançados").click();
+
+    // Filtro de cor da CAUDA por Azul — só o peixe com cauda Blue passa.
+    cy.get(".appearance-filter-part").first().within(() => {
+      cy.get(".color-chip").each(($el) => {
+        if ($el.attr("title") === "Azul") cy.wrap($el).click();
+      });
+    });
+    cy.get(".card").should("have.length", 1);
+
+    // Adiciona filtro de padrão da CAUDA (Estria) — continua 1, já bate os dois critérios.
+    cy.get(".appearance-filter-part").first().within(() => {
+      cy.contains(".filter-chip", "Estria").click();
+    });
+    cy.get(".card").should("have.length", 1);
+
+    // Badge de contagem de filtros ativos aparece no cabeçalho da seção.
+    cy.contains("button.detail-section-head", "Filtros avançados (2)");
+  });
+
   it("filtro 'só filhotes' esconde não-filhotes", () => {
     const normal = creature(307, 7777, 5.0, false);
     const bred = creature(308, 8888, 5.0, true);
@@ -145,6 +181,32 @@ describe("Mochila", () => {
     cy.get('input[type="checkbox"]').check();
     cy.get(".card").should("have.length", 1);
     cy.contains(".card", "Filhote");
+  });
+
+  it("venda em massa ao NPC mostra progresso ao vivo no modal", () => {
+    const a = creature(330, 1111, 3.0);
+    const b = creature(331, 2222, 3.5);
+    cy.intercept("GET", "/api/game/backpack", { body: { capacity: 50, creatures: [a, b] } }).as("backpack");
+    login();
+    cy.wait("@backpack");
+
+    cy.contains("button", "☑️ Selecionar").click();
+    cy.contains("button", "Selecionar todos").click();
+    cy.contains("button", "Vender ao NPC").click();
+    cy.contains("Essa ação não pode ser desfeita.");
+
+    // Ordenação padrão é raridade desc: 331 (3.5) processa antes de 330 (3.0) — atraso na
+    // primeira venda processada dá tempo de ver "Vendendo 0 de 2...".
+    cy.intercept("POST", "/api/game/creatures/331/sell-vendor", (req) => {
+      req.reply({ delay: 300, statusCode: 200, body: { price: 10 } });
+    }).as("sell2");
+    cy.intercept("POST", "/api/game/creatures/330/sell-vendor", { statusCode: 200, body: { price: 9 } }).as("sell1");
+    cy.intercept("GET", "/api/game/backpack", { body: { capacity: 50, creatures: [] } }).as("backpackAfter");
+
+    cy.get(".modal").contains("button", "Vender agora").click();
+    cy.contains("Vendendo 0 de 2...");
+    cy.wait(["@sell1", "@sell2"]);
+    cy.contains("19 moedas");
   });
 
   it("peixe novo comum (< 7.5) esconde score/produção, abre revelação instantânea e marca visto", () => {

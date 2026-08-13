@@ -1,25 +1,25 @@
 // Rótulos e formatação humana (PT-BR) dos traits e do breakdown de raridade.
 import { PT } from "./fishRenderer.js";
 
-export const PART_PT = { tail: "Cauda", dorsal: "Nadadeira dorsal", pectoral: "Nadadeira peitoral" };
+export const PART_PT = { tail: "Cauda", dorsal: "Dorsal", pectoral: "Peitoral" };
 
 export const RARITY_RANGES = ["menos de 5.4", "5.4 – 7.5", "7.5 – 9.8", "9.8 – 14.0", "14.0 ou mais"];
 
-// Rótulo humano de um fator do breakdown de raridade
+// Rótulo humano de um fator do breakdown de raridade (atributo primeiro, parte depois)
 export function factorLabel(f) {
   switch (f.key) {
     case "shimmerTier":
       return f.value === "None" ? "Corpo sem brilho" : `Brilho ${PT.tier[f.value].toLowerCase()}`;
     case "partColor":
-      return `${PART_PT[f.part]}: ${PT.color[f.value]}`;
+      return `Cor ${PART_PT[f.part]}: ${PT.color[f.value]}`;
     case "patternType":
-      return `${PART_PT[f.part]}: ${PT.pattern[f.value].toLowerCase()}`;
+      return `Padrão ${PART_PT[f.part]}: ${PT.pattern[f.value].toLowerCase()}`;
     case "patternColor":
-      return `Cor do padrão (${PART_PT[f.part].toLowerCase()}): ${PT.color[f.value]}`;
+      return `Cor padrão ${PART_PT[f.part]}: ${PT.color[f.value]}`;
     case "patternSizeExtreme":
-      return `Padrão ${f.value} (${PART_PT[f.part].toLowerCase()})`;
+      return `Padrão ${f.value} (${PART_PT[f.part]})`;
     case "patternOpacityExtreme":
-      return `Opacidade ${f.value} do padrão (${PART_PT[f.part].toLowerCase()})`;
+      return `Opacidade ${f.value} (${PART_PT[f.part]})`;
     case "speedExtreme":
       return `${f.part === "tail" ? "Cauda" : "Nadadeira"} ${f.value}`;
     case "samePattern":
