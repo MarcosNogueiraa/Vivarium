@@ -294,17 +294,41 @@ public static class TraitGenerator
     /// nova por chamada de <see cref="BreedTraits(long,ParentAncestry,ParentAncestry,int,double,double,double,double,double,double)"/>,
     /// nunca compartilhada entre cruzamentos diferentes.
     /// </summary>
-    private sealed class DuplicationStreak(double decay, double maxPenalty)
+    internal sealed class DuplicationStreak(double decay, double maxPenalty)
     {
         public int Count { get; private set; }
         public bool? SideA { get; private set; }
 
-        /// <summary>Empurra o threshold de herança pra LONGE do lado que já vem ganhando.</summary>
+        /// <summary>
+        /// Empurra o threshold de herança pra LONGE do lado que já vem ganhando — mas NUNCA
+        /// inverte o lado que o viés de raridade já favorece (só encolhe até um "cara ou coroa"
+        /// neutro em 0.5, no máximo). Bug real corrigido 13/08/2026 (relatado pelo usuário, conta
+        /// EoNeng: filhotes saindo com score bem abaixo dos dois pais): a versão original
+        /// multiplicava o threshold inteiro pela penalidade, o que podia SUBTRAIR do lado
+        /// favorecido pela raridade além do ponto neutro — como `RarityBiasStrength` é
+        /// deliberadamente sutil (threshold raramente passa de ~0.55-0.6, mesmo em pares bem
+        /// díspares), uma sequência de só 2-3 heranças seguidas do MESMO pai (natural quando esse
+        /// pai já tem os traços mais raros — exatamente o caso que a raridade deveria recompensar)
+        /// já bastava pra zerar ou inverter esse sinal, empurrando sistematicamente o filhote pro
+        /// pai MAIS FRACO em vez do mais raro. Agora a penalidade só encolhe a distância até 0.5
+        /// (nunca ultrapassa) quando o lado que está "ganhando" a sequência é o MESMO que a
+        /// raridade já favorece — nesse caso o pior resultado possível é um sorteio neutro, nunca
+        /// uma inversão ativa a favor do pai errado. Quando o lado que ganha a sequência já é o
+        /// lado MENOS favorecido pela raridade (aconteceu por sorte no sorteio, não por viés),
+        /// a penalidade continua livre pra empurrar mais ainda nessa direção (não há sinal de
+        /// raridade forte sendo contrariado).
+        /// </summary>
         public double ApplyPenalty(double threshold)
         {
             if (SideA is not { } sideA) return threshold;
             double penalty = Math.Min(maxPenalty, 1 - Math.Pow(decay, Count));
-            return sideA ? threshold * (1 - penalty) : threshold + (1 - threshold) * penalty;
+            if (sideA)
+            {
+                double reduced = threshold * (1 - penalty);
+                return threshold > 0.5 ? Math.Max(0.5, reduced) : reduced;
+            }
+            double increased = threshold + (1 - threshold) * penalty;
+            return threshold < 0.5 ? Math.Min(0.5, increased) : increased;
         }
 
         public void Update(bool mutated, bool fromA)
@@ -312,6 +336,16 @@ public static class TraitGenerator
             if (mutated) { Count = 0; SideA = null; return; }
             if (SideA == fromA) Count++;
             else { SideA = fromA; Count = 1; }
+        }
+
+        /// <summary>Só pra teste — constrói já com um estado de sequência específico.</summary>
+        internal static DuplicationStreak WithState(double decay, double maxPenalty, bool sideA, int count)
+        {
+            var streak = new DuplicationStreak(decay, maxPenalty);
+            streak.Update(mutated: false, fromA: sideA);
+            for (int i = 1; i < count; i++)
+                streak.Update(mutated: false, fromA: sideA);
+            return streak;
         }
     }
 

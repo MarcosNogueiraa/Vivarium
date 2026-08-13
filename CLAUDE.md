@@ -519,6 +519,16 @@ Duas mecânicas novas no motor de herança, pedidas pelo usuário depois de obse
 
 ⚠️ **Ajuste temporário de QA no mesmo dia:** `BreedingDefaults.RestHalfLifeDays` 5.0→**0.2** (25x mais rápido, ~4h48min de meia-vida em vez de 5 dias) — a pedido do usuário, só pra acelerar os testes desta rodada. Mesmo espírito do `GenerationIntervalMinutes`/gestação já temporariamente ajustados — **reverter pra 5.0 antes de qualquer lançamento "de verdade"**.
 
+### 8.21.1 Bug crítico corrigido no mesmo dia: anti-duplicação podia INVERTER o pai favorecido pela raridade (13/08/2026)
+
+Poucas horas depois do deploy de §8.21, o usuário relatou (conta `EoNeng`, print do "Registro de cruzamentos") vários filhotes nascendo com `RarityScore` bem ABAIXO dos dois pais (ex: 8.1+6.3→3.3; 9.1+6.3→4.1; 6.3+7.7→3.3) — o oposto do que herança deveria produzir na maioria das vezes.
+
+**Causa raiz:** `DuplicationStreak.ApplyPenalty` multiplicava o `threshold` de herança INTEIRO pela penalidade (`threshold * (1 - penalty)` quando o lado A vem ganhando a sequência) — sem nenhum limite. Como `RarityBiasStrength` é deliberadamente sutil por design (o `threshold` raramente passa de ~0.55-0.6, mesmo em pares bem díspares — só no caso mais extremo do jogo, Lendário×Sem-brilho, chega a ~0.71), bastava **1 ou 2 heranças seguidas do MESMO pai** — natural e esperado quando esse pai já tem os traços mais raros, exatamente o cenário que a raridade deveria recompensar — pra a penalidade (que sobe rápido: `1 - 0.55^1 = 0.45` já no primeiro "ganho" repetido) derrubar o threshold abaixo de 0.5, INVERTENDO o lado favorecido. Ou seja: a anti-duplicação, pensada só pra reduzir "clonagem" de identidade de pai, brigava ativamente com o mecanismo de raridade sempre que o pai mais raro também "ganhava" vários slots seguidos (o caso comum) — empurrando sistematicamente o filhote pro pai MAIS FRACO. Confirmado matematicamente (não só por suspeita): com o código antigo, `ApplyPenalty(0.71)` já caía pra `0.391` com uma sequência de tamanho 1.
+
+**Correção:** `ApplyPenalty` agora só pode encolher o `threshold` até um "cara ou coroa" neutro em 0.5 — nunca ultrapassa pro lado oposto. Quando o lado que vem "ganhando" a sequência JÁ é o menos favorecido pela raridade (aconteceu por sorte no sorteio, não por viés), a penalidade continua livre pra empurrar além de 0.5 sem restrição (não há sinal de raridade forte sendo contrariado nesse caso). `generator.js` espelhado 1:1 no mesmo commit.
+
+**Testes de regressão** (`BreedTraitsTests.cs`/`generator.test.js`): testam `DuplicationStreak.ApplyPenalty`/`applyPenalty` diretamente (classe interna exposta como `internal` só pra teste, mesmo padrão já usado em `ResolveOwnTraits`/`EffectiveParentTraits`) — confirmado que revertendo o fix, o teste falha exatamente como o bug real se manifestava (`threshold` caindo de 0.71 pra 0.391/0.178 com sequência de 1-10). `Vivarium.Simulation mutationfloor` re-rodado após o fix: impacto do piso de mutação continua estável (+2.1% vs +2.2% antes, dentro da margem de simulação), e a população em geral pontua mais alto nos dois cenários (com/sem piso) — confirma que o bug estava derrubando scores de forma ampla, não só em casos extremos.
+
 ---
 
 ## 9. Schema de dados completo (MVP, desacoplado para escalar)

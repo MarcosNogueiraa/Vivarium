@@ -517,6 +517,52 @@ public class BreedTraitsTests
         Assert.True(foundInherited, "não achou nenhum filho com subtraits de Degradê herdados de A pra validar o mix em bloco");
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(10)] // penalidade sempre no teto (AntiDuplicationMaxPenalty=0.75) a partir daqui
+    public void DuplicationStreak_ApplyPenalty_NuncaInverteOLadoJaFavorecidoPelaRaridade(int streakCount)
+    {
+        // Bug real corrigido 13/08/2026 (relatado pelo usuário, conta EoNeng — filhotes saindo
+        // com score bem abaixo dos DOIS pais). Causa: ApplyPenalty multiplicava o threshold
+        // inteiro pela penalidade, podendo SUBTRAIR do lado favorecido pela raridade além do
+        // ponto neutro (0.5) — como RarityBiasStrength é sutil por design (threshold raramente
+        // passa de ~0.55-0.6, mesmo em pares bem díspares como Lendário×Comum), uma sequência de
+        // só 2-3 heranças seguidas do MESMO pai (natural quando esse pai já tem os traços mais
+        // raros — exatamente o caso que a raridade deveria recompensar) já bastava pra inverter o
+        // sinal, empurrando sistematicamente o filhote pro pai MAIS FRACO.
+        var streak = TraitGenerator.DuplicationStreak.WithState(
+            BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty, sideA: true, count: streakCount);
+
+        // threshold=0.71 é o pior caso real (Lendário×Sem-brilho, ver comentário em
+        // BreedingConfig.cs) — mesmo aqui, com a MAIOR sequência possível (penalidade no teto de
+        // 75%), o resultado nunca pode cair abaixo de 0.5 (nunca inverte pra favorecer o pai B).
+        double result = streak.ApplyPenalty(0.71);
+        Assert.True(result >= 0.5, $"streak={streakCount}: threshold caiu pra {result:0.000}, abaixo de 0.5 — inverteu o lado favorecido pela raridade");
+
+        // Do lado B (sideA=false): mesma garantia espelhada — nunca cai abaixo de 0.5 quando B é
+        // quem a raridade favorece (threshold baixo).
+        var streakB = TraitGenerator.DuplicationStreak.WithState(
+            BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty, sideA: false, count: streakCount);
+        double resultB = streakB.ApplyPenalty(0.29); // simétrico de 0.71 (B favorecido)
+        Assert.True(resultB <= 0.5, $"streak={streakCount}: threshold subiu pra {resultB:0.000}, acima de 0.5 — inverteu o lado favorecido pela raridade (lado B)");
+    }
+
+    [Fact]
+    public void DuplicationStreak_ApplyPenalty_QuandoLadoQueGanhaJaEraOMenosFavorecido_ContinuaLivrePraEmpurrar()
+    {
+        // Quando o lado que vem ganhando a sequência NÃO é o que a raridade favorece (aconteceu
+        // por sorte no sorteio, não por viés), não há sinal forte sendo contrariado — a
+        // penalidade continua livre pra empurrar além de 0.5, reforçando o lado já favorecido.
+        var streak = TraitGenerator.DuplicationStreak.WithState(
+            BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty, sideA: true, count: 5);
+        // threshold=0.3: A já é o lado MENOS favorecido (B seria o esperado) — empurrar ainda
+        // mais pra longe de A é seguro, pode passar de 0.5 sem problema.
+        double result = streak.ApplyPenalty(0.3);
+        Assert.True(result < 0.3, $"esperava a penalidade continuar reduzindo o threshold, saiu {result:0.000}");
+    }
+
     [Fact]
     public void AntiDuplicacao_ReduzFracaoDeFilhotesCloneDeUmDosPais()
     {

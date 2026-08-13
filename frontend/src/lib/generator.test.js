@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   biasedInheritProbability, breedTraits, CONFIG, coinsPerHourOf, effectiveParentTraits, generateTraits,
-  probabilityOf, rarityBreakdown, resolveOwnTraits, restrictTable, roll01, synergyMultiplier, traitsOf,
-  vendorPriceOf, waterDegradationPerFishPerHour, weightOf,
+  newDuplicationStreak, probabilityOf, rarityBreakdown, resolveOwnTraits, restrictTable, roll01,
+  synergyMultiplier, traitsOf, vendorPriceOf, waterDegradationPerFishPerHour, weightOf,
 } from "./generator.js";
 
 function findSeedWithTailColor(color, searchLimit = 5000) {
@@ -217,6 +217,31 @@ describe("breedTraits — viés de raridade em cor de parte (31/07/2026)", () =>
 
 describe("anti-duplicação e piso de mutação (13/08/2026)", () => {
   // Espelha os testes equivalentes em BreedTraitsTests.cs (C#).
+
+  it.each([1, 2, 3, 10])("applyPenalty nunca inverte o lado já favorecido pela raridade (streak=%i)", (streakCount) => {
+    // Bug real corrigido 13/08/2026 (relatado pelo usuário, conta EoNeng — filhotes saindo com
+    // score bem abaixo dos dois pais). Ver comentário equivalente em BreedTraitsTests.cs (C#).
+    const streak = newDuplicationStreak(CONFIG.breeding.antiDuplicationDecay, CONFIG.breeding.antiDuplicationMaxPenalty);
+    streak.sideA = true;
+    streak.count = streakCount;
+    const result = streak.applyPenalty(0.71);
+    expect(result).toBeGreaterThanOrEqual(0.5);
+
+    const streakB = newDuplicationStreak(CONFIG.breeding.antiDuplicationDecay, CONFIG.breeding.antiDuplicationMaxPenalty);
+    streakB.sideA = false;
+    streakB.count = streakCount;
+    const resultB = streakB.applyPenalty(0.29);
+    expect(resultB).toBeLessThanOrEqual(0.5);
+  });
+
+  it("applyPenalty continua livre pra empurrar quando o lado que ganha já era o menos favorecido", () => {
+    const streak = newDuplicationStreak(CONFIG.breeding.antiDuplicationDecay, CONFIG.breeding.antiDuplicationMaxPenalty);
+    streak.sideA = true;
+    streak.count = 5;
+    const result = streak.applyPenalty(0.3);
+    expect(result).toBeLessThan(0.3);
+  });
+
   it("reduz a fração de filhotes que clonam um dos pais em 4 slots", () => {
     const parentASeed = findSeedWithTier("Subtle", 5000);
     const ta = generateTraits(parentASeed);
