@@ -557,6 +557,17 @@ Usuário fazendo teste de estresse cruzando peixes de altíssima raridade (marco
 
 **Decisão do usuário:** manter como está — documentar o mecanismo (esta entrada) em vez de mudar o motor. Sem mudança de código.
 
+### 8.22 Opt-out de coleta/limpeza automática de VIP + "peixe novo" na Mochila (13/08/2026)
+
+Resolve uma lacuna real: coleta automática (§8.3) e Limpeza Automática (§8.18) de VIP eram sempre ligadas, sem opção de desligar — quem prefere o momento de revelação manual (`CollectCelebration`, §8.19) a cada peixe, ou quer economizar soft evitando compra automática de filtro num momento específico, não tinha escolha. Junto, resolvido o "sumiço silencioso": peixe que aparece sozinho na Mochila via coleta automática nunca passava pelo momento de revelação — o jogador só descobria via contagem, sem saber qual peixe era novo.
+
+- **`Habitat.AutoCollectEnabled`/`AutoCleanEnabled`** (bool, default `true` — preserva o comportamento de sempre pra quem nunca mexeu no toggle). Migration `AddAutoToggleAndIsNew`: `defaultValue: true` explícito no `AddColumn` (o valor gerado automaticamente pelo EF seria `false`, que desligaria os dois recursos silenciosamente pra TODO habitat já existente — corrigido manualmente antes de aplicar). `GameService.ApplyTickAsync` passou a checar cada toggle antes de chamar `CollectAllReadyAsync`/`ApplyAutoCleanAsync` (além do check de VIP+online já existente). Configurável mesmo sem VIP ativo — só tem EFEITO com VIP (mesmo espírito do Sensor de Qualidade da Água, §8.18).
+- **`CreatureInstance.IsNew`** (bool, default `false`) — só `true` quando a criatura nasce pela coleta AUTOMÁTICA (`CollectAllReadyAsync`); coleta manual e breeding sempre gravam `false`, já que o clique do jogador (ou a celebração do Ninho) já É o momento de revelação. `CollectOne` ganhou o parâmetro `isNew` (default `false`) só pra explicitar isso no call site da coleta automática.
+- **`POST /api/game/toggles`** (`{autoCollectEnabled, autoCleanEnabled}`) e **`POST /api/game/creatures/{id}/mark-seen`** (zera `IsNew`, ownership checado por `OwnerId`, nunca confia no cliente) — endpoints novos em `GameEndpoints.cs`. `TankResponse`/`CreatureDto` expõem os campos novos.
+- **Frontend:** `StoreView.jsx` ganhou `AutoToggles` (2 checkboxes simples, sem debounce — clique único, diferente do slider do sensor) dentro do card VIP, salvando na hora via `api.setToggles`. `BackpackView.jsx`: peixe com `isNew` mostra selo "🆕 Novo" e a silhueta (`.fish-silhouette`, `filter: brightness(0) saturate(0)`) — clicar chama `revealNew` (atualização otimista local + `api.markSeen`, com fallback pra `refresh()` completo se der erro) em vez de abrir o detalhe; segundo clique (já revelado) abre normalmente.
+- **Bug real encontrado e corrigido no processo (pré-existente, não desta feature):** `AuthView.jsx` renderiza um aquário decorativo (`demoFish`, 6 peixes fake) no fundo da tela de login — desde a refatoração de traits congelados (§8.19.2, mesmo dia), `traitsOf(creature)` parou de ter fallback pra `generateTraits(seed)` quando `.traits` está ausente, e o `demoFish` nunca tinha esse campo. Resultado: a tela de login quebrava (`Cannot read properties of undefined (reading 'movement')`) de forma intermitente (a race entre o crash assíncrono do `requestAnimationFrame` do canvas e as asserções do teste explica por que só ~2 de 8 testes de um mesmo spec falhavam, não todos). Corrigido preenchendo `demoFish` com `generateTraits(BigInt(seed))` de verdade. Achado ao rodar a suíte e2e completa depois desta feature — lição: qualquer objeto "peixe" fabricado fora da API (não só em specs de teste, também em código de produção como esse) precisa de `.traits` desde a mudança de 13/08/2026.
+- **Testes:** `TogglesTests.cs` (7 casos — default ligado, desligar cada toggle impede a ação correspondente mesmo com VIP+online, coleta manual não marca `IsNew`, `mark-seen` funciona e é ownership-checked) + `toggles.cy.js`/extensão em `backpack.cy.js` (revelar peixe novo).
+
 ---
 
 ## 9. Schema de dados completo (MVP, desacoplado para escalar)
@@ -625,6 +636,8 @@ Habitat
 - CreatedAt
 - HasWaterSensor (bool, default false) -- Sensor de Qualidade da Água comprado (§8.17)
 - AutoCleanTriggerPercent (decimal, default 0) -- gatilho da Limpeza Automática de VIP; só tem efeito com HasWaterSensor=true
+- AutoCollectEnabled (bool, default true) -- opt-out da coleta automática de VIP (§8.22)
+- AutoCleanEnabled (bool, default true) -- opt-out da Limpeza Automática de VIP (§8.22)
 
 Species
 - Id (PK)
@@ -672,6 +685,7 @@ CreatureInstance
 - IsDead (bool, default false) -- não sobreviveu a uma gestação (risco cresce com BreedCount)
 - DiedAt (datetime, nullable)
 - SoldAt (datetime, nullable) -- vendido ao NPC (vendor, 8.12); não apaga a linha (mesma razão do IsDead)
+- IsNew (bool, default false) -- só true na coleta AUTOMÁTICA de VIP (§8.22); zera via mark-seen
 - CreatedAt
 
 ItemDefinition
@@ -824,6 +838,8 @@ Falta pra ir ao ar de verdade (depende de contas/decisões do usuário):
 | GET | `/api/vip` | ✓ | status da assinatura VIP (ativo/até quando) + tabela de preços dos pacotes |
 | POST | `/api/vip/subscribe` | ✓ | compra um pacote (`{days}`: 7\|15\|30) pagando premium; estende se já houver assinatura ativa |
 | POST | `/api/game/water-sensor/trigger` | ✓ | configura o gatilho (0–80%) da Limpeza Automática de VIP; exige o Sensor de Qualidade da Água já comprado (8.17) |
+| POST | `/api/game/toggles` | ✓ | liga/desliga coleta automática e Limpeza Automática de VIP (opt-out, default ligados — 8.22) |
+| POST | `/api/game/creatures/{id}/mark-seen` | ✓ | marca um peixe coletado automaticamente (IsNew) como visto — some o selo/silhueta da Mochila (8.22) |
 
 **Itens do MVP** (seed via migration `SeedItemDefinitions`): `filter_basic` (20 soft, restaura água pra 100 — tick roda antes, pra degradação pendente ser aplicada primeiro), `auto_filter` (500 soft, permanente via UserInventory, tick lê e degrada na metade), `tank_upgrade` (base 50 soft, +1 capacidade, preço = base × 1.5^(capacidade − 3) — seção 8.4). Filtro e upgrade aplicam na hora (sem inventário); só o auto_filter fica em UserInventory.
 

@@ -24,9 +24,12 @@ public record TankResponse(
     DateTime? VipEndAt = null,
     bool HasWaterSensor = false,
     decimal AutoCleanTriggerPercent = 0m,
-    decimal WaterSensorMaxTriggerPercent = 0m);
+    decimal WaterSensorMaxTriggerPercent = 0m,
+    bool AutoCollectEnabled = true,
+    bool AutoCleanEnabled = true);
 
 public record SetAutoCleanTriggerRequest(decimal Percent);
+public record SetTogglesRequest(bool AutoCollectEnabled, bool AutoCleanEnabled);
 
 public record BackpackResponse(int Capacity, IReadOnlyList<CreatureDto> Creatures);
 

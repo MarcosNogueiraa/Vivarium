@@ -77,6 +77,15 @@ public class CreatureInstance
     /// </summary>
     public DateTime? SoldAt { get; set; }
     public DateTime CreatedAt { get; set; }
+    /// <summary>
+    /// Peixe apareceu na Mochila/tanque via coleta AUTOMÁTICA de VIP (§8.3), sem o jogador ter
+    /// clicado em nada — pula o momento de revelação (CollectCelebration) que a coleta manual
+    /// sempre mostra. Fica escondido/silhueta na Mochila até o jogador marcar como visto
+    /// (`POST /api/game/creatures/{id}/mark-seen`). Default false: só a coleta automática
+    /// (`GameService.CollectAllReadyAsync`) grava true; coleta manual e breeding já têm seu
+    /// próprio momento de revelação, não precisam disso.
+    /// </summary>
+    public bool IsNew { get; set; }
 }
 
 public class MarketListing

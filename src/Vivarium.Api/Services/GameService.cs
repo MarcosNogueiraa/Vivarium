@@ -78,13 +78,14 @@ public class GameService(VivariumDbContext db)
 
         // Diferencial VIP: coleta automática + Limpeza Automática (§8.18), mas só enquanto
         // o tanque está online — hoisting do check pra não consultar HasActiveVipAsync 2x.
+        // Cada uma tem opt-out próprio (Habitat.AutoCollectEnabled/AutoCleanEnabled, default
+        // true — preserva o comportamento de sempre pra quem nunca mexeu no toggle).
         bool vipOnline = HabitatTicker.IsOnline(habitat.LastHeartbeatAt, nowUtc, TickConfig.Default)
             && await HasActiveVipAsync(habitat.UserId, nowUtc);
-        if (vipOnline)
-        {
+        if (vipOnline && habitat.AutoCollectEnabled)
             await CollectAllReadyAsync(habitat, nowUtc);
+        if (vipOnline && habitat.AutoCleanEnabled)
             await ApplyAutoCleanAsync(habitat, nowUtc);
-        }
     }
 
     /// <summary>
@@ -151,6 +152,56 @@ public class GameService(VivariumDbContext db)
             return ServiceResult.Conflict("Tente de novo.");
         }
         return ServiceResult.Success(new { autoCleanTriggerPercent = habitat.AutoCleanTriggerPercent });
+    }
+
+    /// <summary>
+    /// Liga/desliga a coleta automática e a Limpeza Automática de VIP (opt-out, default
+    /// ambos ligados) — não exige VIP ativo pra configurar, só tem EFEITO com VIP ativo
+    /// (mesmo espírito do Sensor de Qualidade da Água: comprável/configurável sem VIP, fica
+    /// dormente até assinar).
+    /// </summary>
+    public async Task<ServiceResult> SetTogglesAsync(long userId, bool autoCollectEnabled, bool autoCleanEnabled)
+    {
+        var habitat = await FindHabitatAsync(userId);
+        if (habitat is null)
+            return ServiceResult.NotFound("Habitat não encontrado");
+
+        habitat.AutoCollectEnabled = autoCollectEnabled;
+        habitat.AutoCleanEnabled = autoCleanEnabled;
+
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return ServiceResult.Conflict("Tente de novo.");
+        }
+        return ServiceResult.Success(new { habitat.AutoCollectEnabled, habitat.AutoCleanEnabled });
+    }
+
+    /// <summary>
+    /// Marca um peixe coletado automaticamente (<see cref="CreatureInstance.IsNew"/>) como visto
+    /// — some o selo/silhueta da Mochila. Ownership checado pelo OwnerId, nunca confia no cliente.
+    /// </summary>
+    public async Task<ServiceResult> MarkSeenAsync(long userId, long creatureId)
+    {
+        var creature = await db.CreatureInstances
+            .FirstOrDefaultAsync(c => c.Id == creatureId && c.OwnerId == userId);
+        if (creature is null)
+            return ServiceResult.NotFound("Criatura não encontrada");
+
+        creature.IsNew = false;
+
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return ServiceResult.Conflict("Tente de novo.");
+        }
+        return ServiceResult.Success();
     }
 
     /// <summary>
@@ -278,12 +329,17 @@ public class GameService(VivariumDbContext db)
             if (!toTank && backpackCount >= HabitatDefaults.BackpackCapacity)
                 break; // tanque e mochila cheios — só aí a coleta automática realmente para
 
-            CollectOne(habitat, item, nowUtc, toTank);
+            CollectOne(habitat, item, nowUtc, toTank, isNew: true);
             if (toTank) active++; else backpackCount++;
         }
     }
 
-    private CreatureInstance CollectOne(Habitat habitat, GenerationQueueItem item, DateTime nowUtc, bool toTank)
+    /// <summary>
+    /// <paramref name="isNew"/>: true só na coleta AUTOMÁTICA (o jogador não clicou em nada,
+    /// não viu o momento de revelação — CollectCelebration). Coleta manual sempre passa false:
+    /// o clique já É o momento de revelação, mostrado na hora pelo cliente.
+    /// </summary>
+    private CreatureInstance CollectOne(Habitat habitat, GenerationQueueItem item, DateTime nowUtc, bool toTank, bool isNew = false)
     {
         var collected = CreatureCollector.Collect(item.IsSick, CreatureCollector.NewRandomSeed);
         item.Status = QueueItemStatus.Collected;
@@ -298,6 +354,7 @@ public class GameService(VivariumDbContext db)
             RarityScore = collected.RarityScore,
             TraitsJson = TraitsSerialization.Serialize(collected.Traits),
             CreatedAt = nowUtc,
+            IsNew = isNew,
         };
         db.CreatureInstances.Add(creature);
         return creature;
@@ -582,7 +639,9 @@ public class GameService(VivariumDbContext db)
             vipSub?.EndAt,
             habitat.HasWaterSensor,
             habitat.AutoCleanTriggerPercent,
-            TickConfig.Default.WaterSensorMaxTriggerPercent));
+            TickConfig.Default.WaterSensorMaxTriggerPercent,
+            habitat.AutoCollectEnabled,
+            habitat.AutoCleanEnabled));
     }
 
     // Transferência direta entre contas (negociação externa é responsabilidade

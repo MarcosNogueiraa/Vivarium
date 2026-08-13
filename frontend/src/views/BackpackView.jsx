@@ -76,6 +76,22 @@ export function BackpackView({ refreshTank, notify }) {
     await refresh();
   }
 
+  // Peixe coletado pela coleta AUTOMÁTICA de VIP (creature.isNew) some silhueta/selo só depois
+  // que o jogador clica pra revelar — atualização otimista (sem esperar refresh completo), com
+  // fallback pro estado normal (refresh) se o servidor rejeitar por algum motivo.
+  async function revealNew(c) {
+    try {
+      await api.markSeen(c.id);
+      setData((prev) => prev && {
+        ...prev,
+        creatures: prev.creatures.map((x) => (x.id === c.id ? { ...x, isNew: false } : x)),
+      });
+    } catch (e) {
+      notify(e.message);
+      await refresh();
+    }
+  }
+
   const visible = useMemo(() => {
     if (!data) return [];
     return data.creatures
@@ -197,16 +213,23 @@ export function BackpackView({ refreshTank, notify }) {
                 }}>
                   <button
                     className="fish-stage as-button"
-                    onClick={() => selectMode ? toggleSelected(c) : setDetail(c)}
-                    title={selectMode ? "Selecionar" : "Ver detalhes"}
+                    onClick={() => {
+                      if (selectMode) toggleSelected(c);
+                      else if (c.isNew) revealNew(c);
+                      else setDetail(c);
+                    }}
+                    title={selectMode ? "Selecionar" : c.isNew ? "Peixe novo — clique pra revelar" : "Ver detalhes"}
                   >
-                    <FishCanvas creature={c} />
+                    <div className={c.isNew ? "fish-silhouette" : undefined}>
+                      <FishCanvas creature={c} />
+                    </div>
                     {selectMode && <span className={`select-check${isSelected ? " checked" : ""}`}>{isSelected ? "✓" : ""}</span>}
                   </button>
                   <div className="card-row">
                     <RarityBadge score={Number(c.rarityScore)} />
                     <span className="produces mono">~{coinsPerHourOf(Number(c.rarityScore)).toFixed(1)}/h</span>
                   </div>
+                  {c.isNew && <span className="new-tag">🆕 Novo — clique pra revelar</span>}
                   {c.isBred && <span className="bred-tag">🐣 Filhote</span>}
                   {!selectMode && (
                     <div className="card-row">

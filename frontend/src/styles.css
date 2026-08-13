@@ -744,6 +744,10 @@ input:focus {
 .badge .gem { width: 8px; height: 8px; border-radius: 2px; transform: rotate(45deg); background: rgba(255, 255, 255, 0.9); box-shadow: 0 0 8px rgba(255, 255, 255, 0.6); }
 .shimmer-label { color: var(--glow-2); font-size: 0.82rem; font-weight: 600; }
 .bred-tag { color: #e8628f; font-size: 0.82rem; font-weight: 600; white-space: nowrap; }
+.new-tag { color: var(--gold, #f0b93b); font-size: 0.82rem; font-weight: 600; white-space: nowrap; }
+/* Peixe coletado pela coleta automática de VIP, ainda não revelado (§8.19-toggle) */
+.fish-silhouette { filter: brightness(0) saturate(0) opacity(0.55); transition: filter 0.25s; }
+.fish-silhouette:hover { filter: brightness(0) saturate(0) opacity(0.7); }
 
 /* ---------- Toast ---------- */
 .toast {
