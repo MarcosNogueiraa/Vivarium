@@ -16,39 +16,22 @@ function layersForStep(step) {
 }
 
 /**
- * Um peixe isolado (thumbnail/detalhe), animado a partir do seed. Se for um
- * filhote (`isBred`), passe `parentASeed`/`parentBSeed` — os traits reais vêm
- * da herança (BreedTraits), não do seed do filhote sozinho. Se o PAI (A ou B)
- * também for filhote, passe também `parentAGrandparentASeed`/`BSeed` e
- * `parentBGrandparentASeed`/`BSeed` — sem eles, o cálculo de herança trata
- * silenciosamente esse pai como se não tivesse ancestralidade própria (cai pra
- * `generateTraits(seed)` puro em vez de `breedTraits`), o que pode produzir um
- * peixe visualmente diferente do que realmente é (bug real 10/08/2026: nenhum
- * chamador passava esses 4 campos, então todo FishCanvas de filhote com avós
- * renderizava errado — só o texto do "por que é raro", que usa `traitsOf`
- * direto com a criatura completa, mostrava os traits certos). `revealStep`
- * (opcional, 0–4): monta o peixe parte a parte em vez de tudo de uma vez —
- * ver `REVEAL_ORDER`/`CollectCelebration.jsx`. Omitido = peixe completo (uso
- * normal em toda lista/detalhe do jogo).
+ * Um peixe isolado (thumbnail/detalhe), animado a partir da criatura completa
+ * (`creature.seed` + `creature.traits`, já congelados pelo servidor no
+ * nascimento — CLAUDE.md §8.19.1/13-08-2026). Sempre passe a criatura INTEIRA,
+ * nunca um objeto parcial reconstruído (`{seed, isBred, ...}`) — foi
+ * exatamente esse padrão que escondeu um bug real 2x antes desta simplificação
+ * (10/08 e 12/08/2026): um componente reconstruindo um subconjunto de campos
+ * divergia do texto "por que é raro", que sempre usou a criatura completa.
+ * `revealStep` (opcional, 0–4): monta o peixe parte a parte em vez de tudo de
+ * uma vez — ver `REVEAL_ORDER`/`CollectCelebration.jsx`. Omitido = peixe
+ * completo (uso normal em toda lista/detalhe do jogo).
  */
-export function FishCanvas({
-  seed, width = 220, isBred = false, parentASeed = null, parentBSeed = null,
-  parentAGrandparentASeed = null, parentAGrandparentBSeed = null,
-  parentBGrandparentASeed = null, parentBGrandparentBSeed = null,
-  revealStep = null,
-}) {
+export function FishCanvas({ creature, width = 220, revealStep = null }) {
   const canvasRef = useRef(null);
   const height = Math.round(width * (VIEW_H / VIEW_W));
-  const bigSeed = useMemo(() => BigInt(seed), [seed]);
-  const traits = useMemo(
-    () => traitsOf({
-      seed, isBred, parentASeed, parentBSeed,
-      parentAGrandparentASeed, parentAGrandparentBSeed,
-      parentBGrandparentASeed, parentBGrandparentBSeed,
-    }),
-    [seed, isBred, parentASeed, parentBSeed,
-      parentAGrandparentASeed, parentAGrandparentBSeed, parentBGrandparentASeed, parentBGrandparentBSeed],
-  );
+  const bigSeed = useMemo(() => BigInt(creature.seed), [creature.seed]);
+  const traits = useMemo(() => traitsOf(creature), [creature]);
   const layers = useMemo(() => layersForStep(revealStep), [revealStep]);
 
   useEffect(() => {

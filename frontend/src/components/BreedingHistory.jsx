@@ -11,12 +11,7 @@ function MiniFish({ creature, label, died }) {
   return (
     <div className="hist-fish">
       <div className={`hist-fish-thumb${died ? " hist-fish-dead" : ""}`} style={{ "--tier": band.color }}>
-        <FishCanvas
-          seed={creature.seed} width={56} isBred={creature.isBred}
-          parentASeed={creature.parentASeed} parentBSeed={creature.parentBSeed}
-          parentAGrandparentASeed={creature.parentAGrandparentASeed} parentAGrandparentBSeed={creature.parentAGrandparentBSeed}
-          parentBGrandparentASeed={creature.parentBGrandparentASeed} parentBGrandparentBSeed={creature.parentBGrandparentBSeed}
-        />
+        <FishCanvas creature={creature} width={56} />
         {died && <span className="hist-fish-rip" title="Não sobreviveu à gestação">🕊️</span>}
       </div>
       <span className="hist-fish-label">{label}</span>

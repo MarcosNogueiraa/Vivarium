@@ -6,6 +6,8 @@
 // então continua alcançável em qualquer ponto do scroll. `cy.viewport` com altura BAIXA
 // força o overflow de propósito, mesmo num modal com pouco conteúdo.
 
+import { generateTraits } from "../../src/lib/generator.js";
+
 function fakeJwt(sub = "1", username = "jogador1") {
   const b64 = (obj) => btoa(JSON.stringify(obj)).replace(/=+$/, "");
   return `${b64({ alg: "none", typ: "JWT" })}.${b64({ sub, unique_name: username })}.sig`;
@@ -14,6 +16,7 @@ function fakeJwt(sub = "1", username = "jogador1") {
 function creature(id, seed, rarityScore) {
   return {
     id, speciesId: 1, seed: String(seed), traitConfigVersion: 1, rarityScore,
+    traits: generateTraits(BigInt(seed)), breedingSource: null,
     createdAt: "2026-01-01T00:00:00Z", isBred: false, parentASeed: null, parentBSeed: null, breedCount: 0,
   };
 }

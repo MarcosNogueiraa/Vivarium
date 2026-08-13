@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Vivarium.Core.Domain;
+using Vivarium.Core.Generation;
 
 namespace Vivarium.Api.Tests;
 
@@ -33,6 +34,7 @@ public class LeaderboardTests : IClassFixture<VivariumApiFactory>
             {
                 SpeciesId = 1, OwnerId = ownerId, HabitatId = habitatId,
                 Seed = seed, TraitConfigVersion = 1, RarityScore = rarityScore, CreatedAt = DateTime.UtcNow,
+                TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(seed)),
                 ParentASeed = parentASeed, ParentBSeed = parentBSeed,
             });
             await db.SaveChangesAsync();
@@ -62,6 +64,7 @@ public class LeaderboardTests : IClassFixture<VivariumApiFactory>
                 {
                     SpeciesId = 1, Owner = user, Habitat = habitat,
                     Seed = 5_000_000 + i, TraitConfigVersion = 1, RarityScore = startingRarity + i * 0.01m, CreatedAt = DateTime.UtcNow,
+                    TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(5_000_000 + i)),
                 });
             }
             await db.SaveChangesAsync();

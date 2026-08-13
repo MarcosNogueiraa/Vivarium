@@ -1,16 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  biasedInheritProbability, breedTraits, CONFIG, coinsPerHourOf, effectiveParentTraits, generateTraits,
-  newDuplicationStreak, probabilityOf, rarityBreakdown, resolveOwnTraits, restrictTable, roll01,
-  synergyMultiplier, traitsOf, vendorPriceOf, waterDegradationPerFishPerHour, weightOf,
+  biasedInheritProbability, breedingPreview, CONFIG, coinsPerHourOf, generateTraits,
+  probabilityOf, rarityBreakdownOf, roll01, synergyMultiplier, traitDistribution, traitsOf,
+  vendorPriceOf, waterDegradationPerFishPerHour,
 } from "./generator.js";
-
-function findSeedWithTailColor(color, searchLimit = 5000) {
-  for (let s = 1n; s <= BigInt(searchLimit); s++) {
-    if (generateTraits(s).tail.color === color) return s;
-  }
-  throw new Error(`nenhum seed com cauda ${color} nos primeiros ${searchLimit}`);
-}
 
 describe("roll01", () => {
   it("é determinístico pro mesmo seed+salt", () => {
@@ -74,14 +67,18 @@ describe("generateTraits", () => {
 });
 
 describe("traitsOf", () => {
-  it("peixe normal usa generateTraits(seed)", () => {
-    const creature = { seed: "42", isBred: false };
-    expect(traitsOf(creature)).toEqual(generateTraits(42n));
+  // 13/08/2026 — traits congelados no nascimento: o cliente não deriva mais nada, só lê
+  // `creature.traits` (já resolvido pelo servidor, seja peixe fresco ou filhote).
+  it("devolve creature.traits direto, sem recalcular nada", () => {
+    const traits = generateTraits(42n);
+    const creature = { seed: "42", traits };
+    expect(traitsOf(creature)).toBe(traits);
   });
 
-  it("filhote usa breedTraits com os seeds dos pais", () => {
-    const creature = { seed: "999", isBred: true, parentASeed: "1", parentBSeed: "2" };
-    expect(traitsOf(creature)).toEqual(breedTraits(999n, 1n, 2n));
+  it("funciona igual pra um filhote (o servidor já resolveu a herança)", () => {
+    const traits = generateTraits(999n);
+    const creature = { seed: "999", isBred: true, parentASeed: "1", parentBSeed: "2", traits };
+    expect(traitsOf(creature)).toBe(traits);
   });
 });
 
@@ -105,6 +102,31 @@ describe("probabilityOf", () => {
     const table = [["a", 70], ["b", 20], ["c", 10]];
     const total = table.reduce((s, [v]) => s + probabilityOf(table, v), 0);
     expect(total).toBeCloseTo(1, 10);
+  });
+});
+
+describe("traitDistribution / breedingPreview (prévia do Ninho, antes de confirmar)", () => {
+  it("distribuição de um trait categórico soma 1", () => {
+    const dist = traitDistribution(CONFIG.partColors, "Orange", "Blue", 0.04, 0.15);
+    const total = dist.reduce((s, { prob }) => s + prob, 0);
+    expect(total).toBeCloseTo(1, 10);
+  });
+
+  it("sem mutação, só os valores dos pais têm probabilidade > 0", () => {
+    const dist = traitDistribution(CONFIG.partColors, "Orange", "Blue", 0, 0.15);
+    for (const { value, prob } of dist) {
+      if (value === "Orange" || value === "Blue") expect(prob).toBeGreaterThan(0);
+      else expect(prob).toBe(0);
+    }
+  });
+
+  it("breedingPreview usa os traits reais (já congelados) dos dois pais", () => {
+    const parentA = { seed: "1", traits: generateTraits(1n) };
+    const parentB = { seed: "2", traits: generateTraits(2n) };
+    const preview = breedingPreview(parentA, parentB);
+    expect(preview.parentA).toEqual(parentA.traits);
+    expect(preview.parentB).toEqual(parentB.traits);
+    expect(preview.shimmerTier.reduce((s, { prob }) => s + prob, 0)).toBeCloseTo(1, 10);
   });
 });
 
@@ -159,231 +181,44 @@ describe("synergyMultiplier", () => {
   });
 });
 
-describe("breedTraits — viés de raridade em cor de parte (31/07/2026)", () => {
-  // Antes só o shimmerTier usava rarityBias; cor/padrão de parte herdavam 50/50 puro,
-  // deixando o filhote livre pra regredir perto do piso da população mesmo vindo de
-  // pais decentes. Espelha os testes equivalentes em BreedTraitsTests.cs (C#).
-  it("inclina a herança de cor pro valor mais raro entre os pais", () => {
-    const whiteParent = findSeedWithTailColor("PureWhite");
-    const orangeParent = findSeedWithTailColor("Orange", 50);
-    const rarityBias = 0.6;
-    const n = 4000;
-
-    // Anti-duplicação desligada (antiDuplicationDecay/MaxPenalty=0, 13/08/2026) — este teste
-    // isola só o efeito do rarityBias na cor da cauda; sem desligar, a sequência (que também
-    // reage ao tier, sorteado ANTES da cor, com o MESMO rarityBias) desloca a taxa observada
-    // pra fora da faixa estreita esperada aqui.
-    let whiteCount = 0;
-    for (let childSeed = 1n; childSeed <= BigInt(n); childSeed++) {
-      const color = breedTraits(childSeed, whiteParent, orangeParent, 0, rarityBias,
-        null, null, null, null, CONFIG.breeding.grandparentReachChance, CONFIG.breeding.mutationRarityBiasStrength, 0, 0).tail.color;
-      if (color === "PureWhite") whiteCount++;
-    }
-
-    const expected = biasedInheritProbability(0.01, 0.22, rarityBias);
-    expect(expected).toBeGreaterThan(0.5);
-    expect(whiteCount / n).toBeGreaterThan(expected - 0.05);
-    expect(whiteCount / n).toBeLessThan(expected + 0.05);
-  });
-
-  it("bias 0 (comportamento antigo) continua 50/50 puro — não quebra o default", () => {
-    const whiteParent = findSeedWithTailColor("PureWhite");
-    const orangeParent = findSeedWithTailColor("Orange", 50);
-    const n = 4000;
-
-    let whiteCount = 0;
-    for (let childSeed = 1n; childSeed <= BigInt(n); childSeed++) {
-      const color = breedTraits(childSeed, whiteParent, orangeParent, 0, 0).tail.color;
-      if (color === "PureWhite") whiteCount++;
-    }
-    expect(whiteCount / n).toBeGreaterThan(0.45);
-    expect(whiteCount / n).toBeLessThan(0.55);
-  });
-
-  it("com os parâmetros reais de produção, não vira lavagem garantida", () => {
-    const whiteParent = findSeedWithTailColor("PureWhite");
-    const orangeParent = findSeedWithTailColor("Orange", 50);
-    const { mutationChance, rarityBias } = CONFIG.breeding;
-    const n = 3000;
-
-    let whiteCount = 0;
-    for (let childSeed = 1n; childSeed <= BigInt(n); childSeed++) {
-      const color = breedTraits(childSeed + 10_000_000n, whiteParent, orangeParent, mutationChance, rarityBias).tail.color;
-      if (color === "PureWhite") whiteCount++;
-    }
-    expect(whiteCount / n).toBeLessThan(0.70);
-  });
-});
-
-describe("anti-duplicação e piso de mutação (13/08/2026)", () => {
-  // Espelha os testes equivalentes em BreedTraitsTests.cs (C#).
-
-  it.each([1, 2, 3, 10])("applyPenalty nunca inverte o lado já favorecido pela raridade (streak=%i)", (streakCount) => {
-    // Bug real corrigido 13/08/2026 (relatado pelo usuário, conta EoNeng — filhotes saindo com
-    // score bem abaixo dos dois pais). Ver comentário equivalente em BreedTraitsTests.cs (C#).
-    const streak = newDuplicationStreak(CONFIG.breeding.antiDuplicationDecay, CONFIG.breeding.antiDuplicationMaxPenalty);
-    streak.sideA = true;
-    streak.count = streakCount;
-    const result = streak.applyPenalty(0.71);
-    expect(result).toBeGreaterThanOrEqual(0.5);
-
-    const streakB = newDuplicationStreak(CONFIG.breeding.antiDuplicationDecay, CONFIG.breeding.antiDuplicationMaxPenalty);
-    streakB.sideA = false;
-    streakB.count = streakCount;
-    const resultB = streakB.applyPenalty(0.29);
-    expect(resultB).toBeLessThanOrEqual(0.5);
-  });
-
-  it("applyPenalty continua livre pra empurrar quando o lado que ganha já era o menos favorecido", () => {
-    const streak = newDuplicationStreak(CONFIG.breeding.antiDuplicationDecay, CONFIG.breeding.antiDuplicationMaxPenalty);
-    streak.sideA = true;
-    streak.count = 5;
-    const result = streak.applyPenalty(0.3);
-    expect(result).toBeLessThan(0.3);
-  });
-
-  it("reduz a fração de filhotes que clonam um dos pais em 4 slots", () => {
-    const parentASeed = findSeedWithTier("Subtle", 5000);
-    const ta = generateTraits(parentASeed);
-    let parentBSeed = null;
-    for (let s = 1n; s <= 5000n; s++) {
-      const tb = generateTraits(s);
-      if (tb.shimmerTier !== ta.shimmerTier && tb.tail.color !== ta.tail.color
-        && tb.dorsal.color !== ta.dorsal.color && tb.pectoral.color !== ta.pectoral.color) {
-        parentBSeed = s;
-        break;
-      }
-    }
-    if (parentBSeed === null) throw new Error("não achou par distinto");
-
-    const n = 6000;
-    function countCloneOfA(decay, maxPenalty) {
-      let clones = 0;
-      for (let childSeed = 1n; childSeed <= BigInt(n); childSeed++) {
-        const child = breedTraits(childSeed, parentASeed, parentBSeed, 0, 0,
-          null, null, null, null, 0, -1, decay, maxPenalty);
-        if (child.shimmerTier === ta.shimmerTier && child.tail.color === ta.tail.color
-          && child.dorsal.color === ta.dorsal.color && child.pectoral.color === ta.pectoral.color)
-          clones++;
-      }
-      return clones / n;
-    }
-
-    const pctDisabled = countCloneOfA(0, 0);
-    const pctEnabled = countCloneOfA(CONFIG.breeding.antiDuplicationDecay, CONFIG.breeding.antiDuplicationMaxPenalty);
-
-    expect(pctDisabled).toBeGreaterThan(0.03);
-    expect(pctDisabled).toBeLessThan(0.11);
-    expect(pctEnabled).toBeLessThan(pctDisabled * 0.9);
-  }, 20000);
-
-  it.each([
-    ["Black", "Black"], // ambos 2ª cor mais rara (3%) — só Preto ou Branco
-    ["Blue", "Red"], // Azul(20%)/Vermelho(18%): piso = Azul, só exclui Laranja
-    ["Blue", "Black"], // Azul(20%)/Preto(3%): piso AINDA é Azul, o mais fraco — não o mais raro
-  ])("piso de mutação: nunca sai mais comum que o pai mais fraco (%s + %s)", (colorA, colorB) => {
-    const parentASeed = findSeedWithTailColor(colorA);
-    const parentBSeed = findSeedWithTailColor(colorB);
-    const floorWeight = Math.max(weightOf(CONFIG.partColors, colorA), weightOf(CONFIG.partColors, colorB));
-
-    for (let childSeed = 1n; childSeed <= 3000n; childSeed++) {
-      const child = breedTraits(childSeed, parentASeed, parentBSeed, 1.0, 0,
-        null, null, null, null, 0, CONFIG.breeding.mutationRarityBiasStrength, 0, 0);
-      // Pula os poucos casos em que o tier também mutou pra Vibrante+ (correlação shimmer→cor
-      // reescala a tabela de cor inteira — mesma ressalva do teste C# equivalente).
-      if (["Vibrant", "Rare", "Legendary"].includes(child.shimmerTier)) continue;
-      const resultWeight = weightOf(CONFIG.partColors, child.tail.color);
-      expect(resultWeight).toBeLessThanOrEqual(floorWeight);
-    }
-  });
-
-  it("restrictTable: piso no valor mais comum da tabela mantém a tabela inteira", () => {
-    const maxWeight = Math.max(...CONFIG.shimmerTiers.map(([, w]) => w));
-    expect(restrictTable(CONFIG.shimmerTiers, maxWeight).length).toBe(CONFIG.shimmerTiers.length);
-  });
-
-  it("restrictTable: piso no 2º valor mais raro exclui todos os mais comuns", () => {
-    const blackWeight = weightOf(CONFIG.partColors, "Black");
-    const restricted = restrictTable(CONFIG.partColors, blackWeight).map(([v]) => v);
-    expect(new Set(restricted)).toEqual(new Set(["Black", "PureWhite"]));
-  });
-});
-
-function findSeedWithTier(tier, searchLimit = 5000) {
-  for (let s = 1n; s <= BigInt(searchLimit); s++) {
-    if (generateTraits(s).shimmerTier === tier) return s;
-  }
-  throw new Error(`nenhum seed com tier ${tier} nos primeiros ${searchLimit}`);
-}
-
-describe("chance de herdar traço de um avô (31/07/2026)", () => {
-  // Espelha os testes equivalentes em BreedTraitsTests.cs (C#) — testa
-  // effectiveParentTraits/resolveOwnTraits diretamente em vez de tentar isolar o sinal na
-  // saída ponta-a-ponta (o valor "próprio" de um pai bred já reflete os mesmos avós que o
-  // reach-back alcançaria, então observar só a cor final do filhote é ambíguo).
-  it("sem avós, sempre retorna o próprio", () => {
-    const own = generateTraits(1n);
-    for (let childSeed = 1n; childSeed <= 500n; childSeed++) {
-      const result = effectiveParentTraits(childSeed, "salt", own, null, null, 1);
-      expect(result.traits).toEqual(own);
-      expect(result.source).toBe("own");
-    }
-  });
-
-  it("com avós, a fração que alcança um avô aproxima reachChance", () => {
-    const own = generateTraits(1n);
-    const grandparent1 = generateTraits(2n);
-    const grandparent2 = generateTraits(3n);
-    const reachChance = 0.3;
-    const n = 15000;
-
-    let reached = 0;
-    for (let childSeed = 1n; childSeed <= BigInt(n); childSeed++) {
-      const result = effectiveParentTraits(childSeed, "salt", own, grandparent1, grandparent2, reachChance);
-      if (result.traits !== own) reached++;
-    }
-    expect(reached / n).toBeGreaterThan(reachChance - 0.03);
-    expect(reached / n).toBeLessThan(reachChance + 0.03);
-  });
-
-  it("reachChance 0 nunca alcança o avô mesmo com avós conhecidos", () => {
-    const own = generateTraits(1n);
-    const grandparent1 = generateTraits(2n);
-    const grandparent2 = generateTraits(3n);
-    for (let childSeed = 1n; childSeed <= 2000n; childSeed++) {
-      const result = effectiveParentTraits(childSeed, "salt", own, grandparent1, grandparent2, 0);
-      expect(result.traits).toEqual(own);
-      expect(result.source).toBe("own");
-    }
-  });
-
-  it("resolveOwnTraits: pai fresco usa generateTraits direto", () => {
-    expect(resolveOwnTraits(42n, null, null, 0.08, 0.15)).toEqual(generateTraits(42n));
-  });
-
-  it("resolveOwnTraits: pai filhote recomputa via os avós, nunca generateTraits(seed) direto (bug corrigido)", () => {
-    const resolved = resolveOwnTraits(999n, 1n, 2n, 0.08, 0.15);
-    expect(resolved).toEqual(breedTraits(999n, 1n, 2n, 0.08, 0.15));
-    expect(resolved).not.toEqual(generateTraits(999n));
-  });
-
-  it("breedTraits sem ancestralidade de avós é idêntico ao comportamento antigo (regressão)", () => {
-    const semAvos = breedTraits(42n, 1n, 2n, 0.08, 0.15);
-    const comAvosNulos = breedTraits(42n, 1n, 2n, 0.08, 0.15, null, null, null, null, 0.15);
-    expect(comAvosNulos).toEqual(semAvos);
-  });
-});
-
-describe("rarityBreakdown", () => {
+describe("rarityBreakdownOf", () => {
+  // Desde 13/08/2026: não sorteia mais nada — só recalcula probabilidade/pontos em cima dos
+  // valores JÁ RESOLVIDOS em `creature.traits` (nenhum RNG, nenhum seed envolvido no cálculo).
   it("soma dos fatores bate com o total retornado", () => {
-    const { total, factors } = rarityBreakdown(42n);
+    const creature = { traits: generateTraits(42n) };
+    const { total, factors } = rarityBreakdownOf(creature);
     const sum = factors.reduce((s, f) => s + f.points, 0);
     expect(sum).toBeCloseTo(total, 10);
   });
 
   it("sempre inclui o fator de shimmerTier do corpo", () => {
-    const { factors } = rarityBreakdown(42n);
+    const creature = { traits: generateTraits(42n) };
+    const { factors } = rarityBreakdownOf(creature);
     expect(factors.some((f) => f.key === "shimmerTier")).toBe(true);
+  });
+
+  it("sem creature.breedingSource, todo fator tem source null", () => {
+    const creature = { traits: generateTraits(42n) };
+    const { factors } = rarityBreakdownOf(creature);
+    for (const f of factors) expect(f.source ?? null).toBeNull();
+  });
+
+  it("com creature.breedingSource, mapeia ParentA/ParentB/Mutation pro rótulo esperado pela UI", () => {
+    const creature = {
+      traits: generateTraits(42n),
+      breedingSource: [
+        { key: "shimmerTier", part: null, source: "ParentA" },
+        { key: "color", part: "tail", source: "ParentB" },
+        { key: "pattern", part: "tail", source: "Mutation" },
+      ],
+    };
+    const { factors } = rarityBreakdownOf(creature);
+    expect(factors.find((f) => f.key === "shimmerTier").source).toBe("parentA");
+    expect(factors.find((f) => f.key === "partColor" && f.part === "tail").source).toBe("parentB");
+    expect(factors.find((f) => f.key === "patternType" && f.part === "tail").source).toBe("mutation");
+    // patternColor reusa a mesma origem do pick de padrão (motor não rastreia um slot próprio)
+    const patternColorFactor = factors.find((f) => f.key === "patternColor" && f.part === "tail");
+    if (patternColorFactor) expect(patternColorFactor.source).toBe("mutation");
   });
 });
 
@@ -434,7 +269,7 @@ describe("Degradê — mix de cores (12/08/2026)", () => {
 
   it("Even soma as duas cores (base e padrão) no breakdown de raridade", () => {
     const { seed, part } = findSeedWithGradientMix("Even", 20000);
-    const { factors } = rarityBreakdown(seed);
+    const { factors } = rarityBreakdownOf({ traits: generateTraits(seed) });
     const colorFactor = factors.find((f) => f.key === "partColor" && f.part === part);
     const patternColorFactor = factors.find((f) => f.key === "patternColor" && f.part === part);
     expect(colorFactor.points).toBeGreaterThan(0);
@@ -446,7 +281,7 @@ describe("Degradê — mix de cores (12/08/2026)", () => {
   it("split assimétrico só conta a cor dominante — a minoritária zera e ganha uma nota", () => {
     for (const mix of ["BaseDominant", "PatternDominant"]) {
       const { seed, part } = findSeedWithGradientMix(mix, 5000);
-      const { factors } = rarityBreakdown(seed);
+      const { factors } = rarityBreakdownOf({ traits: generateTraits(seed) });
       const colorFactor = factors.find((f) => f.key === "partColor" && f.part === part);
       const patternColorFactor = factors.find((f) => f.key === "patternColor" && f.part === part);
       if (mix === "BaseDominant") {
@@ -460,30 +295,6 @@ describe("Degradê — mix de cores (12/08/2026)", () => {
       }
     }
   });
-
-  it("mix herdado em bloco no breeding quando o subtrait vem do mesmo pai", () => {
-    let parentA = null;
-    for (let s = 1n; s <= 5000n; s++) {
-      if (generateTraits(s).tail.pattern === "Gradient") { parentA = s; break; }
-    }
-    let parentB = null;
-    for (let s = 1n; s <= 5000n; s++) {
-      if (generateTraits(s).tail.pattern === "None") { parentB = s; break; }
-    }
-    const traitsA = generateTraits(parentA);
-
-    let foundInherited = false;
-    for (let childSeed = 1n; childSeed <= 5000n; childSeed++) {
-      const child = breedTraits(childSeed, parentA, parentB, 0, 0);
-      if (child.tail.pattern !== "Gradient") continue;
-      if (child.tail.patternColor !== traitsA.tail.patternColor) continue;
-      if (child.tail.patternSize !== traitsA.tail.patternSize) continue;
-      if (child.tail.patternOpacity !== traitsA.tail.patternOpacity) continue;
-      foundInherited = true;
-      expect(child.tail.mix).toBe(traitsA.tail.mix);
-    }
-    expect(foundInherited).toBe(true);
-  }, 20000);
 });
 
 describe("waterDegradationPerFishPerHour", () => {
@@ -494,3 +305,4 @@ describe("waterDegradationPerFishPerHour", () => {
     expect(epico).toBeCloseTo(comum * 3, 10); // score 15 / ref 5 = 3x o peso de score 5
   });
 });
+

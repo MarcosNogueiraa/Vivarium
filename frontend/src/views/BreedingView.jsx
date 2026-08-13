@@ -28,12 +28,7 @@ function ParentPreviewCard({ label, creature, traits }) {
   return (
     <div className="parent-preview-card">
       <span className="eyebrow">{label}</span>
-      <FishCanvas
-        seed={creature.seed} width={220}
-        isBred={creature.isBred} parentASeed={creature.parentASeed} parentBSeed={creature.parentBSeed}
-        parentAGrandparentASeed={creature.parentAGrandparentASeed} parentAGrandparentBSeed={creature.parentAGrandparentBSeed}
-        parentBGrandparentASeed={creature.parentBGrandparentASeed} parentBGrandparentBSeed={creature.parentBGrandparentBSeed}
-      />
+      <FishCanvas creature={creature} width={220} />
       <span className="badge" style={{ "--tier": band.color }}><span className="gem" /> {band.name} · {score.toFixed(1)}</span>
       {creature.isBred && <span className="bred-tag">🐣 Filhote</span>}
       <div className="peek-row">
@@ -329,11 +324,7 @@ export function BreedingView({ tank, refreshTank, notify }) {
                   onMouseLeave={cancelPeek}
                 >
                   <button className="fish-stage as-button" onClick={() => togglePick(c)} title="Selecionar">
-                    <FishCanvas
-                      seed={c.seed} isBred={c.isBred} parentASeed={c.parentASeed} parentBSeed={c.parentBSeed}
-                      parentAGrandparentASeed={c.parentAGrandparentASeed} parentAGrandparentBSeed={c.parentAGrandparentBSeed}
-                      parentBGrandparentASeed={c.parentBGrandparentASeed} parentBGrandparentBSeed={c.parentBGrandparentBSeed}
-                    />
+                    <FishCanvas creature={c} />
                   </button>
                   <RarityBadge score={Number(c.rarityScore)} />
                   {c.isBred && <span className="bred-tag">🐣 Filhote</span>}

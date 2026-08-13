@@ -40,12 +40,7 @@ function Farewell({ creature }) {
   return (
     <div className="farewell-fish">
       <div className="farewell-portrait" style={{ "--tier": band.color }}>
-        <FishCanvas
-          seed={creature.seed} width={120} isBred={creature.isBred}
-          parentASeed={creature.parentASeed} parentBSeed={creature.parentBSeed}
-          parentAGrandparentASeed={creature.parentAGrandparentASeed} parentAGrandparentBSeed={creature.parentAGrandparentBSeed}
-          parentBGrandparentASeed={creature.parentBGrandparentASeed} parentBGrandparentBSeed={creature.parentBGrandparentBSeed}
-        />
+        <FishCanvas creature={creature} width={120} />
       </div>
       <span className="badge" style={{ "--tier": band.color }}>
         <span className="gem" /> {band.name} · {score.toFixed(1)}
@@ -70,12 +65,7 @@ function ParentChip({ creature, dead, onEnter, onLeave, onClick }) {
       tabIndex={0}
       title={`${band.name} · ${score.toFixed(1)} — toque pra ver os atributos`}
     >
-      <FishCanvas
-        seed={creature.seed} width={64} isBred={creature.isBred}
-        parentASeed={creature.parentASeed} parentBSeed={creature.parentBSeed}
-        parentAGrandparentASeed={creature.parentAGrandparentASeed} parentAGrandparentBSeed={creature.parentAGrandparentBSeed}
-        parentBGrandparentASeed={creature.parentBGrandparentASeed} parentBGrandparentBSeed={creature.parentBGrandparentBSeed}
-      />
+      <FishCanvas creature={creature} width={64} />
     </div>
   );
 }
@@ -128,8 +118,6 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
   const sourceOf = (pred) => breakdown.factors.find(pred)?.source ?? null;
   const SOURCE_LABEL = {
     parentA: "🧬 Herdado do Pai A", parentB: "🧬 Herdado do Pai B",
-    grandparentA1: "🧬 Herdado de um avô", grandparentA2: "🧬 Herdado de um avô",
-    grandparentB1: "🧬 Herdado de um avô", grandparentB2: "🧬 Herdado de um avô",
     mutation: "🎲 Mutação (não veio de nenhum pai)",
   };
   const attrLines = [
@@ -186,13 +174,7 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
           style={{ "--tier": tierColor }}
           onClick={suspense && !revealed ? revealNext : undefined}
         >
-          <FishCanvas
-            seed={creature.seed} width={220} isBred={creature.isBred}
-            parentASeed={creature.parentASeed} parentBSeed={creature.parentBSeed}
-            parentAGrandparentASeed={creature.parentAGrandparentASeed} parentAGrandparentBSeed={creature.parentAGrandparentBSeed}
-            parentBGrandparentASeed={creature.parentBGrandparentASeed} parentBGrandparentBSeed={creature.parentBGrandparentBSeed}
-            revealStep={suspense ? step : null}
-          />
+          <FishCanvas creature={creature} width={220} revealStep={suspense ? step : null} />
         </div>
 
         {suspense && !revealed && (

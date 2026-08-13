@@ -200,11 +200,7 @@ export function BackpackView({ refreshTank, notify }) {
                     onClick={() => selectMode ? toggleSelected(c) : setDetail(c)}
                     title={selectMode ? "Selecionar" : "Ver detalhes"}
                   >
-                    <FishCanvas
-                      seed={c.seed} isBred={c.isBred} parentASeed={c.parentASeed} parentBSeed={c.parentBSeed}
-                      parentAGrandparentASeed={c.parentAGrandparentASeed} parentAGrandparentBSeed={c.parentAGrandparentBSeed}
-                      parentBGrandparentASeed={c.parentBGrandparentASeed} parentBGrandparentBSeed={c.parentBGrandparentBSeed}
-                    />
+                    <FishCanvas creature={c} />
                     {selectMode && <span className={`select-check${isSelected ? " checked" : ""}`}>{isSelected ? "✓" : ""}</span>}
                   </button>
                   <div className="card-row">

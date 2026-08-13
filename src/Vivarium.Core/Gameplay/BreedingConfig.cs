@@ -48,27 +48,6 @@ public static class BreedingDefaults
     public const double RarityBiasStrength = 0.15;
 
     /// <summary>
-    /// Chance (por "slot": brilho, cauda, dorsal, peitoral — 31/07/2026) de um filhote herdar
-    /// um traço de um AVÔ em vez do pai direto, quando esse pai é ele mesmo um filhote — um
-    /// traço "pulando uma geração", como recessivo. Deliberadamente MENOR que a chance de herdar
-    /// do pai direto (que domina o resto do tempo).
-    /// Trajetória de ajustes no mesmo dia (12/08/2026), a pedido do usuário: 0.15→0.03→0.01→0.001.
-    /// Essa chance é sorteada de forma INDEPENDENTE 8 vezes por cruzamento (4 slots × 2 lados dos
-    /// pais) — com 15%, a chance de PELO MENOS UM traço vir de um avô em qualquer cruzamento era
-    /// `1-(0.85)^8 ≈ 72.8%`, quase 3 em cada 4 cruzamentos, deixando a influência dos avós parecer
-    /// dominante mesmo a chance individual sendo baixa (usuário relatou resultados "estranhos"
-    /// analisando o histórico de cruzamentos de uma conta real com múltiplas gerações). Depois de
-    /// confirmar caso a caso (via consulta direta ao banco) que cada ocorrência era o mecanismo
-    /// funcionando corretamente — não bug — o usuário decidiu por conta própria deixar as chances
-    /// "como se fossem peixes gerados do zero", ou seja, essencialmente desligar o mecanismo, mas
-    /// preservando um resíduo mínimo em vez de zerar de vez (pra não remover a mecânica por
-    /// completo). Com 0.001, a chance de pelo menos 1 traço vir de avô cai pra
-    /// `1-(0.999)^8 ≈ 0.8%` — praticamente nunca acontece, mas ainda existe. Validado com
-    /// `Vivarium.Simulation breed`.
-    /// </summary>
-    public const double GrandparentReachChance = 0.001;
-
-    /// <summary>
     /// Anti-duplicação (13/08/2026, pedido do usuário): cada um dos 7 "slots" com viés de
     /// raridade (tier de brilho, cor e padrão de cauda/dorsal/peitoral) era sorteado de forma
     /// independente — nada impedia o filhote de puxar quase todos (ou todos) os atributos do

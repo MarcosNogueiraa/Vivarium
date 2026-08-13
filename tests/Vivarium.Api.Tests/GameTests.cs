@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Vivarium.Core.Domain;
+using Vivarium.Core.Generation;
 
 namespace Vivarium.Api.Tests;
 
@@ -89,6 +90,7 @@ public class GameTests : IClassFixture<VivariumApiFactory>
                 {
                     SpeciesId = 1, OwnerId = userId, HabitatId = habitatId,
                     Seed = 1000 + i, TraitConfigVersion = 1, RarityScore = 3m,
+                    TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(1000 + i)),
                     CreatedAt = DateTime.UtcNow,
                 });
             }
@@ -182,7 +184,7 @@ public class GameTests : IClassFixture<VivariumApiFactory>
         Assert.Empty(tank!.Queue); // nada preso na fila
         Assert.Equal(3, tank.Creatures.Count); // tanque cheio (capacidade 3)
 
-        var backpack = await client.GetFromJsonAsync<Vivarium.Api.Contracts.BackpackResponse>("/api/game/backpack");
+        var backpack = await client.GetFromJsonAsync<Vivarium.Api.Contracts.BackpackResponse>("/api/game/backpack", TraitsSerialization.Options);
         Assert.Equal(2, backpack!.Creatures.Count); // os 2 excedentes foram pra mochila, não travaram
     }
 

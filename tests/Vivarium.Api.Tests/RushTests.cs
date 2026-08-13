@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Vivarium.Core.Domain;
+using Vivarium.Core.Generation;
 
 namespace Vivarium.Api.Tests;
 
@@ -35,7 +36,9 @@ public class RushTests : IClassFixture<VivariumApiFactory>
             var c = new CreatureInstance
             {
                 SpeciesId = 1, OwnerId = userId, HabitatId = habitatId,
-                Seed = seed, TraitConfigVersion = 1, RarityScore = rarityScore, CreatedAt = DateTime.UtcNow,
+                Seed = seed, TraitConfigVersion = 1, RarityScore = rarityScore,
+                TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(seed)),
+                CreatedAt = DateTime.UtcNow,
             };
             db.CreatureInstances.Add(c);
             await db.SaveChangesAsync();

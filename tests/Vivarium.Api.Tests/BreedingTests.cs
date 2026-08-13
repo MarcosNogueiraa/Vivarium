@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Vivarium.Core.Domain;
 using Vivarium.Core.Gameplay;
+using Vivarium.Core.Generation;
 
 namespace Vivarium.Api.Tests;
 
@@ -46,7 +47,9 @@ public class BreedingTests : IClassFixture<VivariumApiFactory>
             var c = new CreatureInstance
             {
                 SpeciesId = 1, OwnerId = userId, HabitatId = habitatId,
-                Seed = seed, TraitConfigVersion = 1, RarityScore = rarityScore, CreatedAt = DateTime.UtcNow,
+                Seed = seed, TraitConfigVersion = 1, RarityScore = rarityScore,
+                TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(seed)),
+                CreatedAt = DateTime.UtcNow,
             };
             db.CreatureInstances.Add(c);
             await db.SaveChangesAsync();
@@ -333,13 +336,17 @@ public class BreedingTests : IClassFixture<VivariumApiFactory>
                 db.CreatureInstances.Add(new CreatureInstance
                 {
                     SpeciesId = 1, OwnerId = userId, HabitatId = habitatId,
-                    Seed = 9000 + i, TraitConfigVersion = 1, RarityScore = 4m, CreatedAt = DateTime.UtcNow,
+                    Seed = 9000 + i, TraitConfigVersion = 1, RarityScore = 4m,
+                    TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(9000 + i)),
+                    CreatedAt = DateTime.UtcNow,
                 });
             for (int i = 0; i < HabitatDefaults.BackpackCapacity - 1; i++)
                 db.CreatureInstances.Add(new CreatureInstance
                 {
                     SpeciesId = 1, OwnerId = userId, HabitatId = null,
-                    Seed = 9100 + i, TraitConfigVersion = 1, RarityScore = 4m, CreatedAt = DateTime.UtcNow,
+                    Seed = 9100 + i, TraitConfigVersion = 1, RarityScore = 4m,
+                    TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(9100 + i)),
+                    CreatedAt = DateTime.UtcNow,
                 });
             await db.SaveChangesAsync();
         });
@@ -370,7 +377,9 @@ public class BreedingTests : IClassFixture<VivariumApiFactory>
             var stranded = new CreatureInstance
             {
                 SpeciesId = 1, OwnerId = userId, HabitatId = breedingHabitatId,
-                Seed = 7001, TraitConfigVersion = 1, RarityScore = 5m, CreatedAt = DateTime.UtcNow,
+                Seed = 7001, TraitConfigVersion = 1, RarityScore = 5m,
+                TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(7001)),
+                CreatedAt = DateTime.UtcNow,
             };
             db.CreatureInstances.Add(stranded);
             await db.SaveChangesAsync();

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { traitsOf } from "./generator.js";
+import { generateTraits, traitsOf } from "./generator.js";
 import { nextFishEta, tankFishSorted, tankPotential, tankSynergy } from "./tankMath.js";
 
 function fish(id, seed, rarityScore) {
-  return { id, seed: String(seed), rarityScore, isBred: false };
+  return { id, seed: String(seed), rarityScore, isBred: false, traits: generateTraits(BigInt(seed)) };
 }
 
 describe("tankSynergy", () => {

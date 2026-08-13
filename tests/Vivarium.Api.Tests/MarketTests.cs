@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Vivarium.Core.Domain;
+using Vivarium.Core.Generation;
 
 namespace Vivarium.Api.Tests;
 
@@ -21,6 +22,7 @@ public class MarketTests : IClassFixture<VivariumApiFactory>
             {
                 SpeciesId = 1, OwnerId = userId, HabitatId = habitat.Id,
                 Seed = 424242, TraitConfigVersion = 1, RarityScore = 5.5m,
+                TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(424242)),
                 CreatedAt = DateTime.UtcNow,
             };
             db.CreatureInstances.Add(creature);
@@ -39,6 +41,7 @@ public class MarketTests : IClassFixture<VivariumApiFactory>
             {
                 SpeciesId = 1, OwnerId = userId, HabitatId = null,
                 Seed = 484848, TraitConfigVersion = 1, RarityScore = 4.4m,
+                TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(484848)),
                 CreatedAt = DateTime.UtcNow,
             };
             db.CreatureInstances.Add(creature);

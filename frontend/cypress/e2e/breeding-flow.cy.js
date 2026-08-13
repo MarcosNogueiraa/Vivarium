@@ -2,6 +2,8 @@
 // confirmar o cruzamento, e a gestação ativa (aguardando/pronta + acelerar com premium).
 // API mockada via cy.intercept.
 
+import { generateTraits } from "../../src/lib/generator.js";
+
 function fakeJwt(sub = "1", username = "jogador1") {
   const b64 = (obj) => btoa(JSON.stringify(obj)).replace(/=+$/, "");
   return `${b64({ alg: "none", typ: "JWT" })}.${b64({ sub, unique_name: username })}.sig`;
@@ -10,6 +12,7 @@ function fakeJwt(sub = "1", username = "jogador1") {
 function creature(id, seed, rarityScore) {
   return {
     id, speciesId: 1, seed: String(seed), traitConfigVersion: 1, rarityScore,
+    traits: generateTraits(BigInt(seed)), breedingSource: null,
     createdAt: "2026-01-01T00:00:00Z", isBred: false, parentASeed: null, parentBSeed: null, breedCount: 0,
   };
 }
@@ -155,8 +158,6 @@ describe("Ninho — gestação ativa", () => {
   });
 
   it("mostra a chance e a origem (herdado/mutação) de cada atributo do filhote (12/08/2026)", () => {
-    // Filhote de verdade (isBred + seeds dos pais) — sem isso rarityBreakdownOf trata como
-    // peixe fresco e não calcula origem nenhuma (mesmo padrão de traitsOf em toda a base).
     const bredParentA = { ...parentA, seed: "111111" };
     const bredParentB = { ...parentB, seed: "222222" };
     cy.intercept("GET", "/api/breeding", {
@@ -166,7 +167,21 @@ describe("Ninho — gestação ativa", () => {
     login();
     cy.wait(["@status", "@backpack"]);
 
-    const child = bredCreature(404, 444444, 8.5, 111111, 222222);
+    // Desde 13/08/2026, a origem de cada atributo (herdado/mutação) vem congelada em
+    // `breedingSource` (o servidor grava isso no nascimento) — sem ela, rarityBreakdownOf não
+    // tem de onde tirar o rótulo (mesmo padrão em toda a base: nada mais é derivado do seed).
+    const child = {
+      ...bredCreature(404, 444444, 8.5, 111111, 222222),
+      breedingSource: [
+        { key: "shimmerTier", part: null, source: "ParentA" },
+        { key: "color", part: "tail", source: "ParentB" },
+        { key: "pattern", part: "tail", source: "Mutation" },
+        { key: "color", part: "dorsal", source: "ParentA" },
+        { key: "pattern", part: "dorsal", source: "ParentB" },
+        { key: "color", part: "pectoral", source: "ParentB" },
+        { key: "pattern", part: "pectoral", source: "ParentA" },
+      ],
+    };
     cy.intercept("POST", "/api/breeding/collect", { statusCode: 200, body: { child, parentADied: false, parentBDied: false } }).as("collect");
     cy.intercept("GET", "/api/breeding", { body: { active: false, slot: null } }).as("statusAfter");
     cy.intercept("GET", "/api/game/backpack", { body: { capacity: 50, creatures: [child] } }).as("backpackAfter");
