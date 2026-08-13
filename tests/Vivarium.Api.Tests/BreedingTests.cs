@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Vivarium.Core.Domain;
+using Vivarium.Core.Gameplay;
 
 namespace Vivarium.Api.Tests;
 
@@ -323,8 +324,8 @@ public class BreedingTests : IClassFixture<VivariumApiFactory>
         (await client.PostAsJsonAsync("/api/breeding/start", new { parentAId = a, parentBId = b })).EnsureSuccessStatusCode();
         await MakeSlotReadyNow(userId);
 
-        // Tanque (capacidade 3) e mochila (capacidade 50) ficam com só 1 vaga livre no total —
-        // menos que as 3 necessárias pro pior caso.
+        // Tanque (capacidade 3) e mochila (capacidade HabitatDefaults.BackpackCapacity) ficam
+        // com só 1 vaga livre no total — menos que as 3 necessárias pro pior caso.
         long habitatId = await HabitatIdOf(userId);
         await _factory.WithDbAsync(async db =>
         {
@@ -334,7 +335,7 @@ public class BreedingTests : IClassFixture<VivariumApiFactory>
                     SpeciesId = 1, OwnerId = userId, HabitatId = habitatId,
                     Seed = 9000 + i, TraitConfigVersion = 1, RarityScore = 4m, CreatedAt = DateTime.UtcNow,
                 });
-            for (int i = 0; i < 49; i++)
+            for (int i = 0; i < HabitatDefaults.BackpackCapacity - 1; i++)
                 db.CreatureInstances.Add(new CreatureInstance
                 {
                     SpeciesId = 1, OwnerId = userId, HabitatId = null,

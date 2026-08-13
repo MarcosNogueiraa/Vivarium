@@ -151,6 +151,42 @@ public class GameTests : IClassFixture<VivariumApiFactory>
     }
 
     [Fact]
+    public async Task Vip_Online_TanqueCheio_ColetaAutomaticaCaiParaMochilaEmVezDeTravar()
+    {
+        // Bug real corrigido 12/08/2026 (relatado pelo usuário): a coleta automática VIP
+        // (CollectAllReadyAsync) parava assim que o tanque enchia (break), diferente da coleta
+        // MANUAL, que sempre cai pra mochila — resultado: fila travada pra sempre com o tanque
+        // cheio, mesmo com espaço de sobra na mochila e o jogador online o tempo todo.
+        var (client, userId) = await _factory.RegisterAsync("vip2");
+        long habitatId = await HabitatIdOf(userId);
+
+        await _factory.WithDbAsync(async db =>
+        {
+            db.VipSubscriptions.Add(new VipSubscription
+            {
+                UserId = userId,
+                StartAt = DateTime.UtcNow.AddDays(-1),
+                EndAt = DateTime.UtcNow.AddDays(30),
+                Status = SubscriptionStatus.Active,
+            });
+            var habitat = await db.Habitats.FirstAsync(h => h.Id == habitatId);
+            habitat.LastHeartbeatAt = DateTime.UtcNow; // online
+        });
+        // Capacidade padrão do tanque é 3; o registro já deixa 1 item pronto na fila (8.13) —
+        // insere mais 4 pra garantir itens sobrando depois de encher o tanque.
+        for (int i = 0; i < 4; i++)
+            await InserirItemProntoNaFila(habitatId);
+
+        var tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
+
+        Assert.Empty(tank!.Queue); // nada preso na fila
+        Assert.Equal(3, tank.Creatures.Count); // tanque cheio (capacidade 3)
+
+        var backpack = await client.GetFromJsonAsync<Vivarium.Api.Contracts.BackpackResponse>("/api/game/backpack");
+        Assert.Equal(2, backpack!.Creatures.Count); // os 2 excedentes foram pra mochila, não travaram
+    }
+
+    [Fact]
     public async Task FreeOnline_NaoColetaAutomaticamente()
     {
         var (client, userId) = await _factory.RegisterAsync("free1");

@@ -228,8 +228,13 @@ public static class EconomyDefaults
 public static class HabitatDefaults
 {
     public const int Capacity = 3;
-    /// <summary>Storage de criaturas fora do tanque (não farmam). Base pro breeding.</summary>
-    public const int BackpackCapacity = 50;
+    /// <summary>
+    /// Storage de criaturas fora do tanque (não farmam). Base pro breeding.
+    /// 50→100 (12/08/2026, a pedido do usuário) — junto do fix da coleta automática VIP
+    /// (`GameService.CollectAllReadyAsync`) não sobrar pra mochila, jogadores estavam
+    /// enchendo a mochila mais rápido do que conseguiam esvaziar via mercado/vendor.
+    /// </summary>
+    public const int BackpackCapacity = 100;
     public const int QueueCap = 5;
     /// <summary>
     /// Geração deliberadamente lenta — o ritmo "de graça" existe pra não dar pra rushar o
