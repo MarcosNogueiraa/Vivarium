@@ -2,7 +2,16 @@
 // lista gestações passadas com pais/filhote e quem morreu, e é responsivo em mobile.
 // API mockada via cy.intercept.
 
-import { generateTraits } from "../../src/lib/generator.js";
+function fakeTraits(seed) {
+  const colors = ["Orange", "Blue", "Red", "Yellow", "Green", "Purple", "Black", "PureWhite"];
+  const color = colors[Number(BigInt(seed) % 8n)];
+  const part = { color, pattern: "None", patternColor: null, patternSize: null, patternOpacity: null, mix: null };
+  return {
+    shimmerTier: "None", shimmerColor: null, shimmerOpacity: 0,
+    tail: part, dorsal: part, pectoral: part,
+    movement: { tailSpeed: 50, tailAmplitude: 0.4, finSpeed: 50, finAmplitude: 0.3 },
+  };
+}
 
 function fakeJwt(sub = "1", username = "jogador1") {
   const b64 = (obj) => btoa(JSON.stringify(obj)).replace(/=+$/, "");
@@ -12,7 +21,7 @@ function fakeJwt(sub = "1", username = "jogador1") {
 function creature(id, seed, rarityScore) {
   return {
     id, speciesId: 1, seed: String(seed), traitConfigVersion: 1, rarityScore,
-    traits: generateTraits(BigInt(seed)), breedingSource: null,
+    traits: fakeTraits(seed), breedingSource: null,
     createdAt: "2026-01-01T00:00:00Z", isBred: false, parentASeed: null, parentBSeed: null, breedCount: 0,
   };
 }
