@@ -30,5 +30,15 @@ public static class AdminEndpoints
                 await db.SaveChangesAsync();
             return result.ToHttp();
         });
+
+        group.MapPost("/wallet", async (
+            AdjustWalletRequest body, ClaimsPrincipal principal, AdminService admin, VivariumDbContext db) =>
+        {
+            var result = await admin.AdjustUserWalletAsync(
+                TokenService.GetUserId(principal), body.Username, body.CurrencyCode, body.Mode, body.Amount, DateTime.UtcNow);
+            if (result.Ok)
+                await db.SaveChangesAsync();
+            return result.ToHttp();
+        });
     }
 }
