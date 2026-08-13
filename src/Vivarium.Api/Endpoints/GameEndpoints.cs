@@ -69,5 +69,17 @@ public static class GameEndpoints
         group.MapPost("/water-sensor/trigger", async (
             SetAutoCleanTriggerRequest req, ClaimsPrincipal principal, GameService game) =>
             (await game.SetAutoCleanTriggerAsync(TokenService.GetUserId(principal), req.Percent)).ToHttp());
+
+        // ---------- Toggles de coleta automática / Limpeza Automática (opt-out de VIP) ----------
+
+        group.MapPost("/toggles", async (
+            SetTogglesRequest req, ClaimsPrincipal principal, GameService game) =>
+            (await game.SetTogglesAsync(TokenService.GetUserId(principal), req.AutoCollectEnabled, req.AutoCleanEnabled)).ToHttp());
+
+        // ---------- Peixe novo (coletado automaticamente sem revelação) ----------
+
+        group.MapPost("/creatures/{creatureId:long}/mark-seen", async (
+            long creatureId, ClaimsPrincipal principal, GameService game) =>
+            (await game.MarkSeenAsync(TokenService.GetUserId(principal), creatureId)).ToHttp());
     }
 }

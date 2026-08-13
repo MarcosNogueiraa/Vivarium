@@ -65,6 +65,45 @@ function WaterSensorSlider({ tank, notify, onSaved }) {
   );
 }
 
+/// Opt-out da coleta automática/Limpeza Automática de VIP — checkboxes simples (sem debounce,
+/// diferente do slider do sensor, já que aqui é um só clique por vez, não arrasto contínuo).
+/// Salva na hora; qualquer erro volta o checkbox pro estado anterior via refreshTank.
+function AutoToggles({ tank, notify, onSaved }) {
+  const [busy, setBusy] = useState(false);
+  async function onChange(field, checked) {
+    setBusy(true);
+    try {
+      const autoCollectEnabled = field === "collect" ? checked : (tank?.autoCollectEnabled ?? true);
+      const autoCleanEnabled = field === "clean" ? checked : (tank?.autoCleanEnabled ?? true);
+      await api.setToggles(autoCollectEnabled, autoCleanEnabled);
+      await onSaved();
+    } catch (err) {
+      notify(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="card-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: 6 }}>
+      <label className="filter-toggle">
+        <input
+          type="checkbox" checked={tank?.autoCollectEnabled ?? true} disabled={busy}
+          onChange={(e) => onChange("collect", e.target.checked)}
+        />
+        Coleta automática
+      </label>
+      <label className="filter-toggle">
+        <input
+          type="checkbox" checked={tank?.autoCleanEnabled ?? true} disabled={busy}
+          onChange={(e) => onChange("clean", e.target.checked)}
+        />
+        Limpeza automática
+      </label>
+      {!tank?.isVip && <p className="faint">Só tem efeito com VIP ativo — a configuração fica guardada até você assinar.</p>}
+    </div>
+  );
+}
+
 export function StoreView({ tank, refreshTank, notify }) {
   const [items, setItems] = useState(null);
   const [warnFilter, setWarnFilter] = useState(false);
@@ -136,6 +175,7 @@ export function StoreView({ tank, refreshTank, notify }) {
             ? <>Ativo até <b>{new Date(tank.vipEndAt).toLocaleDateString("pt-BR")}</b></>
             : "Sem VIP ativo agora."}
         </p>
+        <AutoToggles tank={tank} notify={notify} onSaved={refreshTank} />
         {vip && (
           <div className="card-row" style={{ flexWrap: "wrap", gap: 8 }}>
             {Object.entries(vip.packages).map(([days, price]) => (

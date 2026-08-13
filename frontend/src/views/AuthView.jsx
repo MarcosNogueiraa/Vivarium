@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { AquariumCanvas } from "../components/AquariumCanvas.jsx";
 import { api, setToken } from "../lib/api.js";
+import { generateTraits } from "../lib/generator.js";
 
 function randomDemoSeed() {
   return String(Math.floor(Math.random() * 9_007_199_254_740_991));
@@ -13,8 +14,13 @@ export function AuthView({ onAuthed }) {
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // Decorativo só (nenhum peixe real) — traits congelados no nascimento (13/08/2026) tiraram
+  // o fallback de derivar do seed em traitsOf, então precisa vir pronto aqui, igual a API manda.
   const demoFish = useMemo(
-    () => Array.from({ length: 6 }, (_, i) => ({ id: i, seed: randomDemoSeed() })),
+    () => Array.from({ length: 6 }, (_, i) => {
+      const seed = randomDemoSeed();
+      return { id: i, seed, traits: generateTraits(BigInt(seed)) };
+    }),
     [],
   );
 

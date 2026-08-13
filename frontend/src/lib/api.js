@@ -79,4 +79,7 @@ export const api = {
   vipStatus: () => request("GET", "/api/vip"),
   subscribeVip: (days) => request("POST", "/api/vip/subscribe", { days }),
   setAutoCleanTrigger: (percent) => request("POST", "/api/game/water-sensor/trigger", { percent }),
+  setToggles: (autoCollectEnabled, autoCleanEnabled) =>
+    request("POST", "/api/game/toggles", { autoCollectEnabled, autoCleanEnabled }),
+  markSeen: (id) => request("POST", `/api/game/creatures/${id}/mark-seen`),
 };

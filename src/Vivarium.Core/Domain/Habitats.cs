@@ -43,6 +43,21 @@ public class Habitat
     /// <see cref="HasWaterSensor"/> == true; por padrão fica em 0 (dormente).
     /// </summary>
     public decimal AutoCleanTriggerPercent { get; set; }
+
+    /// <summary>
+    /// Opt-out da coleta automática de VIP (CLAUDE.md §8.3) — default true preserva o
+    /// comportamento de sempre (todo VIP online coleta sozinho). Desligar deixa a fila parada
+    /// pra coleta manual mesmo com VIP ativo — pra quem prefere o momento de revelação
+    /// (CollectCelebration) a cada peixe em vez de deixar acumular sem ver.
+    /// </summary>
+    public bool AutoCollectEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Opt-out da Limpeza Automática de VIP (CLAUDE.md §8.17) — default true preserva o
+    /// comportamento de sempre. Desligar não muda <see cref="HasWaterSensor"/>/<see cref="AutoCleanTriggerPercent"/>,
+    /// só impede a compra automática de filtro mesmo com o gatilho configurado.
+    /// </summary>
+    public bool AutoCleanEnabled { get; set; } = true;
 }
 
 public class Species

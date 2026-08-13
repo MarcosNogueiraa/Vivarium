@@ -19,11 +19,11 @@ function fakeJwt(sub = "1", username = "jogador1") {
 
 // 13/08/2026 — traits congelados no nascimento: a API sempre devolve `traits` pronto
 // (`creature.traits`), nunca mais um seed pra o cliente derivar — os mocks espelham isso.
-function creature(id, seed, rarityScore, isBred = false) {
+function creature(id, seed, rarityScore, isBred = false, isNew = false) {
   return {
     id, speciesId: 1, seed: String(seed), traitConfigVersion: 1, rarityScore,
     traits: fakeTraits(seed), breedingSource: null,
-    createdAt: "2026-01-01T00:00:00Z", isBred, parentASeed: null, parentBSeed: null, breedCount: 0,
+    createdAt: "2026-01-01T00:00:00Z", isBred, parentASeed: null, parentBSeed: null, breedCount: 0, isNew,
   };
 }
 
@@ -145,5 +145,22 @@ describe("Mochila", () => {
     cy.get('input[type="checkbox"]').check();
     cy.get(".card").should("have.length", 1);
     cy.contains(".card", "Filhote");
+  });
+
+  it("peixe novo (coletado sozinho por VIP) mostra selo, some ao clicar (revela)", () => {
+    const fresh = creature(309, 9999, 6.0, false, true);
+    cy.intercept("GET", "/api/game/backpack", { body: { capacity: 50, creatures: [fresh] } }).as("backpack");
+    login();
+    cy.wait("@backpack");
+
+    cy.contains(".card", "🆕 Novo");
+    cy.get(".fish-silhouette").should("exist");
+
+    cy.intercept("POST", "/api/game/creatures/309/mark-seen", { statusCode: 200, body: {} }).as("markSeen");
+    cy.get(".fish-stage.as-button").click();
+    cy.wait("@markSeen");
+
+    cy.contains(".card", "🆕 Novo").should("not.exist");
+    cy.get(".fish-silhouette").should("not.exist");
   });
 });

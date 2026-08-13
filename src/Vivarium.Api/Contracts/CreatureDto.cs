@@ -18,7 +18,8 @@ public record CreatureDto(
     string? ParentASeed, string? ParentBSeed, int BreedCount,
     string? ParentAGrandparentASeed, string? ParentAGrandparentBSeed,
     string? ParentBGrandparentASeed, string? ParentBGrandparentBSeed,
-    CreatureTraits? Traits, IReadOnlyList<TraitGenerator.TraitSourceEntry>? BreedingSource)
+    CreatureTraits? Traits, IReadOnlyList<TraitGenerator.TraitSourceEntry>? BreedingSource,
+    bool IsNew)
 {
     public static CreatureDto From(CreatureInstance c) =>
         new(c.Id, c.SpeciesId, c.Seed.ToString(), c.TraitConfigVersion, c.RarityScore, c.CreatedAt, c.ParentAId.HasValue,
@@ -26,5 +27,6 @@ public record CreatureDto(
             c.ParentAGrandparentASeed?.ToString(), c.ParentAGrandparentBSeed?.ToString(),
             c.ParentBGrandparentASeed?.ToString(), c.ParentBGrandparentBSeed?.ToString(),
             c.TraitsJson is not null ? TraitsSerialization.DeserializeTraits(c.TraitsJson) : null,
-            c.BreedingSourceJson is not null ? TraitsSerialization.DeserializeSource(c.BreedingSourceJson) : null);
+            c.BreedingSourceJson is not null ? TraitsSerialization.DeserializeSource(c.BreedingSourceJson) : null,
+            c.IsNew);
 }
