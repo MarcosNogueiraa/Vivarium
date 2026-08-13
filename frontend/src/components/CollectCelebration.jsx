@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Modal } from "./Modal.jsx";
 import { FishCanvas, REVEAL_STEP_COUNT } from "./FishCanvas.jsx";
 import { Coin } from "./Coin.jsx";
@@ -79,7 +79,7 @@ function ParentChip({ creature, dead, onEnter, onLeave, onClick }) {
  * `parentA`/`parentB` (opcional, breeding): os pais, vivos ou mortos — pequenos
  * retratos hoverable com as estatísticas, sempre visíveis nesta tela.
  */
-export function CollectCelebration({ creature, onClose, variant = "tank", deadParents = [], parentA = null, parentB = null }) {
+export function CollectCelebration({ creature, onClose, variant = "tank", deadParents = [], parentA = null, parentB = null, onRevealed = null }) {
   const score = Number(creature.rarityScore);
   const band = bandOf(score);
   const coins = coinsPerHourOf(score);
@@ -97,6 +97,17 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
   const revealed = !suspense || step >= REVEAL_STEP_COUNT;
   function revealNext() { if (!revealed) setStep((s) => Math.min(s + 1, REVEAL_STEP_COUNT)); }
   const tierColor = revealed ? band.color : "var(--muted)";
+
+  // Peixe "novo" da Mochila (§8.22, coletado automaticamente por VIP): avisa o chamador
+  // quando a revelação termina de verdade — só aí marca IsNew=false (mark-seen), nunca antes,
+  // senão fechar o modal no meio da suspense já "gastaria" a revelação sem o jogador ter visto.
+  const revealedOnceRef = useRef(false);
+  useEffect(() => {
+    if (revealed && onRevealed && !revealedOnceRef.current) {
+      revealedOnceRef.current = true;
+      onRevealed();
+    }
+  }, [revealed, onRevealed]);
 
   // Pontos de raridade por parte revelada (pedido do usuário) — soma os
   // fatores de `rarityBreakdownOf` (mesmo cálculo de "por que é raro" do

@@ -147,20 +147,45 @@ describe("Mochila", () => {
     cy.contains(".card", "Filhote");
   });
 
-  it("peixe novo (coletado sozinho por VIP) mostra selo, some ao clicar (revela)", () => {
-    const fresh = creature(309, 9999, 6.0, false, true);
+  it("peixe novo comum (< 7.5) esconde score/produção, abre revelação instantânea e marca visto", () => {
+    const fresh = creature(309, 9999, 6.0, false, true); // < 7.5: sem suspense
     cy.intercept("GET", "/api/game/backpack", { body: { capacity: 50, creatures: [fresh] } }).as("backpack");
     login();
     cy.wait("@backpack");
 
-    cy.contains(".card", "🆕 Novo");
+    cy.contains(".card", "??? — clique pra revelar");
     cy.get(".fish-silhouette").should("exist");
+    cy.get(".card .badge").should("not.exist"); // RarityBadge escondido
+    cy.get(".card .produces").should("not.exist"); // produção escondida
+    cy.contains(".card", "Pro tanque").should("not.exist"); // ações escondidas até revelar
 
     cy.intercept("POST", "/api/game/creatures/309/mark-seen", { statusCode: 200, body: {} }).as("markSeen");
     cy.get(".fish-stage.as-button").click();
-    cy.wait("@markSeen");
+    cy.get(".modal.celebrate").should("be.visible");
+    cy.wait("@markSeen"); // < 7.5: revela e marca visto assim que o modal abre, sem clique extra
 
-    cy.contains(".card", "🆕 Novo").should("not.exist");
+    cy.get(".modal-close").click();
+    cy.contains(".card", "??? — clique pra revelar").should("not.exist");
     cy.get(".fish-silhouette").should("not.exist");
+    cy.contains(".card", "Pro tanque"); // ações voltam a aparecer
+  });
+
+  it("peixe novo Raro+ (>= 7.5) revela clique-a-clique antes de marcar visto", () => {
+    const rare = creature(310, 8888, 8.5, false, true); // >= 7.5: suspense
+    cy.intercept("GET", "/api/game/backpack", { body: { capacity: 50, creatures: [rare] } }).as("backpack");
+    login();
+    cy.wait("@backpack");
+
+    cy.intercept("POST", "/api/game/creatures/310/mark-seen", { statusCode: 200, body: {} }).as("markSeen");
+    cy.get(".fish-stage.as-button").click();
+    cy.get(".modal.celebrate").should("be.visible");
+    cy.contains("Abrindo peixe raro"); // ainda não revelado — sem mark-seen
+
+    // 4 cliques no peixe (corpo/brilho, cauda, dorsal, peitoral) — mesma revelação da coleta.
+    for (let i = 0; i < 4; i++) cy.get(".celebrate-fish").click();
+    cy.wait("@markSeen"); // só marca visto depois da revelação completa
+
+    cy.get(".modal-close").click();
+    cy.contains(".card", "??? — clique pra revelar").should("not.exist");
   });
 });

@@ -7,6 +7,7 @@ import { FishCanvas } from "../components/FishCanvas.jsx";
 import { Select } from "../components/Select.jsx";
 import { PromptModal } from "../components/PromptModal.jsx";
 import { ConfirmModal } from "../components/ConfirmModal.jsx";
+import { CollectCelebration } from "../components/CollectCelebration.jsx";
 import { FishDetail } from "./FishDetail.jsx";
 
 const SORTS = {
@@ -21,6 +22,7 @@ const SORTS = {
 export function BackpackView({ refreshTank, notify }) {
   const [data, setData] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [revealing, setRevealing] = useState(null); // peixe isNew sendo revelado (CollectCelebration)
   const [prompt, setPrompt] = useState(null); // { kind: "sell"|"transfer"|"vendor", creature }
   const [sortBy, setSortBy] = useState("rarity-desc");
   const [bandFilter, setBandFilter] = useState("all");
@@ -76,9 +78,12 @@ export function BackpackView({ refreshTank, notify }) {
     await refresh();
   }
 
-  // Peixe coletado pela coleta AUTOMÁTICA de VIP (creature.isNew) some silhueta/selo só depois
-  // que o jogador clica pra revelar — atualização otimista (sem esperar refresh completo), com
-  // fallback pro estado normal (refresh) se o servidor rejeitar por algum motivo.
+  // Peixe coletado pela coleta AUTOMÁTICA de VIP (creature.isNew): score/produção ficam
+  // escondidos até o jogador abrir a revelação (CollectCelebration — mesmo componente do
+  // momento de coleta manual, Raro+ com clique-a-clique, mesmo abaixo disso instantâneo).
+  // Só marca IsNew=false (mark-seen) quando a revelação de fato termina — `onRevealed` do
+  // CollectCelebration, nunca ao só abrir o modal. Atualização otimista local (sem esperar
+  // refresh completo), com fallback pro estado normal (refresh) se o servidor rejeitar.
   async function revealNew(c) {
     try {
       await api.markSeen(c.id);
@@ -206,32 +211,40 @@ export function BackpackView({ refreshTank, notify }) {
             <div className="grid" style={{ paddingBottom: selectMode && selected.size > 0 ? 70 : 0 }}>
               {visible.map((c) => {
                 const isSelected = selected.has(c.id);
+                // Cor da faixa de raridade some enquanto não revelado — a própria borda do
+                // card já entregaria a raridade de relance, senão (var(--muted), neutro).
+                const tierColor = c.isNew ? "var(--muted)" : bandOf(Number(c.rarityScore)).color;
                 return (
                 <div key={c.id} className="card" style={{
-                  "--tier": bandOf(Number(c.rarityScore)).color,
+                  "--tier": tierColor,
                   ...(selectMode && isSelected ? { borderColor: "var(--tier)", boxShadow: "0 0 0 2px var(--tier)" } : {}),
                 }}>
                   <button
                     className="fish-stage as-button"
                     onClick={() => {
-                      if (selectMode) toggleSelected(c);
-                      else if (c.isNew) revealNew(c);
-                      else setDetail(c);
+                      if (selectMode && !c.isNew) toggleSelected(c);
+                      else if (c.isNew) setRevealing(c);
+                      else if (!selectMode) setDetail(c);
                     }}
-                    title={selectMode ? "Selecionar" : c.isNew ? "Peixe novo — clique pra revelar" : "Ver detalhes"}
+                    title={c.isNew ? "Peixe novo — clique pra revelar" : selectMode ? "Selecionar" : "Ver detalhes"}
                   >
                     <div className={c.isNew ? "fish-silhouette" : undefined}>
                       <FishCanvas creature={c} />
                     </div>
                     {selectMode && <span className={`select-check${isSelected ? " checked" : ""}`}>{isSelected ? "✓" : ""}</span>}
                   </button>
-                  <div className="card-row">
-                    <RarityBadge score={Number(c.rarityScore)} />
-                    <span className="produces mono">~{coinsPerHourOf(Number(c.rarityScore)).toFixed(1)}/h</span>
-                  </div>
-                  {c.isNew && <span className="new-tag">🆕 Novo — clique pra revelar</span>}
+                  {c.isNew ? (
+                    <div className="card-row">
+                      <span className="new-tag">🆕 ??? — clique pra revelar</span>
+                    </div>
+                  ) : (
+                    <div className="card-row">
+                      <RarityBadge score={Number(c.rarityScore)} />
+                      <span className="produces mono">~{coinsPerHourOf(Number(c.rarityScore)).toFixed(1)}/h</span>
+                    </div>
+                  )}
                   {c.isBred && <span className="bred-tag">🐣 Filhote</span>}
-                  {!selectMode && (
+                  {!selectMode && !c.isNew && (
                     <div className="card-row">
                       <button className="btn-primary" onClick={() => deploy(c)}>Pro tanque</button>
                       <button onClick={() => sell(c)}>Vender</button>
@@ -256,6 +269,13 @@ export function BackpackView({ refreshTank, notify }) {
             </div>
           )}
         </>
+      )}
+      {revealing && (
+        <CollectCelebration
+          creature={revealing}
+          onClose={() => setRevealing(null)}
+          onRevealed={() => revealNew(revealing)}
+        />
       )}
       {detail && (
         <FishDetail creature={detail} onClose={() => setDetail(null)}>
