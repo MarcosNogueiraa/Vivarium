@@ -156,7 +156,7 @@ export function StoreView({ tank, refreshTank, notify }) {
   const premiumBalance = Number(tank?.wallet?.PREMIUM ?? 0);
 
   return (
-    <div className="grid">
+    <div className="grid store-grid">
       <div className="card store-card store-card--premium vip-card">
         <span className="store-card-icon">👑</span>
         <strong>VIP</strong>

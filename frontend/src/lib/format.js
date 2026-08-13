@@ -35,7 +35,12 @@ export const speedWord = (s) =>
   s < 10 ? "muito lenta" : s < 35 ? "lenta" : s > 90 ? "muito rápida" : s > 65 ? "rápida" : "normal";
 
 export function ageOf(createdAt) {
-  const mins = Math.max(0, (Date.now() - new Date(createdAt).getTime()) / 60000);
+  // ListingDto (Mercado) não expõe createdAt do dono original — sem essa guarda,
+  // new Date(undefined) vira Invalid Date e o cálculo inteiro propaga NaN, mostrando
+  // literalmente "NaN d" no modal de detalhe (achado real ao revisar o Mercado).
+  const time = createdAt == null ? NaN : new Date(createdAt).getTime();
+  if (Number.isNaN(time)) return null;
+  const mins = Math.max(0, (Date.now() - time) / 60000);
   if (mins < 60) return `${Math.floor(mins)} min`;
   const h = mins / 60;
   if (h < 24) return `${Math.floor(h)} h`;

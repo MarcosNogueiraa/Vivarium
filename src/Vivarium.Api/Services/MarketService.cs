@@ -4,6 +4,7 @@ using Vivarium.Api.Data;
 using Vivarium.Api.Http;
 using Vivarium.Core.Domain;
 using Vivarium.Core.Gameplay;
+using Vivarium.Core.Generation;
 
 namespace Vivarium.Api.Services;
 
@@ -30,6 +31,7 @@ public class MarketService(VivariumDbContext db, GameService game)
                 m.CreatureInstance.ParentASeed, m.CreatureInstance.ParentBSeed,
                 m.CreatureInstance.ParentAGrandparentASeed, m.CreatureInstance.ParentAGrandparentBSeed,
                 m.CreatureInstance.ParentBGrandparentASeed, m.CreatureInstance.ParentBGrandparentBSeed,
+                m.CreatureInstance.TraitsJson, m.CreatureInstance.BreedingSourceJson,
             })
             .ToListAsync())
             .Select(m => new ListingDto(
@@ -38,7 +40,9 @@ public class MarketService(VivariumDbContext db, GameService game)
                 m.TraitConfigVersion, m.RarityScore, m.ParentAId.HasValue,
                 m.ParentASeed?.ToString(), m.ParentBSeed?.ToString(),
                 m.ParentAGrandparentASeed?.ToString(), m.ParentAGrandparentBSeed?.ToString(),
-                m.ParentBGrandparentASeed?.ToString(), m.ParentBGrandparentBSeed?.ToString()))
+                m.ParentBGrandparentASeed?.ToString(), m.ParentBGrandparentBSeed?.ToString(),
+                m.TraitsJson is not null ? TraitsSerialization.DeserializeTraits(m.TraitsJson) : null,
+                m.BreedingSourceJson is not null ? TraitsSerialization.DeserializeSource(m.BreedingSourceJson) : null))
             .ToList();
     }
 

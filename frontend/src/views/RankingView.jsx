@@ -159,7 +159,18 @@ export function RankingView({ notify, exitSpectatorSignal }) {
               <span className="rank">#{e.rank}</span>
               <span className="username">{e.username}{e.isSelf && " (você)"}</span>
               <span className="value mono">{active.icon ? active.icon : <Coin />}{active.format(Number(e.value))}<small>{active.suffix}</small></span>
-              {!e.isSelf && <button onClick={() => visit(e.username)}>Visitar</button>}
+              {/* Sempre reserva o espaço do botão, mesmo na própria linha (sem "Visitar")
+                  — senão .username (flex:1) absorve esse espaço e o valor pula pra mais
+                  perto da borda direita, desalinhando a coluna de valores das outras
+                  linhas (achado real ao revisar o Ranking). */}
+              <button
+                className={e.isSelf ? "invisible" : undefined}
+                tabIndex={e.isSelf ? -1 : 0}
+                aria-hidden={e.isSelf || undefined}
+                onClick={() => !e.isSelf && visit(e.username)}
+              >
+                Visitar
+              </button>
             </div>
           ))}
           {data.selfOutsideTop && (
@@ -167,6 +178,7 @@ export function RankingView({ notify, exitSpectatorSignal }) {
               <span className="rank">#{data.selfOutsideTop.rank}</span>
               <span className="username">{data.selfOutsideTop.username} (você)</span>
               <span className="value mono">{active.icon ? active.icon : <Coin />}{active.format(Number(data.selfOutsideTop.value))}<small>{active.suffix}</small></span>
+              <button className="invisible" tabIndex={-1} aria-hidden="true">Visitar</button>
             </div>
           )}
         </div>
