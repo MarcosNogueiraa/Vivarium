@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   biasedInheritProbability, breedTraits, CONFIG, coinsPerHourOf, effectiveParentTraits, generateTraits,
-  probabilityOf, rarityBreakdown, resolveOwnTraits, roll01, synergyMultiplier, traitsOf, vendorPriceOf,
-  waterDegradationPerFishPerHour,
+  probabilityOf, rarityBreakdown, resolveOwnTraits, restrictTable, roll01, synergyMultiplier, traitsOf,
+  vendorPriceOf, waterDegradationPerFishPerHour, weightOf,
 } from "./generator.js";
 
 function findSeedWithTailColor(color, searchLimit = 5000) {
@@ -169,9 +169,14 @@ describe("breedTraits — viés de raridade em cor de parte (31/07/2026)", () =>
     const rarityBias = 0.6;
     const n = 4000;
 
+    // Anti-duplicação desligada (antiDuplicationDecay/MaxPenalty=0, 13/08/2026) — este teste
+    // isola só o efeito do rarityBias na cor da cauda; sem desligar, a sequência (que também
+    // reage ao tier, sorteado ANTES da cor, com o MESMO rarityBias) desloca a taxa observada
+    // pra fora da faixa estreita esperada aqui.
     let whiteCount = 0;
     for (let childSeed = 1n; childSeed <= BigInt(n); childSeed++) {
-      const color = breedTraits(childSeed, whiteParent, orangeParent, 0, rarityBias).tail.color;
+      const color = breedTraits(childSeed, whiteParent, orangeParent, 0, rarityBias,
+        null, null, null, null, CONFIG.breeding.grandparentReachChance, CONFIG.breeding.mutationRarityBiasStrength, 0, 0).tail.color;
       if (color === "PureWhite") whiteCount++;
     }
 
@@ -209,6 +214,82 @@ describe("breedTraits — viés de raridade em cor de parte (31/07/2026)", () =>
     expect(whiteCount / n).toBeLessThan(0.70);
   });
 });
+
+describe("anti-duplicação e piso de mutação (13/08/2026)", () => {
+  // Espelha os testes equivalentes em BreedTraitsTests.cs (C#).
+  it("reduz a fração de filhotes que clonam um dos pais em 4 slots", () => {
+    const parentASeed = findSeedWithTier("Subtle", 5000);
+    const ta = generateTraits(parentASeed);
+    let parentBSeed = null;
+    for (let s = 1n; s <= 5000n; s++) {
+      const tb = generateTraits(s);
+      if (tb.shimmerTier !== ta.shimmerTier && tb.tail.color !== ta.tail.color
+        && tb.dorsal.color !== ta.dorsal.color && tb.pectoral.color !== ta.pectoral.color) {
+        parentBSeed = s;
+        break;
+      }
+    }
+    if (parentBSeed === null) throw new Error("não achou par distinto");
+
+    const n = 6000;
+    function countCloneOfA(decay, maxPenalty) {
+      let clones = 0;
+      for (let childSeed = 1n; childSeed <= BigInt(n); childSeed++) {
+        const child = breedTraits(childSeed, parentASeed, parentBSeed, 0, 0,
+          null, null, null, null, 0, -1, decay, maxPenalty);
+        if (child.shimmerTier === ta.shimmerTier && child.tail.color === ta.tail.color
+          && child.dorsal.color === ta.dorsal.color && child.pectoral.color === ta.pectoral.color)
+          clones++;
+      }
+      return clones / n;
+    }
+
+    const pctDisabled = countCloneOfA(0, 0);
+    const pctEnabled = countCloneOfA(CONFIG.breeding.antiDuplicationDecay, CONFIG.breeding.antiDuplicationMaxPenalty);
+
+    expect(pctDisabled).toBeGreaterThan(0.03);
+    expect(pctDisabled).toBeLessThan(0.11);
+    expect(pctEnabled).toBeLessThan(pctDisabled * 0.9);
+  }, 20000);
+
+  it.each([
+    ["Black", "Black"], // ambos 2ª cor mais rara (3%) — só Preto ou Branco
+    ["Blue", "Red"], // Azul(20%)/Vermelho(18%): piso = Azul, só exclui Laranja
+    ["Blue", "Black"], // Azul(20%)/Preto(3%): piso AINDA é Azul, o mais fraco — não o mais raro
+  ])("piso de mutação: nunca sai mais comum que o pai mais fraco (%s + %s)", (colorA, colorB) => {
+    const parentASeed = findSeedWithTailColor(colorA);
+    const parentBSeed = findSeedWithTailColor(colorB);
+    const floorWeight = Math.max(weightOf(CONFIG.partColors, colorA), weightOf(CONFIG.partColors, colorB));
+
+    for (let childSeed = 1n; childSeed <= 3000n; childSeed++) {
+      const child = breedTraits(childSeed, parentASeed, parentBSeed, 1.0, 0,
+        null, null, null, null, 0, CONFIG.breeding.mutationRarityBiasStrength, 0, 0);
+      // Pula os poucos casos em que o tier também mutou pra Vibrante+ (correlação shimmer→cor
+      // reescala a tabela de cor inteira — mesma ressalva do teste C# equivalente).
+      if (["Vibrant", "Rare", "Legendary"].includes(child.shimmerTier)) continue;
+      const resultWeight = weightOf(CONFIG.partColors, child.tail.color);
+      expect(resultWeight).toBeLessThanOrEqual(floorWeight);
+    }
+  });
+
+  it("restrictTable: piso no valor mais comum da tabela mantém a tabela inteira", () => {
+    const maxWeight = Math.max(...CONFIG.shimmerTiers.map(([, w]) => w));
+    expect(restrictTable(CONFIG.shimmerTiers, maxWeight).length).toBe(CONFIG.shimmerTiers.length);
+  });
+
+  it("restrictTable: piso no 2º valor mais raro exclui todos os mais comuns", () => {
+    const blackWeight = weightOf(CONFIG.partColors, "Black");
+    const restricted = restrictTable(CONFIG.partColors, blackWeight).map(([v]) => v);
+    expect(new Set(restricted)).toEqual(new Set(["Black", "PureWhite"]));
+  });
+});
+
+function findSeedWithTier(tier, searchLimit = 5000) {
+  for (let s = 1n; s <= BigInt(searchLimit); s++) {
+    if (generateTraits(s).shimmerTier === tier) return s;
+  }
+  throw new Error(`nenhum seed com tier ${tier} nos primeiros ${searchLimit}`);
+}
 
 describe("chance de herdar traço de um avô (31/07/2026)", () => {
   // Espelha os testes equivalentes em BreedTraitsTests.cs (C#) — testa

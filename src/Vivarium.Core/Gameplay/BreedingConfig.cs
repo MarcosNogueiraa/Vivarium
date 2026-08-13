@@ -68,6 +68,46 @@ public static class BreedingDefaults
     /// </summary>
     public const double GrandparentReachChance = 0.001;
 
+    /// <summary>
+    /// Anti-duplicação (13/08/2026, pedido do usuário): cada um dos 7 "slots" com viés de
+    /// raridade (tier de brilho, cor e padrão de cauda/dorsal/peitoral) era sorteado de forma
+    /// independente — nada impedia o filhote de puxar quase todos (ou todos) os atributos do
+    /// MESMO pai, parecendo uma "duplicata" em vez de um peixe novo. Agora, quanto mais slots
+    /// CONSECUTIVOS (na ordem em que são computados — tier, cauda, dorsal, peitoral) já vieram do
+    /// mesmo pai sem mutar, menor fica a chance do PRÓXIMO também vir dele —
+    /// <see cref="AntiDuplicationDecay"/> é o fator de encolhimento do desvio em torno de 50/50
+    /// POR nível de sequência (`penalty = min(AntiDuplicationMaxPenalty, 1 - decay^streak)`),
+    /// <see cref="AntiDuplicationMaxPenalty"/> é o teto (nunca vira 100% determinístico — sempre
+    /// sobra alguma chance do mesmo pai "vencer" de novo). Mutação reseta a sequência (já quebra a
+    /// sensação de clonagem sozinha). Movimento (velocidade/amplitude) fica de fora — já é 50/50
+    /// puro sem viés de raridade, contribui pouco pro score. Escopo por cruzamento: a sequência
+    /// não atravessa cruzamentos diferentes nem a resolução aninhada de "traits próprios" de um
+    /// pai filhote (cada chamada de `BreedTraits` usa a sua própria sequência, isolada).
+    /// </summary>
+    public const double AntiDuplicationDecay = 0.55;
+
+    /// <summary>Teto da penalidade de anti-duplicação — ver <see cref="AntiDuplicationDecay"/>.</summary>
+    public const double AntiDuplicationMaxPenalty = 0.75;
+
+    /// <summary>
+    /// Piso de mutação + leve viés pro raro (13/08/2026, pedido do usuário): hoje mutação (4% de
+    /// chance por trait) é um sorteio 100% livre pela tabela de pesos — podia inclusive sair MAIS
+    /// COMUM (mais fraco) que os dois pais, o que parece incoerente com o risco assumido no
+    /// cruzamento. Regra nova: quando um trait sofre mutação, o resultado nunca pode ficar mais
+    /// comum que o pai MAIS FRACO (mais comum) dos dois — só pode empatar com ele ou ficar mais
+    /// raro. Auto-limitado: quando o pai mais fraco já É o valor mais comum da tabela (ex: tier
+    /// "Sem brilho", 78% de peso — o caso mais frequente do jogo), não existe nada "mais comum"
+    /// pra excluir, então a regra não muda nada nesse cruzamento (mutação continua 100% livre,
+    /// igual antes) — só entra em ação quando pelo menos um pai já tem um valor não-trivial.
+    /// Dentro do subconjunto restante (igual ou mais raro que o piso), <see
+    /// cref="MutationRarityBiasStrength"/> aplica um tilt leve a favor do raro (mesma força já
+    /// calibrada pra herança, `RarityBiasStrength`) — não é uma garantia à parte, só evita que o
+    /// sorteio dentro do subconjunto seja uniforme-por-peso puro. Vale pros 7 slots (inclusive
+    /// tier de brilho) — a auto-limitação acima já protege o caso comum-comum, então não precisa
+    /// de exceção pro tier.
+    /// </summary>
+    public const double MutationRarityBiasStrength = 0.15;
+
     // --- Custo dinâmico (soft) ---
     // O tempo de gestação já é o sink principal pra pares raros (um lendário
     // parado ~88h custa ~65k de renda perdida); o custo em moeda só precisa ser
@@ -94,8 +134,15 @@ public static class BreedingDefaults
     /// continua subindo pra sempre — é só o RISCO que se recupera com paciência), e nunca é
     /// obrigatório: quem quer certeza paga o seguro; quem tem pressa paga o estabilizador; quem
     /// tem tempo, descansa de graça. Ver `EffectiveBreedCount`.
+    ///
+    /// TEMPORÁRIO (13/08/2026): 5.0→0.2 (25x mais rápido, ~4h48min de meia-vida em vez de 5 dias)
+    /// — a pedido do usuário, só pra acelerar os testes desta rodada (herança/anti-duplicação/piso
+    /// de mutação), mesmo espírito do `GenerationIntervalMinutes` 60→10 e da gestação
+    /// temporariamente flat em `BaseGestationHours`/`MinGestationHours`/`MaxGestationHours` acima —
+    /// não é mudança de design, é conveniência de QA. Reverter pra 5.0 antes de qualquer
+    /// lançamento "de verdade".
     /// </summary>
-    public const double RestHalfLifeDays = 5.0;
+    public const double RestHalfLifeDays = 0.2;
 
     // --- Estabilizador genético (soft, redução parcial) e Seguro de cruzamento (premium,
     // garantia total) — opt-in no Start, cobrados ali mesmo (sem item/inventário: mais simples

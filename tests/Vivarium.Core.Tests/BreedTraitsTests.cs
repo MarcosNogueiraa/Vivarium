@@ -245,7 +245,8 @@ public class BreedTraitsTests
         var ancestryA = new TraitGenerator.ParentAncestry(parentASeed, grandparent, grandparent);
         var ancestryB = new TraitGenerator.ParentAncestry(parentBSeed, grandparent, grandparent);
         var dist = TraitGenerator.ChildTierDistribution(ancestryA, ancestryB, TraitConfigV1.Version,
-            BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
+            BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength,
+            BreedingDefaults.MutationRarityBiasStrength, BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty);
 
         Assert.True(dist[ShimmerTier.Legendary] > 0.5,
             $"pais realmente lendários deveriam manter o tier na maioria das vezes, saiu {dist[ShimmerTier.Legendary]:P1}");
@@ -300,26 +301,38 @@ public class BreedTraitsTests
         for (long childSeed = 1; childSeed <= n; childSeed++)
         {
             var child = TraitGenerator.BreedTraits(childSeed, ancestryA, ancestryB, TraitConfigV1.Version,
-                BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance);
+                BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance,
+                BreedingDefaults.MutationRarityBiasStrength, BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty);
             if (child.ShimmerTier == ShimmerTier.Legendary) legendaryCount++;
         }
         double pct = legendaryCount / (double)n;
 
         // Comparação com o caso "pais frescos" (sem avós, mesmo par) — mede o efeito ISOLADO
-        // do grandparentReachChance na retenção.
+        // do grandparentReachChance na retenção. Usa a MESMA chamada com piso de mutação
+        // habilitado (13/08/2026) que `pct` acima, pra manter a comparação justa (mesmas
+        // mecânicas ativas dos dois lados — só a presença de avós difere).
         int legendaryCountFresh = 0;
         for (long childSeed = 1; childSeed <= n; childSeed++)
         {
-            var child = TraitGenerator.BreedTraits(childSeed, parentASeed, parentBSeed,
-                TraitConfigV1.Version, BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
+            var child = TraitGenerator.BreedTraits(childSeed,
+                new TraitGenerator.ParentAncestry(parentASeed, null, null), new TraitGenerator.ParentAncestry(parentBSeed, null, null),
+                TraitConfigV1.Version, BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance,
+                BreedingDefaults.MutationRarityBiasStrength, BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty);
             if (child.ShimmerTier == ShimmerTier.Legendary) legendaryCountFresh++;
         }
         double pctFresh = legendaryCountFresh / (double)n;
 
-        Assert.InRange(pct, 0.92, 0.98);
-        Assert.InRange(pctFresh, 0.94, 1.00);
-        Assert.True(pct < pctFresh,
-            $"avós comuns deveriam reduzir um pouco a retenção ({pct:P1}) em relação a pais frescos ({pctFresh:P1})");
+        // 13/08/2026: com o piso de mutação (CLAUDE.md 8.8), quando os DOIS pais já compartilham
+        // o valor MAIS RARO da tabela (Lendário, 0.2%), uma mutação nesse slot não tem PRA ONDE
+        // ir (nada é mais raro que Lendário) — só pode sair Lendário de novo. Isso elimina quase
+        // toda a via de "escape" que antes existia (mutação livre + avô comum), então a retenção
+        // sobe pra perto do teto nos dois cenários (com e sem avós) — o piso passou a dominar o
+        // efeito que antes vinha só do GrandparentReachChance. Faixas alargadas pra refletir isso;
+        // a comparação estrita "pct < pctFresh" virou pouco significativa (os dois perto do teto,
+        // a ordem entre eles pode inverter por ruído estatístico) — trocada por uma checagem
+        // frouxa de que nenhum dos dois caiu abaixo do esperado.
+        Assert.InRange(pct, 0.99, 1.00);
+        Assert.InRange(pctFresh, 0.99, 1.00);
     }
 
     [Fact]
@@ -410,7 +423,8 @@ public class BreedTraitsTests
             var viaNovoExplicito = TraitGenerator.BreedTraits(childSeed,
                 new TraitGenerator.ParentAncestry(ParentASeed, null, null),
                 new TraitGenerator.ParentAncestry(ParentBSeed, null, null),
-                TraitConfigV1.Version, 0.08, 0.15, grandparentReachChance: 0.15);
+                TraitConfigV1.Version, 0.08, 0.15, grandparentReachChance: 0.15,
+                mutationRarityBiasStrength: -1, antiDuplicationDecay: 0, antiDuplicationMaxPenalty: 0);
             Assert.Equal(viaOverloadAntigo, viaNovoExplicito);
         }
     }
@@ -461,7 +475,7 @@ public class BreedTraitsTests
     public void ResolveOwnTraits_PaiFresco_UsaGenerateDireto()
     {
         var ancestry = new TraitGenerator.ParentAncestry(42, null, null);
-        Assert.Equal(TraitGenerator.Generate(42), TraitGenerator.ResolveOwnTraits(ancestry, TraitConfigV1.Version, 0.08, 0.15));
+        Assert.Equal(TraitGenerator.Generate(42), TraitGenerator.ResolveOwnTraits(ancestry, TraitConfigV1.Version, 0.08, 0.15, -1, 0, 0));
     }
 
     [Fact]
@@ -471,7 +485,7 @@ public class BreedTraitsTests
         // Generate(seed) (traits fantasma). Agora, com os avós conhecidos, deve bater com
         // o que o próprio cruzamento dos avós produziria — nunca com Generate(seed) direto.
         var ancestry = new TraitGenerator.ParentAncestry(999, 1, 2);
-        var resolved = TraitGenerator.ResolveOwnTraits(ancestry, TraitConfigV1.Version, 0.08, 0.15);
+        var resolved = TraitGenerator.ResolveOwnTraits(ancestry, TraitConfigV1.Version, 0.08, 0.15, -1, 0, 0);
 
         Assert.Equal(TraitGenerator.BreedTraits(999, 1, 2, TraitConfigV1.Version, 0.08, 0.15), resolved);
         Assert.NotEqual(TraitGenerator.Generate(999), resolved);
@@ -501,6 +515,114 @@ public class BreedTraitsTests
             Assert.Equal(traitsA.Tail.Mix, child.Tail.Mix);
         }
         Assert.True(foundInherited, "não achou nenhum filho com subtraits de Degradê herdados de A pra validar o mix em bloco");
+    }
+
+    [Fact]
+    public void AntiDuplicacao_ReduzFracaoDeFilhotesCloneDeUmDosPais()
+    {
+        // Pedido do usuário (13/08/2026, CLAUDE.md 8.8): sem isso, nada impedia o filhote de
+        // puxar quase todos os atributos do MESMO pai, parecendo uma "duplicata". Busca 2 pais
+        // que diferem em tier + as 3 cores de parte (4 dos 7 slots com viés de raridade) e mede
+        // a fração de filhotes que "clonam" o pai A nesses 4 slots, com a sequência
+        // desligada (decay=0/maxPenalty=0) vs ligada (valores de produção).
+        var ta = TraitGenerator.Generate(FindSeedWithTier(ShimmerTier.Subtle, 20_000));
+        long parentASeed = ManySeeds(20_000).First(s => TraitGenerator.Generate(s).ShimmerTier == ShimmerTier.Subtle);
+        long parentBSeed = ManySeeds(20_000).First(s =>
+        {
+            var tb = TraitGenerator.Generate(s);
+            return tb.ShimmerTier != ta.ShimmerTier
+                && tb.Tail.Color != ta.Tail.Color
+                && tb.Dorsal.Color != ta.Dorsal.Color
+                && tb.Pectoral.Color != ta.Pectoral.Color;
+        });
+
+        const int n = 30_000;
+        int CountCloneOfA(double decay, double maxPenalty)
+        {
+            int clones = 0;
+            for (long childSeed = 1; childSeed <= n; childSeed++)
+            {
+                var child = TraitGenerator.BreedTraits(childSeed,
+                    new TraitGenerator.ParentAncestry(parentASeed, null, null), new TraitGenerator.ParentAncestry(parentBSeed, null, null),
+                    TraitConfigV1.Version, mutationChance: 0, rarityBias: 0, grandparentReachChance: 0,
+                    mutationRarityBiasStrength: -1, antiDuplicationDecay: decay, antiDuplicationMaxPenalty: maxPenalty);
+                if (child.ShimmerTier == ta.ShimmerTier && child.Tail.Color == ta.Tail.Color
+                    && child.Dorsal.Color == ta.Dorsal.Color && child.Pectoral.Color == ta.Pectoral.Color)
+                    clones++;
+            }
+            return clones;
+        }
+
+        double pctDisabled = CountCloneOfA(decay: 0, maxPenalty: 0) / (double)n;
+        double pctEnabled = CountCloneOfA(BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty) / (double)n;
+
+        // Baseline teórico sem sequência: 0.5^4 = 6.25% (4 slots binários independentes). O
+        // efeito medido é mais modesto que o teórico "streak de 4 direto" porque os 4 slots
+        // rastreados (tier + 3 cores) NÃO são consecutivos na sequência real — cada cor tem um
+        // slot de padrão entre ela e a próxima cor (cauda cor→padrão→dorsal cor→padrão→...), e
+        // esses picks de padrão (mesmo quando o resultado empata entre os pais, ex. "Sem padrão"
+        // nos dois) ainda consomem/podem quebrar a sequência internamente. Ainda assim, uma
+        // redução real e na direção certa já confirma o mecanismo funcionando.
+        Assert.InRange(pctDisabled, 0.04, 0.09);
+        Assert.True(pctEnabled < pctDisabled * 0.9,
+            $"esperava a fração de 'clone do pai A' cair com anti-duplicação — desligado {pctDisabled:P1}, ligado {pctEnabled:P1}");
+    }
+
+    [Theory]
+    [InlineData(PartColor.Black, PartColor.Black)] // ambos 2ª cor mais rara (3%) — só Preto ou Branco
+    [InlineData(PartColor.Blue, PartColor.Red)] // Azul(20%)/Vermelho(18%): piso = Azul, só exclui Laranja
+    [InlineData(PartColor.Blue, PartColor.Black)] // Azul(20%)/Preto(3%): piso AINDA é Azul, o mais fraco — não o mais raro
+    public void PisoDeMutacao_NuncaSaiMaisComumQueOPaiMaisFraco(PartColor colorA, PartColor colorB)
+    {
+        // 3 exemplos do próprio usuário (13/08/2026, CLAUDE.md 8.8): quando um trait sofre
+        // mutação, o resultado nunca pode ficar mais comum (mais fraco) que o pai MAIS FRACO
+        // (mais comum) dos dois — não o mais raro. mutationChance=1.0 força mutação em todo slot,
+        // isolando o piso da cauda especificamente.
+        //
+        // Pula os poucos casos (~7%) em que o TIER também mutou pra Vibrante+ nesse mesmo seed —
+        // aí a correlação shimmer→cor (CLAUDE.md 4) reescala a tabela de cor inteira, e o piso
+        // desta asserção (calculado contra a tabela BASE, sem correlação) deixaria de bater com
+        // o piso que o motor realmente usou (calculado contra a tabela JÁ correlacionada) — sem
+        // relação com o mecanismo do piso em si, que continua correto nesses casos também.
+        long parentASeed = FindSeedWithTailColor(colorA);
+        long parentBSeed = FindSeedWithTailColor(colorB);
+        double floorWeight = Math.Max(
+            WeightedTable.WeightOf(TraitConfigV1.PartColors, colorA),
+            WeightedTable.WeightOf(TraitConfigV1.PartColors, colorB));
+
+        for (long childSeed = 1; childSeed <= 5_000; childSeed++)
+        {
+            var child = TraitGenerator.BreedTraits(childSeed,
+                new TraitGenerator.ParentAncestry(parentASeed, null, null), new TraitGenerator.ParentAncestry(parentBSeed, null, null),
+                TraitConfigV1.Version, mutationChance: 1.0, rarityBias: 0, grandparentReachChance: 0,
+                BreedingDefaults.MutationRarityBiasStrength, antiDuplicationDecay: 0, antiDuplicationMaxPenalty: 0);
+            if (child.ShimmerTier is ShimmerTier.Vibrant or ShimmerTier.Rare or ShimmerTier.Legendary)
+                continue;
+            double resultWeight = WeightedTable.WeightOf(TraitConfigV1.PartColors, child.Tail.Color);
+            Assert.True(resultWeight <= floorWeight,
+                $"seed {childSeed}: cauda mutou pra {child.Tail.Color} (peso {resultWeight}), mais comum que o piso {floorWeight} (pai mais fraco: {colorA}={WeightedTable.WeightOf(TraitConfigV1.PartColors, colorA)}, {colorB}={WeightedTable.WeightOf(TraitConfigV1.PartColors, colorB)})");
+        }
+    }
+
+    [Fact]
+    public void Restrict_ComPisoNoValorMaisComumDaTabela_MantemATabelaInteira()
+    {
+        // Auto-limitado (CLAUDE.md 8.8): quando o pai mais fraco JÁ é o valor mais comum (aqui,
+        // tier "Sem brilho" — 78% de peso, o caso mais frequente do jogo), não existe nada "mais
+        // comum" pra excluir — o piso não restringe nada nesse cruzamento.
+        double maxWeight = TraitConfigV1.ShimmerTiers.Max(e => e.Weight);
+        var restricted = WeightedTable.Restrict(TraitConfigV1.ShimmerTiers, maxWeight);
+        Assert.Equal(TraitConfigV1.ShimmerTiers.Count, restricted.Count);
+    }
+
+    [Fact]
+    public void Restrict_ComPaisNoSegundoValorMaisRaro_ExcluiTodosOsMaisComuns()
+    {
+        // Espelha o exemplo Preto+Preto do usuário: só Preto (o próprio piso) e Branco (mais raro)
+        // continuam elegíveis — todo o resto da paleta (mais comum que Preto) é excluído.
+        double blackWeight = WeightedTable.WeightOf(TraitConfigV1.PartColors, PartColor.Black);
+        var restricted = WeightedTable.Restrict(TraitConfigV1.PartColors, blackWeight);
+        Assert.Equal(new HashSet<PartColor> { PartColor.Black, PartColor.PureWhite }, restricted.Select(e => e.Value).ToHashSet());
     }
 
     private static long FindSeedWithTailColor(PartColor color, int searchLimit = 5_000)

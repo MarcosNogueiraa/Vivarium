@@ -89,7 +89,8 @@ public static class TraitGenerator
     public static CreatureTraits BreedTraits(
         long childSeed, long parentASeed, long parentBSeed, int configVersion, double mutationChance, double rarityBias)
         => BreedTraits(childSeed, new ParentAncestry(parentASeed, null, null), new ParentAncestry(parentBSeed, null, null),
-            configVersion, mutationChance, rarityBias, grandparentReachChance: 0);
+            configVersion, mutationChance, rarityBias, grandparentReachChance: 0,
+            mutationRarityBiasStrength: -1, antiDuplicationDecay: 0, antiDuplicationMaxPenalty: 0);
 
     /// <summary>
     /// Um pai pro cruzamento: o próprio seed + (se ele mesmo for um filhote) os seeds dos
@@ -109,10 +110,18 @@ public static class TraitGenerator
     /// virou mecânica de jogo). Resolve exatamente 2 gerações de profundidade (pai real + avô
     /// real); além disso, avô é tratado como Generate(seed) puro — a "genética" rastreada com
     /// precisão para aí, decisão de escopo deliberada.
+    ///
+    /// <paramref name="mutationRarityBiasStrength"/>/<paramref name="antiDuplicationDecay"/>/
+    /// <paramref name="antiDuplicationMaxPenalty"/> (13/08/2026): ver
+    /// <see cref="BreedingDefaults.MutationRarityBiasStrength"/>/<see cref="BreedingDefaults.AntiDuplicationDecay"/>/
+    /// <see cref="BreedingDefaults.AntiDuplicationMaxPenalty"/> pro raciocínio completo — passados
+    /// explicitamente (não lidos direto de `BreedingDefaults`) pra manter este motor desacoplado
+    /// de `Vivarium.Core.Gameplay`, mesmo padrão já usado por `mutationChance`/`rarityBias`.
     /// </summary>
     public static CreatureTraits BreedTraits(
         long childSeed, ParentAncestry parentA, ParentAncestry parentB,
-        int configVersion, double mutationChance, double rarityBias, double grandparentReachChance)
+        int configVersion, double mutationChance, double rarityBias, double grandparentReachChance,
+        double mutationRarityBiasStrength, double antiDuplicationDecay, double antiDuplicationMaxPenalty)
     {
         // Mesmo relaxamento de Generate acima — só bloqueia versão maior que a atual.
         if (configVersion > TraitConfigV1.Version)
@@ -120,8 +129,10 @@ public static class TraitGenerator
 
         // Traits REAIS de cada pai: se ele é filhote (avós conhecidos), recomputa via a
         // sobrecarga simples (sem reach-back — só 1 nível abaixo); senão, Generate direto.
-        CreatureTraits ownA = ResolveOwnTraits(parentA, configVersion, mutationChance, rarityBias);
-        CreatureTraits ownB = ResolveOwnTraits(parentB, configVersion, mutationChance, rarityBias);
+        CreatureTraits ownA = ResolveOwnTraits(parentA, configVersion, mutationChance, rarityBias,
+            mutationRarityBiasStrength, antiDuplicationDecay, antiDuplicationMaxPenalty);
+        CreatureTraits ownB = ResolveOwnTraits(parentB, configVersion, mutationChance, rarityBias,
+            mutationRarityBiasStrength, antiDuplicationDecay, antiDuplicationMaxPenalty);
         CreatureTraits? gpA1 = parentA.GrandparentASeed is { } gA1 ? Generate(gA1, configVersion) : null;
         CreatureTraits? gpA2 = parentA.GrandparentBSeed is { } gA2 ? Generate(gA2, configVersion) : null;
         CreatureTraits? gpB1 = parentB.GrandparentASeed is { } gB1 ? Generate(gB1, configVersion) : null;
@@ -130,10 +141,16 @@ public static class TraitGenerator
         CreatureTraits effA(string slotSalt) => EffectiveParentTraits(childSeed, slotSalt + "_a", ownA, gpA1, gpA2, grandparentReachChance);
         CreatureTraits effB(string slotSalt) => EffectiveParentTraits(childSeed, slotSalt + "_b", ownB, gpB1, gpB2, grandparentReachChance);
 
+        // Anti-duplicação (13/08/2026): 1 sequência POR cruzamento, atravessando os 7 slots com
+        // viés de raridade abaixo (tier, cauda cor/padrão, dorsal cor/padrão, peitoral cor/padrão)
+        // na MESMA ordem em que são computados. Movimento fica de fora (não usa InheritOrMutate).
+        var streak = new DuplicationStreak(antiDuplicationDecay, antiDuplicationMaxPenalty);
+
         double score = 0;
 
         var (shimmerA, shimmerB) = (effA("body_shimmer"), effB("body_shimmer"));
-        var tierPick = InheritOrMutate(childSeed, "body_shimmer", mutationChance, shimmerA.ShimmerTier, shimmerB.ShimmerTier, TraitConfigV1.ShimmerTiers, rarityBias);
+        var tierPick = InheritOrMutate(childSeed, "body_shimmer", mutationChance, shimmerA.ShimmerTier, shimmerB.ShimmerTier,
+            TraitConfigV1.ShimmerTiers, rarityBias, mutationRarityBiasStrength, streak);
         score += TraitConfigV1.ShimmerScoreWeight * SelfInformation(tierPick.Probability);
         ShimmerTier tier = tierPick.Value;
 
@@ -162,11 +179,11 @@ public static class TraitGenerator
         var partColorTable = ApplyCorrelation(TraitConfigV1.PartColors, boosted);
 
         var (tailA, tailB) = (effA("tail"), effB("tail"));
-        var tail = BreedPart(childSeed, "tail", mutationChance, rarityBias, tailA.Tail, tailB.Tail, partColorTable, ref score);
+        var tail = BreedPart(childSeed, "tail", mutationChance, rarityBias, mutationRarityBiasStrength, streak, tailA.Tail, tailB.Tail, partColorTable, ref score);
         var (dorsalA, dorsalB) = (effA("dorsal"), effB("dorsal"));
-        var dorsal = BreedPart(childSeed, "dorsal", mutationChance, rarityBias, dorsalA.Dorsal, dorsalB.Dorsal, partColorTable, ref score);
+        var dorsal = BreedPart(childSeed, "dorsal", mutationChance, rarityBias, mutationRarityBiasStrength, streak, dorsalA.Dorsal, dorsalB.Dorsal, partColorTable, ref score);
         var (pectoralA, pectoralB) = (effA("pectoral"), effB("pectoral"));
-        var pectoral = BreedPart(childSeed, "pectoral", mutationChance, rarityBias, pectoralA.Pectoral, pectoralB.Pectoral, partColorTable, ref score);
+        var pectoral = BreedPart(childSeed, "pectoral", mutationChance, rarityBias, mutationRarityBiasStrength, streak, pectoralA.Pectoral, pectoralB.Pectoral, partColorTable, ref score);
 
         score += SetBonus(tail, dorsal, pectoral);
 
@@ -189,10 +206,21 @@ public static class TraitGenerator
         return new CreatureTraits(tier, shimmerColor, shimmerOpacity, tail, dorsal, pectoral, movement, score);
     }
 
-    /// <summary>Traits reais de um pai — Generate direto se fresco, ou recomputa 1 nível (sem reach-back) se ele é filhote.</summary>
-    internal static CreatureTraits ResolveOwnTraits(ParentAncestry ancestry, int configVersion, double mutationChance, double rarityBias)
+    /// <summary>
+    /// Traits reais de um pai — Generate direto se fresco, ou recomputa 1 nível (sem reach-back)
+    /// se ele é filhote. Passa adiante os MESMOS `mutationRarityBiasStrength`/
+    /// `antiDuplicationDecay`/`antiDuplicationMaxPenalty` recebidos (não zera) — um pai filhote
+    /// deve ser aproximado com as mesmas mecânicas de anti-duplicação/piso de mutação que
+    /// qualquer outro cruzamento, só que com 1 nível a menos de ancestralidade (mesma limitação
+    /// já documentada — CLAUDE.md 8.19.1).
+    /// </summary>
+    internal static CreatureTraits ResolveOwnTraits(
+        ParentAncestry ancestry, int configVersion, double mutationChance, double rarityBias,
+        double mutationRarityBiasStrength, double antiDuplicationDecay, double antiDuplicationMaxPenalty)
         => ancestry.GrandparentASeed is { } gA && ancestry.GrandparentBSeed is { } gB
-            ? BreedTraits(ancestry.Seed, gA, gB, configVersion, mutationChance, rarityBias)
+            ? BreedTraits(ancestry.Seed, new ParentAncestry(gA, null, null), new ParentAncestry(gB, null, null),
+                configVersion, mutationChance, rarityBias, grandparentReachChance: 0,
+                mutationRarityBiasStrength, antiDuplicationDecay, antiDuplicationMaxPenalty)
             : Generate(ancestry.Seed, configVersion);
 
     /// <summary>
@@ -226,12 +254,21 @@ public static class TraitGenerator
     /// sem brilho quando na verdade a chance real de manter Lendário era alta. Mesma classe de bug
     /// já corrigida em `BreedTraits`/`FishCanvas` (31/07 e 10/08/2026) — sempre que uma criatura
     /// "completa" ganha ancestralidade, checar todo lugar que ainda deriva traits de um seed cru.
+    ///
+    /// **Simplificação aceita (13/08/2026):** não modela o piso de mutação (`MutationRarityBiasStrength`
+    /// /CLAUDE.md 8.8) — o branch de mutação aqui ainda assume sorteio livre pela tabela cheia
+    /// (`pBaseline`), então a prévia fica levemente otimista pra "sem brilho" e pessimista pros
+    /// tiers raros quando pelo menos um pai já tem um tier não-trivial. Mesmo padrão de
+    /// simplificação já aceito nesta função (boost de correlação cor↔shimmer também fica de fora).
     /// </summary>
     public static IReadOnlyDictionary<ShimmerTier, double> ChildTierDistribution(
-        ParentAncestry parentA, ParentAncestry parentB, int configVersion, double mutationChance, double rarityBias)
+        ParentAncestry parentA, ParentAncestry parentB, int configVersion, double mutationChance, double rarityBias,
+        double mutationRarityBiasStrength, double antiDuplicationDecay, double antiDuplicationMaxPenalty)
     {
-        var a = ResolveOwnTraits(parentA, configVersion, mutationChance, rarityBias);
-        var b = ResolveOwnTraits(parentB, configVersion, mutationChance, rarityBias);
+        var a = ResolveOwnTraits(parentA, configVersion, mutationChance, rarityBias,
+            mutationRarityBiasStrength, antiDuplicationDecay, antiDuplicationMaxPenalty);
+        var b = ResolveOwnTraits(parentB, configVersion, mutationChance, rarityBias,
+            mutationRarityBiasStrength, antiDuplicationDecay, antiDuplicationMaxPenalty);
 
         double probA = WeightedTable.ProbabilityOf(TraitConfigV1.ShimmerTiers, a.ShimmerTier);
         double probB = WeightedTable.ProbabilityOf(TraitConfigV1.ShimmerTiers, b.ShimmerTier);
@@ -251,25 +288,79 @@ public static class TraitGenerator
     private readonly record struct InheritedPick<T>(T Value, double Probability, bool Mutated, bool FromA);
 
     /// <summary>
+    /// Estado da "sequência de duplicação" dentro de UM cruzamento (CLAUDE.md 8.8, 13/08/2026):
+    /// conta quantos slots CONSECUTIVOS já vieram herdados do MESMO pai sem mutar — ver
+    /// <see cref="BreedingDefaults.AntiDuplicationDecay"/> pro raciocínio completo. Uma instância
+    /// nova por chamada de <see cref="BreedTraits(long,ParentAncestry,ParentAncestry,int,double,double,double,double,double,double)"/>,
+    /// nunca compartilhada entre cruzamentos diferentes.
+    /// </summary>
+    private sealed class DuplicationStreak(double decay, double maxPenalty)
+    {
+        public int Count { get; private set; }
+        public bool? SideA { get; private set; }
+
+        /// <summary>Empurra o threshold de herança pra LONGE do lado que já vem ganhando.</summary>
+        public double ApplyPenalty(double threshold)
+        {
+            if (SideA is not { } sideA) return threshold;
+            double penalty = Math.Min(maxPenalty, 1 - Math.Pow(decay, Count));
+            return sideA ? threshold * (1 - penalty) : threshold + (1 - threshold) * penalty;
+        }
+
+        public void Update(bool mutated, bool fromA)
+        {
+            if (mutated) { Count = 0; SideA = null; return; }
+            if (SideA == fromA) Count++;
+            else { SideA = fromA; Count = 1; }
+        }
+    }
+
+    /// <summary>
     /// Decide, por um hash independente, se o trait muta (sorteia do zero) ou é
     /// herdado de A/B. <paramref name="rarityBias"/> (0 = 50/50 puro) desloca a
-    /// escolha de herança em favor do valor mais raro entre os pais — a mutação em
-    /// si nunca é enviesada.
+    /// escolha de herança em favor do valor mais raro entre os pais.
+    ///
+    /// **Piso de mutação (13/08/2026):** quando <paramref name="mutationRarityBiasStrength"/> é
+    /// negativo (sentinela — só a sobrecarga simples de 6 argumentos usa isso, pra testes legados
+    /// que não conhecem o mecanismo), a mutação sorteia livre pela tabela cheia, igual sempre foi.
+    /// Qualquer valor `>= 0` (produção sempre usa <see cref="BreedingDefaults.MutationRarityBiasStrength"/>)
+    /// ATIVA o piso: o resultado nunca pode ficar mais comum que o pai mais fraco dos dois —
+    /// restringe a tabela (<see cref="WeightedTable.Restrict{T}"/>) ao peso do pai mais fraco pra
+    /// cima antes de sortear, com leve viés a favor do raro dentro do que sobra (o próprio valor
+    /// de <paramref name="mutationRarityBiasStrength"/>, 0 = sem viés extra dentro do piso).
+    ///
+    /// **Anti-duplicação (13/08/2026):** <paramref name="streak"/>, se presente, empurra o
+    /// threshold de herança pra longe do lado que já ganhou nos slots anteriores — ver
+    /// <see cref="BreedingDefaults.AntiDuplicationDecay"/>.
     /// </summary>
     private static InheritedPick<T> InheritOrMutate<T>(
         long childSeed, string salt, double mutationChance,
-        T valueA, T valueB, IReadOnlyList<WeightedValue<T>> table, double rarityBias = 0)
+        T valueA, T valueB, IReadOnlyList<WeightedValue<T>> table, double rarityBias = 0,
+        double mutationRarityBiasStrength = -1, DuplicationStreak? streak = null)
     {
         bool mutated = DeterministicHash.Roll01(childSeed, salt + "_source") < mutationChance;
         if (mutated)
         {
-            var (value, p) = WeightedTable.Pick(table, DeterministicHash.Roll01(childSeed, salt));
+            if (mutationRarityBiasStrength < 0)
+            {
+                var (freeValue, freeP) = WeightedTable.Pick(table, DeterministicHash.Roll01(childSeed, salt));
+                streak?.Update(mutated: true, fromA: false);
+                return new InheritedPick<T>(freeValue, freeP, true, false);
+            }
+
+            double floorWeight = Math.Max(WeightedTable.WeightOf(table, valueA), WeightedTable.WeightOf(table, valueB));
+            var restricted = WeightedTable.Restrict(table, floorWeight);
+            var (value, _) = WeightedTable.PickBiasedTowardRare(restricted, DeterministicHash.Roll01(childSeed, salt), mutationRarityBiasStrength);
+            double p = WeightedTable.ProbabilityOf(table, value); // probabilidade REAL na tabela cheia, pro rarity score
+            streak?.Update(mutated: true, fromA: false);
             return new InheritedPick<T>(value, p, true, false);
         }
         double probA = WeightedTable.ProbabilityOf(table, valueA);
         double probB = WeightedTable.ProbabilityOf(table, valueB);
         double threshold = WeightedTable.BiasedInheritProbability(probA, probB, rarityBias);
+        if (streak is not null) threshold = streak.ApplyPenalty(threshold);
         bool fromA = DeterministicHash.Roll01(childSeed, salt + "_inherit") < threshold;
+        streak?.Update(mutated: false, fromA: fromA);
         T v = fromA ? valueA : valueB;
         return new InheritedPick<T>(v, fromA ? probA : probB, false, fromA);
     }
@@ -291,14 +382,17 @@ public static class TraitGenerator
     }
 
     private static PartTraits BreedPart(
-        long childSeed, string partSalt, double mutationChance, double rarityBias,
+        long childSeed, string partSalt, double mutationChance, double rarityBias, double mutationRarityBiasStrength,
+        DuplicationStreak? streak,
         PartTraits a, PartTraits b, IReadOnlyList<WeightedValue<PartColor>> colorTable, ref double score)
     {
-        var colorPick = InheritOrMutate(childSeed, partSalt + "_color", mutationChance, a.Color, b.Color, colorTable, rarityBias);
+        var colorPick = InheritOrMutate(childSeed, partSalt + "_color", mutationChance, a.Color, b.Color, colorTable,
+            rarityBias, mutationRarityBiasStrength, streak);
         score += SelfInformation(colorPick.Probability);
         PartColor color = colorPick.Value;
 
-        var patternPick = InheritOrMutate(childSeed, partSalt + "_pattern", mutationChance, a.Pattern, b.Pattern, TraitConfigV1.PatternTypes, rarityBias);
+        var patternPick = InheritOrMutate(childSeed, partSalt + "_pattern", mutationChance, a.Pattern, b.Pattern, TraitConfigV1.PatternTypes,
+            rarityBias, mutationRarityBiasStrength, streak);
         score += SelfInformation(patternPick.Probability);
         PatternType pattern = patternPick.Value;
 
