@@ -107,6 +107,10 @@ export function GameView({ onLogout }) {
             }}>🏆 Ranking</button>
           </nav>
           <button className="guide-btn" onClick={() => setShowHowItWorks(true)} title="Como o jogo funciona">?</button>
+          {/* PWA "adicionar à tela de início" no iOS não tem puxar-pra-atualizar nem
+              botão de reload do navegador — pedido do usuário (13/08/2026), jogando
+              assim, sem jeito fácil de recarregar quando algo trava. */}
+          <button className="guide-btn" onClick={() => window.location.reload()} title="Recarregar a página">🔄</button>
         </div>
         <span className="spacer" />
         <div className="topbar-stats">
