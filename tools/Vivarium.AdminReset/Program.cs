@@ -202,7 +202,8 @@ switch (args[0])
                 var ancestryB = new Vivarium.Core.Generation.TraitGenerator.ParentAncestry(pb, c.ParentBGrandparentASeed, c.ParentBGrandparentBSeed);
                 traits = Vivarium.Core.Generation.TraitGenerator.BreedTraits(
                     c.Seed, ancestryA, ancestryB, Vivarium.Core.Generation.TraitConfigV1.Version,
-                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance);
+                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance,
+                    BreedingDefaults.MutationRarityBiasStrength, BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty);
                 Console.WriteLine($"#{c.Id} (FILHOTE) Seed={c.Seed} ParentASeed={pa} ParentBSeed={pb} ParentAGpA={c.ParentAGrandparentASeed} ParentAGpB={c.ParentAGrandparentBSeed} ParentBGpA={c.ParentBGrandparentASeed} ParentBGpB={c.ParentBGrandparentBSeed}");
             }
             else
@@ -252,7 +253,8 @@ switch (args[0])
                 var ancestryB = new Vivarium.Core.Generation.TraitGenerator.ParentAncestry(pb, c.ParentBGrandparentASeed, c.ParentBGrandparentBSeed);
                 recalculated = Vivarium.Core.Generation.TraitGenerator.BreedTraits(
                     c.Seed, ancestryA, ancestryB, Vivarium.Core.Generation.TraitConfigV1.Version,
-                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance).RarityScore;
+                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance,
+                    BreedingDefaults.MutationRarityBiasStrength, BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty).RarityScore;
             }
             else
             {
@@ -306,7 +308,8 @@ switch (args[0])
                 var ancestryB = new Vivarium.Core.Generation.TraitGenerator.ParentAncestry(pb, c.ParentBGrandparentASeed, c.ParentBGrandparentBSeed);
                 recalculated = Vivarium.Core.Generation.TraitGenerator.BreedTraits(
                     c.Seed, ancestryA, ancestryB, Vivarium.Core.Generation.TraitConfigV1.Version,
-                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance).RarityScore;
+                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance,
+                    BreedingDefaults.MutationRarityBiasStrength, BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty).RarityScore;
             }
             else
             {

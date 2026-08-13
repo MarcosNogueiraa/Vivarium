@@ -35,7 +35,8 @@ public static class TailColorResolver
                 var ancestryB = new TraitGenerator.ParentAncestry(parentBSeed, c.ParentBGrandparentASeed, c.ParentBGrandparentBSeed);
                 return TraitGenerator.BreedTraits(
                     c.Seed, ancestryA, ancestryB, c.TraitConfigVersion,
-                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance
+                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance,
+                    BreedingDefaults.MutationRarityBiasStrength, BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty
                 ).Tail.Color;
             }
             return TraitGenerator.Generate(c.Seed, c.TraitConfigVersion).Tail.Color;

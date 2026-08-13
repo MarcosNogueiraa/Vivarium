@@ -84,6 +84,12 @@ if (args.Length >= 1 && args[0] == "breeddump")
     return;
 }
 
+if (args.Length >= 1 && args[0] == "mutationfloor")
+{
+    MutationFloorImpactReport();
+    return;
+}
+
 if (args.Length >= 1 && args[0] == "grandparentdump")
 {
     // Crosscheck do mecanismo de avós (31/07/2026) contra o port JS — mesmo princípio do
@@ -242,7 +248,8 @@ static void GrandparentDumpLine(long childSeed, long parentASeed, long? gpAA, lo
     var ancestryA = new TraitGenerator.ParentAncestry(parentASeed, gpAA, gpAB);
     var ancestryB = new TraitGenerator.ParentAncestry(parentBSeed, gpBA, gpBB);
     var t = TraitGenerator.BreedTraits(childSeed, ancestryA, ancestryB, TraitConfigV1.Version,
-        BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance);
+        BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance,
+        BreedingDefaults.MutationRarityBiasStrength, BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty);
     var inv = CultureInfo.InvariantCulture;
     var sb = new System.Text.StringBuilder();
     sb.Append(childSeed).Append(';').Append(parentASeed).Append(';').Append(gpAA?.ToString() ?? "-").Append(';').Append(gpAB?.ToString() ?? "-")
@@ -835,3 +842,95 @@ static double Percentile(double[] sorted, double p)
     int lo = (int)rank;
     return lo >= sorted.Length - 1 ? sorted[^1] : sorted[lo] + (rank - lo) * (sorted[lo + 1] - sorted[lo]);
 }
+
+/// <summary>
+/// Mede o impacto econômico do piso de mutação (CLAUDE.md 8.8, 13/08/2026) ao longo de VÁRIAS
+/// gerações de cruzamento (filhote de hoje vira pai amanhã) — pedido explícito do usuário
+/// ("quero calcular o impacto disso na economia"). Simula 2 populações sintéticas idênticas
+/// (mesma semente de aleatoriedade pra pareamento/mutação — só o piso liga/desliga), cruzando
+/// pares aleatórios geração após geração, e reporta RarityScore médio e % Lendário da população
+/// em cada geração — o sinal de "deriva descontrolada" seria um score médio disparando sem
+/// estabilizar, não só subir um pouco.
+/// </summary>
+static void MutationFloorImpactReport()
+{
+    const int PopSize = 2_000;
+    const int Generations = 20;
+
+    List<PopMember> Founders(int seed)
+    {
+        var rng = new Random(seed);
+        var pop = new List<PopMember>(PopSize);
+        for (int i = 0; i < PopSize; i++)
+        {
+            long s = rng.NextInt64();
+            var t = TraitGenerator.Generate(s);
+            pop.Add(new PopMember(s, null, null, t.RarityScore, t.ShimmerTier));
+        }
+        return pop;
+    }
+
+    List<(double AvgScore, double LegendaryPct)> RunTrajectory(double mutationRarityBiasStrength, int rngSeed)
+    {
+        var pop = Founders(rngSeed);
+        var pairRng = new Random(rngSeed + 1);
+        var report = new List<(double, double)>(Generations);
+
+        for (int gen = 0; gen < Generations; gen++)
+        {
+            var next = new List<PopMember>(PopSize);
+            for (int i = 0; i < PopSize; i++)
+            {
+                var a = pop[pairRng.Next(pop.Count)];
+                var b = pop[pairRng.Next(pop.Count)];
+                long childSeed = pairRng.NextInt64();
+                var ancestryA = new TraitGenerator.ParentAncestry(a.Seed, a.OwnParentASeed, a.OwnParentBSeed);
+                var ancestryB = new TraitGenerator.ParentAncestry(b.Seed, b.OwnParentASeed, b.OwnParentBSeed);
+                var child = TraitGenerator.BreedTraits(childSeed, ancestryA, ancestryB, TraitConfigV1.Version,
+                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance,
+                    mutationRarityBiasStrength, BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty);
+                next.Add(new PopMember(childSeed, a.Seed, b.Seed, child.RarityScore, child.ShimmerTier));
+            }
+            pop = next;
+            double avgScore = pop.Average(m => m.RarityScore);
+            double legendaryPct = pop.Count(m => m.Tier == ShimmerTier.Legendary) / (double)pop.Count * 100;
+            report.Add((avgScore, legendaryPct));
+        }
+        return report;
+    }
+
+    // -1 = piso desligado (sorteio livre de mutação, comportamento ANTES desta mudança);
+    // BreedingDefaults.MutationRarityBiasStrength = piso ligado (produção, 13/08/2026).
+    var withoutFloor = RunTrajectory(-1, rngSeed: 9001);
+    var withFloor = RunTrajectory(BreedingDefaults.MutationRarityBiasStrength, rngSeed: 9001);
+
+    Console.WriteLine($"\nIMPACTO ECONÔMICO DO PISO DE MUTAÇÃO ({PopSize:N0} indivíduos, {Generations} gerações, cruzamento aleatório por geração):");
+    Console.WriteLine($"{"Geração",8} | {"Score médio SEM piso",22} | {"Score médio COM piso",22} | {"% Lendário SEM",15} | {"% Lendário COM",15}");
+    for (int gen = 0; gen < Generations; gen++)
+    {
+        var (avgW, legW) = withoutFloor[gen];
+        var (avgF, legF) = withFloor[gen];
+        Console.WriteLine($"{gen + 1,8} | {avgW,22:0.000} | {avgF,22:0.000} | {legW,15:0.00} | {legF,15:0.00}");
+    }
+
+    var lastW = withoutFloor[^1];
+    var lastF = withFloor[^1];
+    double deltaScorePct = (lastF.AvgScore - lastW.AvgScore) / lastW.AvgScore * 100;
+    Console.WriteLine($"\nNa última geração: score médio {(deltaScorePct >= 0 ? "+" : "")}{deltaScorePct:0.0}% com o piso vs. sem; " +
+        $"% Lendário {lastW.LegendaryPct:0.00}% (sem) -> {lastF.LegendaryPct:0.00}% (com).");
+
+    // Checagem de "deriva descontrolada": compara o crescimento da 2ª metade das gerações
+    // contra a 1ª metade — se ainda estiver crescendo no mesmo ritmo (não estabilizou), é sinal
+    // de alerta; se a taxa de crescimento cair, a população está convergindo pra um novo patamar.
+    double firstHalfGrowth = withFloor[Generations / 2 - 1].AvgScore - withFloor[0].AvgScore;
+    double secondHalfGrowth = withFloor[^1].AvgScore - withFloor[Generations / 2].AvgScore;
+    Console.WriteLine($"Crescimento (com piso) na 1ª metade das gerações: {firstHalfGrowth:0.000} pontos; na 2ª metade: {secondHalfGrowth:0.000} pontos " +
+        $"({(secondHalfGrowth < firstHalfGrowth ? "desacelerando — convergindo, não é deriva descontrolada" : "ATENÇÃO: ainda acelerando")}).");
+}
+
+/// <summary>
+/// Membro de uma população sintética — só o suficiente pra reproduzir o mesmo cap de 2 gerações
+/// do schema real (CreatureInstance: Seed + os 2 seeds dos PRÓPRIOS pais diretos, nunca mais
+/// fundo). Espelha exatamente o que fica denormalizado numa criatura real.
+/// </summary>
+readonly record struct PopMember(long Seed, long? OwnParentASeed, long? OwnParentBSeed, double RarityScore, ShimmerTier Tier);
