@@ -88,4 +88,58 @@ public class AdminService(VivariumDbContext db)
 
         return ServiceResult.Success(new { usersAffected = wallets.Count, amount });
     }
+
+    /// <summary>
+    /// Ajusta a carteira de UM jogador específico — "add" soma (delta pode ser negativo,
+    /// pra remover; resultado nunca fica abaixo de 0) e "set" define o saldo absoluto
+    /// (precisa ser ≥ 0). Ferramenta manual pontual (suporte/correção/teste), mesmo
+    /// espírito de GrantPremiumToAllAsync, só que mirada e com os dois modos.
+    /// </summary>
+    public async Task<ServiceResult> AdjustUserWalletAsync(
+        long requestingUserId, string username, string currencyCode, string mode, decimal amount, DateTime now)
+    {
+        if (!await IsAdminAsync(requestingUserId))
+            return ServiceResult.Forbidden("Só administradores podem fazer isso");
+
+        currencyCode = currencyCode.Trim().ToUpperInvariant();
+        if (currencyCode is not ("SOFT" or "PREMIUM"))
+            return ServiceResult.Bad("Moeda inválida (use SOFT ou PREMIUM)");
+
+        mode = mode.Trim().ToLowerInvariant();
+        if (mode is not ("add" or "set"))
+            return ServiceResult.Bad("Modo inválido (use add ou set)");
+        if (mode == "set" && amount < 0)
+            return ServiceResult.Bad("Saldo definido não pode ser negativo");
+
+        var target = await db.Users.FirstOrDefaultAsync(u => u.Username == username);
+        if (target is null)
+            return ServiceResult.NotFound("Jogador não encontrado");
+
+        int currencyId = await db.CurrencyTypes.Where(c => c.Code == currencyCode).Select(c => c.Id).FirstAsync();
+        var wallet = await db.WalletBalances
+            .FirstOrDefaultAsync(w => w.UserId == target.Id && w.CurrencyTypeId == currencyId);
+        if (wallet is null)
+        {
+            wallet = new WalletBalance { UserId = target.Id, CurrencyTypeId = currencyId, Amount = 0 };
+            db.WalletBalances.Add(wallet);
+        }
+
+        decimal before = wallet.Amount;
+        wallet.Amount = mode == "set" ? amount : Math.Max(0, wallet.Amount + amount);
+        decimal delta = wallet.Amount - before;
+
+        if (delta != 0)
+        {
+            db.TransactionLogs.Add(new TransactionLog
+            {
+                Type = TransactionType.AdminGrant,
+                ToUserId = target.Id,
+                CurrencyTypeId = currencyId,
+                Amount = delta,
+                CreatedAt = now,
+            });
+        }
+
+        return ServiceResult.Success(new { username = target.Username, currencyCode, balance = wallet.Amount });
+    }
 }
