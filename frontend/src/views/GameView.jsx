@@ -13,7 +13,7 @@ import { BreedingView } from "./BreedingView.jsx";
 import { RankingView } from "./RankingView.jsx";
 import { HowItWorksGuide } from "./HowItWorksGuide.jsx";
 import { RarityGuide } from "./RarityGuide.jsx";
-import { ConfirmModal } from "../components/ConfirmModal.jsx";
+import { AdminPanel } from "../components/AdminPanel.jsx";
 import { AccountMenu } from "../components/AccountMenu.jsx";
 import { TankUpgradeCelebration } from "../components/TankUpgradeCelebration.jsx";
 
@@ -32,8 +32,7 @@ export function GameView({ onLogout }) {
   const [claimingReward, setClaimingReward] = useState(false);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [showRarityGuide, setShowRarityGuide] = useState(false);
-  const [showGiveFishConfirm, setShowGiveFishConfirm] = useState(false);
-  const [showGrantPremiumConfirm, setShowGrantPremiumConfirm] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
   const navRef = useRef(null);
 
   // Em telas estreitas o nav vira uma tira de rolagem horizontal (styles.css,
@@ -44,19 +43,6 @@ export function GameView({ onLogout }) {
     navRef.current?.querySelector("button.active")
       ?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
   }, [tab]);
-
-  async function giveStarterFishToAll() {
-    const { habitatsAffected } = await api.adminGiveStarterFishAll();
-    setShowGiveFishConfirm(false);
-    notify(`+1 peixe pronto pra ${habitatsAffected} jogador(es)`);
-  }
-
-  async function grantPremiumToAll() {
-    const { usersAffected, amount } = await api.adminGrantPremiumAll(1000);
-    setShowGrantPremiumConfirm(false);
-    notify(`+${amount} premium pra ${usersAffected} jogador(es)`);
-    await refreshTank();
-  }
 
   async function devCoins() {
     try { await api.devCoins(1000); notify("+1000 fichas"); await refreshTank(); }
@@ -136,13 +122,8 @@ export function GameView({ onLogout }) {
             <button className="dev-btn" onClick={devPremium} title="Só existe em dev">+100 premium</button>
           )}
           {tank.isAdmin && (
-            <button className="dev-btn" onClick={() => setShowGiveFishConfirm(true)} title="Dá 1 peixe pronto pra coletar a todo jogador com espaço na fila">
-              🎣 Dar peixe a todos
-            </button>
-          )}
-          {tank.isAdmin && (
-            <button className="dev-btn" onClick={() => setShowGrantPremiumConfirm(true)} title="Credita 1000 de moeda premium na carteira de todo jogador">
-              💎 1000 premium a todos
+            <button className="dev-btn" onClick={() => setShowAdminPanel(true)} title="Ferramentas administrativas">
+              🛠️ Admin
             </button>
           )}
         </div>
@@ -180,22 +161,10 @@ export function GameView({ onLogout }) {
         />
       )}
       {showRarityGuide && <RarityGuide onClose={() => setShowRarityGuide(false)} />}
-      {showGiveFishConfirm && (
-        <ConfirmModal
-          title="Dar peixe a todos"
-          message="Todo jogador com espaço na fila (menos de 5 pendentes) recebe +1 peixe pronto pra coletar. Confirma?"
-          confirmLabel="Dar peixe a todos"
-          onConfirm={giveStarterFishToAll}
-          onClose={() => setShowGiveFishConfirm(false)}
-        />
-      )}
-      {showGrantPremiumConfirm && (
-        <ConfirmModal
-          title="Dar 1000 premium a todos"
-          message="Todo jogador recebe +1000 de moeda premium na carteira. Ação de teste em produção — não é reversível. Confirma?"
-          confirmLabel="Dar 1000 premium a todos"
-          onConfirm={grantPremiumToAll}
-          onClose={() => setShowGrantPremiumConfirm(false)}
+      {showAdminPanel && (
+        <AdminPanel
+          notify={notify}
+          onClose={async () => { setShowAdminPanel(false); await refreshTank(); }}
         />
       )}
       {bandUpgrade && <TankUpgradeCelebration bandName={bandUpgrade} onClose={dismissBandUpgrade} />}

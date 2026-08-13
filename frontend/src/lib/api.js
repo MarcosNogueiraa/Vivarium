@@ -62,6 +62,8 @@ export const api = {
   devCoins: (amount = 1000, currency = "SOFT") => request("POST", `/api/dev/coins?amount=${amount}&currency=${currency}`),
   adminGiveStarterFishAll: () => request("POST", "/api/admin/give-starter-fish-all"),
   adminGrantPremiumAll: (amount) => request("POST", "/api/admin/grant-premium-all", { amount }),
+  adminAdjustWallet: (username, currencyCode, mode, amount) =>
+    request("POST", "/api/admin/wallet", { username, currencyCode, mode, amount }),
   transferCreature: (id, toUsername) =>
     request("POST", `/api/game/creatures/${id}/transfer`, { toUsername }),
   breedingStatus: () => request("GET", "/api/breeding"),

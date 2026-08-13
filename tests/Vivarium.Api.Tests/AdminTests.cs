@@ -92,4 +92,99 @@ public class AdminTests : IClassFixture<VivariumApiFactory>
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
+
+    [Fact]
+    public async Task NaoAdmin_AjustarCarteira_Retorna403()
+    {
+        var (client, _) = await _factory.RegisterAsync("naoadmin3");
+
+        var response = await client.PostAsJsonAsync("/api/admin/wallet",
+            new { username = "naoadmin3", currencyCode = "SOFT", mode = "add", amount = 100 });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_AjustarCarteira_Add_SomaAoSaldoExistente()
+    {
+        var (adminClient, adminId) = await _factory.RegisterAsync("admin4");
+        await TornarAdmin(adminId);
+        var (otherClient, _) = await _factory.RegisterAsync("alvo1");
+        var before = await otherClient.GetFromJsonAsync<TankWalletDto>("/api/game/tank");
+
+        var response = await adminClient.PostAsJsonAsync("/api/admin/wallet",
+            new { username = "alvo1", currencyCode = "SOFT", mode = "add", amount = 500 });
+        response.EnsureSuccessStatusCode();
+
+        var after = await otherClient.GetFromJsonAsync<TankWalletDto>("/api/game/tank");
+        Assert.Equal(before!.Wallet["SOFT"] + 500, after!.Wallet["SOFT"]);
+    }
+
+    [Fact]
+    public async Task Admin_AjustarCarteira_Set_DefineSaldoAbsoluto()
+    {
+        var (adminClient, adminId) = await _factory.RegisterAsync("admin5");
+        await TornarAdmin(adminId);
+        var (otherClient, _) = await _factory.RegisterAsync("alvo2");
+
+        var response = await adminClient.PostAsJsonAsync("/api/admin/wallet",
+            new { username = "alvo2", currencyCode = "PREMIUM", mode = "set", amount = 42 });
+        response.EnsureSuccessStatusCode();
+
+        var after = await otherClient.GetFromJsonAsync<TankWalletDto>("/api/game/tank");
+        Assert.Equal(42, after!.Wallet["PREMIUM"]);
+    }
+
+    [Fact]
+    public async Task Admin_AjustarCarteira_Add_NuncaFicaNegativo()
+    {
+        var (adminClient, adminId) = await _factory.RegisterAsync("admin6");
+        await TornarAdmin(adminId);
+        var (otherClient, _) = await _factory.RegisterAsync("alvo3");
+
+        var response = await adminClient.PostAsJsonAsync("/api/admin/wallet",
+            new { username = "alvo3", currencyCode = "SOFT", mode = "add", amount = -999999 });
+        response.EnsureSuccessStatusCode();
+
+        var after = await otherClient.GetFromJsonAsync<TankWalletDto>("/api/game/tank");
+        Assert.Equal(0, after!.Wallet["SOFT"]);
+    }
+
+    [Fact]
+    public async Task Admin_AjustarCarteira_JogadorInexistente_Retorna404()
+    {
+        var (adminClient, adminId) = await _factory.RegisterAsync("admin7");
+        await TornarAdmin(adminId);
+
+        var response = await adminClient.PostAsJsonAsync("/api/admin/wallet",
+            new { username = "ninguem-existe", currencyCode = "SOFT", mode = "add", amount = 10 });
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_AjustarCarteira_MoedaInvalida_Retorna400()
+    {
+        var (adminClient, adminId) = await _factory.RegisterAsync("admin8");
+        await TornarAdmin(adminId);
+        await _factory.RegisterAsync("alvo4");
+
+        var response = await adminClient.PostAsJsonAsync("/api/admin/wallet",
+            new { username = "alvo4", currencyCode = "GEMAS", mode = "add", amount = 10 });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_AjustarCarteira_SetNegativo_Retorna400()
+    {
+        var (adminClient, adminId) = await _factory.RegisterAsync("admin9");
+        await TornarAdmin(adminId);
+        await _factory.RegisterAsync("alvo5");
+
+        var response = await adminClient.PostAsJsonAsync("/api/admin/wallet",
+            new { username = "alvo5", currencyCode = "SOFT", mode = "set", amount = -1 });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
 }
