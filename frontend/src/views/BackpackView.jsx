@@ -215,7 +215,16 @@ export function BackpackView({ refreshTank, notify }) {
               {selectMode ? "✕ Cancelar seleção" : "☑️ Selecionar"}
             </button>
           </div>
-          <CollapsibleSection title={`Filtros avançados${activeAppearanceFilters > 0 ? ` (${activeAppearanceFilters})` : ""}`}>
+          <CollapsibleSection
+            variant="prominent"
+            hint="Filtre por cor e padrão de cada parte — cauda, dorsal e peitoral, de forma independente."
+            title={
+              <>
+                Filtros avançados{" "}
+                {activeAppearanceFilters > 0 && <span className="filter-count-badge">({activeAppearanceFilters})</span>}
+              </>
+            }
+          >
             <div className="appearance-filter-group">
               {PARTS.map((part) => (
                 <div className="appearance-filter-part" key={part}>

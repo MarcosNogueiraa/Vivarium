@@ -11,9 +11,14 @@ import { Select } from "../components/Select.jsx";
 import { CollectCelebration } from "../components/CollectCelebration.jsx";
 import { PeekPanel } from "../components/PeekPanel.jsx";
 import { BreedingHistory } from "../components/BreedingHistory.jsx";
+import { CollapsibleSection } from "../components/CollapsibleSection.jsx";
 import { bandOf, BANDS, PART_HEX, PT } from "../lib/fishRenderer.js";
-import { breedingPreview, coinsPerHourOf, traitsOf } from "../lib/generator.js";
+import { breedingPreview, coinsPerHourOf, traitsOf, CONFIG } from "../lib/generator.js";
 import { PART_PT, partSummary } from "../lib/format.js";
+
+const PARTS = ["tail", "dorsal", "pectoral"];
+const PATTERN_VALUES = CONFIG.patternTypes.map(([v]) => v);
+const emptyPartFilter = { color: "all", pattern: "all" };
 
 const SORTS = {
   "rarity-desc": { label: "Raridade (maior primeiro)", cmp: (a, b) => Number(b.rarityScore) - Number(a.rarityScore) },
@@ -87,7 +92,9 @@ export function BreedingView({ tank, refreshTank, notify }) {
   const [, forceTick] = useState(0);
   const [sortBy, setSortBy] = useState("rarity-desc");
   const [bandFilter, setBandFilter] = useState("all");
-  const [colorFilter, setColorFilter] = useState("all");
+  const [partFilters, setPartFilters] = useState({
+    tail: { ...emptyPartFilter }, dorsal: { ...emptyPartFilter }, pectoral: { ...emptyPartFilter },
+  });
   const [onlyBred, setOnlyBred] = useState(false);
 
   const softBalance = Number(tank.wallet?.SOFT ?? 0);
@@ -111,10 +118,28 @@ export function BreedingView({ tank, refreshTank, notify }) {
   const candidates = backpack ? [...tank.creatures, ...backpack.creatures] : [];
   const visibleCandidates = useMemo(() => candidates
     .filter((c) => bandFilter === "all" || bandOf(Number(c.rarityScore)).name === bandFilter)
-    .filter((c) => colorFilter === "all" || traitsOf(c).tail.color === colorFilter)
+    .filter((c) => {
+      const t = traitsOf(c);
+      return PARTS.every((part) => {
+        const f = partFilters[part];
+        return (f.color === "all" || t[part].color === f.color)
+          && (f.pattern === "all" || t[part].pattern === f.pattern);
+      });
+    })
     .filter((c) => !onlyBred || c.isBred)
     .sort(SORTS[sortBy].cmp),
-  [candidates, bandFilter, colorFilter, onlyBred, sortBy]);
+  [candidates, bandFilter, partFilters, onlyBred, sortBy]);
+
+  const activeAppearanceFilters = PARTS.reduce(
+    (n, part) => n + (partFilters[part].color !== "all" ? 1 : 0) + (partFilters[part].pattern !== "all" ? 1 : 0),
+    0
+  );
+  function setPartColor(part, color) {
+    setPartFilters((prev) => ({ ...prev, [part]: { ...prev[part], color } }));
+  }
+  function setPartPattern(part, pattern) {
+    setPartFilters((prev) => ({ ...prev, [part]: { ...prev[part], pattern } }));
+  }
 
   if (status === null || backpack === null) return <p className="hint">Carregando o ninho…</p>;
 
@@ -285,27 +310,65 @@ export function BreedingView({ tank, refreshTank, notify }) {
                 </button>
               ))}
             </div>
-            <div className="filter-chips">
-              <button className={`filter-chip${colorFilter === "all" ? " active" : ""}`} onClick={() => setColorFilter("all")}>
-                Toda cor
-              </button>
-              {Object.keys(PART_HEX).map((color) => (
-                <button
-                  key={color}
-                  className={`filter-chip color-chip${colorFilter === color ? " active" : ""}`}
-                  style={{ "--tier": PART_HEX[color] }}
-                  title={PT.color[color]}
-                  onClick={() => setColorFilter(color)}
-                >
-                  <span className="dot-color" style={{ background: PART_HEX[color] }} />
-                </button>
-              ))}
-            </div>
             <label className="filter-toggle">
               <input type="checkbox" checked={onlyBred} onChange={(e) => setOnlyBred(e.target.checked)} />
               Só filhotes 🐣
             </label>
           </div>
+          <CollapsibleSection
+            variant="prominent"
+            hint="Filtre por cor e padrão de cada parte — cauda, dorsal e peitoral, de forma independente. Útil pra escolher pais que combinem traços específicos."
+            title={
+              <>
+                Filtros avançados{" "}
+                {activeAppearanceFilters > 0 && <span className="filter-count-badge">({activeAppearanceFilters})</span>}
+              </>
+            }
+          >
+            <div className="appearance-filter-group">
+              {PARTS.map((part) => (
+                <div className="appearance-filter-part" key={part}>
+                  <strong>{PART_PT[part]}</strong>
+                  <div className="filter-chips">
+                    <button
+                      className={`filter-chip${partFilters[part].color === "all" ? " active" : ""}`}
+                      onClick={() => setPartColor(part, "all")}
+                    >
+                      Toda cor
+                    </button>
+                    {Object.keys(PART_HEX).map((color) => (
+                      <button
+                        key={color}
+                        className={`filter-chip color-chip${partFilters[part].color === color ? " active" : ""}`}
+                        style={{ "--tier": PART_HEX[color] }}
+                        title={PT.color[color]}
+                        onClick={() => setPartColor(part, color)}
+                      >
+                        <span className="dot-color" style={{ background: PART_HEX[color] }} />
+                      </button>
+                    ))}
+                  </div>
+                  <div className="filter-chips">
+                    <button
+                      className={`filter-chip${partFilters[part].pattern === "all" ? " active" : ""}`}
+                      onClick={() => setPartPattern(part, "all")}
+                    >
+                      Todo padrão
+                    </button>
+                    {PATTERN_VALUES.map((pattern) => (
+                      <button
+                        key={pattern}
+                        className={`filter-chip${partFilters[part].pattern === pattern ? " active" : ""}`}
+                        onClick={() => setPartPattern(part, pattern)}
+                      >
+                        {PT.pattern[pattern]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CollapsibleSection>
           {visibleCandidates.length === 0 ? (
             <p className="hint">Nenhum peixe corresponde a esse filtro.</p>
           ) : (
