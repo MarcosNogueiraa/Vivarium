@@ -270,14 +270,26 @@ export function biasedInheritProbability(probA, probB, bias) {
  * espelha `TraitGenerator.DuplicationStreak` (C#). Uma instância nova por chamada de
  * `breedTraits`/`bredRarityBreakdown`, nunca compartilhada entre cruzamentos diferentes.
  */
-function newDuplicationStreak(decay, maxPenalty) {
+/**
+ * `applyPenalty` nunca inverte o lado que o viés de raridade já favorece — só encolhe até um
+ * "cara ou coroa" neutro em 0.5, no máximo. Bug real corrigido 13/08/2026 (espelha o fix em
+ * TraitGenerator.DuplicationStreak/C#, CLAUDE.md 8.8): a versão original multiplicava o
+ * threshold inteiro pela penalidade, podendo INVERTER o lado favorecido pela raridade (que já é
+ * sutil por design) — filhotes saindo com score abaixo dos dois pais.
+ */
+export function newDuplicationStreak(decay, maxPenalty) {
   return {
     count: 0,
     sideA: null,
     applyPenalty(threshold) {
       if (this.sideA === null) return threshold;
       const penalty = Math.min(maxPenalty, 1 - Math.pow(decay, this.count));
-      return this.sideA ? threshold * (1 - penalty) : threshold + (1 - threshold) * penalty;
+      if (this.sideA) {
+        const reduced = threshold * (1 - penalty);
+        return threshold > 0.5 ? Math.max(0.5, reduced) : reduced;
+      }
+      const increased = threshold + (1 - threshold) * penalty;
+      return threshold < 0.5 ? Math.min(0.5, increased) : increased;
     },
     update(mutated, fromA) {
       if (mutated) { this.count = 0; this.sideA = null; return; }
