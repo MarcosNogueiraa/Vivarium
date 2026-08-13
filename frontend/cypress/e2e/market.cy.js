@@ -1,5 +1,6 @@
 // E2E do Mercado: comprar de outro jogador, cancelar a própria listagem, estado vazio.
 // API mockada via cy.intercept.
+import { generateTraits } from "../../src/lib/generator.js";
 
 function fakeJwt(sub = "1", username = "jogador1") {
   const b64 = (obj) => btoa(JSON.stringify(obj)).replace(/=+$/, "");
@@ -10,6 +11,7 @@ function listing(id, sellerId, sellerName, seed, rarityScore, priceSoft) {
   return {
     id, creatureInstanceId: id * 10, sellerId, sellerName, priceSoft,
     seed: String(seed), rarityScore, isBred: false, parentASeed: null, parentBSeed: null,
+    traits: generateTraits(BigInt(seed)), breedingSource: null,
   };
 }
 

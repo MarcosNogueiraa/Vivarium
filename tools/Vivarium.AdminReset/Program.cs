@@ -30,8 +30,9 @@ if (args.Length == 0)
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- check-cross-refs <id1,id2,...>");
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- delete-users <id1,id2,...>");
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- list-creatures <email>");
-    Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- diff-scores [email]");
-    Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- fix-scores");
+    Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- dump-traits <id1,id2,...>");
+    Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- backfill-traits");
+    Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- audit-ancestry");
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- finish-all-breeding");
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- reset-account <email>");
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- give-seed <username-ou-email> <seed>");
@@ -178,6 +179,9 @@ switch (args[0])
     }
     case "dump-traits":
     {
+        // Só leitura — desde 13/08/2026 os traits já vêm congelados em TraitsJson no
+        // nascimento, então isso é só uma leitura direta, sem motor de geração envolvido
+        // (ver backfill-traits/audit-ancestry abaixo pro que substituiu diff-scores/fix-scores).
         if (args.Length != 2)
         {
             Console.WriteLine("Uso: dotnet run --project tools/Vivarium.AdminReset -- dump-traits <id1,id2,...>");
@@ -189,29 +193,13 @@ switch (args[0])
         {
             var c = creatures.FirstOrDefault(x => x.Id == id);
             if (c is null) { Console.WriteLine($"#{id}: não encontrada"); continue; }
-
-            Vivarium.Core.Generation.CreatureTraits traits;
-            // Recalcula sempre com a versão ATUAL do motor (TraitConfigV1.Version), nunca
-            // com c.TraitConfigVersion — esse campo fica gravado com o valor de quando a
-            // criatura nasceu, e Generate/BreedTraits lançam exceção se a versão passada não
-            // bater com a versão atual. Bug real exposto no primeiro bump de Version (1->2,
-            // 12/08/2026, Degradê) — ver fix-scores abaixo pra correção completa.
-            if (c.ParentASeed is { } pa && c.ParentBSeed is { } pb)
+            if (string.IsNullOrEmpty(c.TraitsJson))
             {
-                var ancestryA = new Vivarium.Core.Generation.TraitGenerator.ParentAncestry(pa, c.ParentAGrandparentASeed, c.ParentAGrandparentBSeed);
-                var ancestryB = new Vivarium.Core.Generation.TraitGenerator.ParentAncestry(pb, c.ParentBGrandparentASeed, c.ParentBGrandparentBSeed);
-                traits = Vivarium.Core.Generation.TraitGenerator.BreedTraits(
-                    c.Seed, ancestryA, ancestryB, Vivarium.Core.Generation.TraitConfigV1.Version,
-                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance,
-                    BreedingDefaults.MutationRarityBiasStrength, BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty);
-                Console.WriteLine($"#{c.Id} (FILHOTE) Seed={c.Seed} ParentASeed={pa} ParentBSeed={pb} ParentAGpA={c.ParentAGrandparentASeed} ParentAGpB={c.ParentAGrandparentBSeed} ParentBGpA={c.ParentBGrandparentASeed} ParentBGpB={c.ParentBGrandparentBSeed}");
+                Console.WriteLine($"#{c.Id}: sem TraitsJson (rodar backfill-traits primeiro)");
+                continue;
             }
-            else
-            {
-                traits = Vivarium.Core.Generation.TraitGenerator.Generate(c.Seed, Vivarium.Core.Generation.TraitConfigV1.Version);
-                Console.WriteLine($"#{c.Id} (normal) Seed={c.Seed}");
-            }
-            Console.WriteLine($"    RarityScore no banco={c.RarityScore}  Recalculado agora={traits.RarityScore}");
+            var traits = Vivarium.Core.Generation.TraitsSerialization.DeserializeTraits(c.TraitsJson);
+            Console.WriteLine($"#{c.Id} {(c.ParentAId != null ? "(FILHOTE)" : "(normal)")} Seed={c.Seed} RarityScore no banco={c.RarityScore}");
             Console.WriteLine($"    Shimmer: tier={traits.ShimmerTier} cor={traits.ShimmerColor} opacidade={traits.ShimmerOpacity:0.0}");
             Console.WriteLine($"    Cauda:   cor={traits.Tail.Color} padrão={traits.Tail.Pattern} corPadrão={traits.Tail.PatternColor} tam={traits.Tail.PatternSize:0.0} op={traits.Tail.PatternOpacity:0.0}");
             Console.WriteLine($"    Dorsal:  cor={traits.Dorsal.Color} padrão={traits.Dorsal.Pattern} corPadrão={traits.Dorsal.PatternColor} tam={traits.Dorsal.PatternSize:0.0} op={traits.Dorsal.PatternOpacity:0.0}");
@@ -221,113 +209,93 @@ switch (args[0])
         }
         return 0;
     }
-    case "diff-scores":
+    case "backfill-traits":
     {
-        // Só leitura — mede o estrago do bug de versionamento (TraitConfigVersion nunca
-        // incrementado apesar de mudanças de peso já terem acontecido): recalcula o score de
-        // TODA criatura viva (não vendida, não morta) com o motor ATUAL e compara com o que
-        // está gravado. Não escreve nada. Segundo argumento opcional filtra por email (detalhe).
-        string? filterEmail = args.Length >= 2 ? args[1] : null;
-        long? filterUserId = null;
-        if (filterEmail != null)
-        {
-            var fu = await db.Users.FirstOrDefaultAsync(u => u.Email == filterEmail);
-            if (fu is null) { Console.WriteLine($"Usuário '{filterEmail}' não encontrado."); return 1; }
-            filterUserId = fu.Id;
-        }
-        var all = await db.CreatureInstances
-            .Where(c => !c.IsDead && c.SoldAt == null && (filterUserId == null || c.OwnerId == filterUserId))
-            .ToListAsync();
-        int changed = 0;
-        double maxDelta = 0;
-        long maxDeltaId = 0;
-        var byUser = new Dictionary<long, (int Count, decimal TotalDelta)>();
-        foreach (var c in all)
-        {
-            double recalculated;
-            // Sempre com a versão ATUAL do motor, não c.TraitConfigVersion — mesmo motivo
-            // documentado em dump-traits acima.
-            if (c.ParentASeed is { } pa && c.ParentBSeed is { } pb)
-            {
-                var ancestryA = new Vivarium.Core.Generation.TraitGenerator.ParentAncestry(pa, c.ParentAGrandparentASeed, c.ParentAGrandparentBSeed);
-                var ancestryB = new Vivarium.Core.Generation.TraitGenerator.ParentAncestry(pb, c.ParentBGrandparentASeed, c.ParentBGrandparentBSeed);
-                recalculated = Vivarium.Core.Generation.TraitGenerator.BreedTraits(
-                    c.Seed, ancestryA, ancestryB, Vivarium.Core.Generation.TraitConfigV1.Version,
-                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance,
-                    BreedingDefaults.MutationRarityBiasStrength, BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty).RarityScore;
-            }
-            else
-            {
-                recalculated = Vivarium.Core.Generation.TraitGenerator.Generate(c.Seed, Vivarium.Core.Generation.TraitConfigV1.Version).RarityScore;
-            }
-            decimal delta = (decimal)recalculated - c.RarityScore;
-            if (Math.Abs((double)delta) > 0.05)
-            {
-                changed++;
-                (int Count, decimal TotalDelta) cur = byUser.TryGetValue(c.OwnerId, out var v) ? v : (0, 0m);
-                byUser[c.OwnerId] = (cur.Count + 1, cur.TotalDelta + delta);
-                if (Math.Abs((double)delta) > Math.Abs(maxDelta)) { maxDelta = (double)delta; maxDeltaId = c.Id; }
-                if (filterUserId != null)
-                    Console.WriteLine($"  #{c.Id,-5} HabitatId={c.HabitatId,-5} gravado={c.RarityScore,7:0.00}  recalculado={recalculated,7:0.00}  delta={delta,7:+0.00;-0.00}  {(c.ParentAId != null ? "(filhote)" : "")}");
-            }
-        }
-        Console.WriteLine($"Total de criaturas vivas/ativas: {all.Count}");
-        Console.WriteLine($"Com score divergente (>0.05): {changed} ({100.0 * changed / Math.Max(1, all.Count):0.0}%)");
-        Console.WriteLine($"Maior divergência: criatura #{maxDeltaId}, delta={maxDelta:0.00}");
-        Console.WriteLine();
-        var userIds = byUser.Keys.ToList();
-        var users = await db.Users.Where(u => userIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.Username);
-        foreach (var kv in byUser.OrderByDescending(kv => Math.Abs(kv.Value.TotalDelta)))
-            Console.WriteLine($"  {users.GetValueOrDefault(kv.Key, $"#{kv.Key}"),-20} {kv.Value.Count,4} peixe(s) divergente(s), delta total={kv.Value.TotalDelta:0.0}");
-        return 0;
-    }
-    case "fix-scores":
-    {
-        // Corrige o bug de RarityScore desatualizado (TraitConfigVersion nunca incrementado
-        // apesar de mudanças de peso já terem acontecido — ver diff-scores): recalcula com o
-        // motor ATUAL e sobrescreve o campo gravado pra TODA criatura viva (não vendida, não
-        // morta) cujo score divergir. Não muda Seed/traits/ancestralidade — só sincroniza o
-        // número com o que já está sendo renderizado/usado ao vivo. Dentro de uma transação.
+        // Congela TraitsJson pra TODA criatura já existente (inclusive mortas/vendidas —
+        // preserva histórico) — passo único de migração antes do deploy do motor novo
+        // (traits congelados no nascimento, ver CLAUDE.md §8.19.1/plano "traits congelados").
         //
-        // Bug corrigido junto (12/08/2026, exposto no primeiro bump real de Version): recalculava
-        // passando c.TraitConfigVersion (o valor já GRAVADO na linha, sempre 1 até agora) — como
-        // Generate/BreedTraits lançam exceção se a versão não bater com TraitConfigV1.Version
-        // atual, isso quebrava na primeira linha assim que Version saísse de 1. Corrigido pra
-        // sempre usar a versão ATUAL do motor, e agora também grava c.TraitConfigVersion (antes só
-        // o RarityScore era atualizado, deixando o campo permanentemente desatualizado e expondo
-        // o mesmo bug de novo na próxima mudança de peso).
-        var all = await db.CreatureInstances.Where(c => !c.IsDead && c.SoldAt == null).ToListAsync();
-        int fixedCount = 0;
-        decimal totalDelta = 0;
+        // Processa em ordem de criação (mais antigos primeiro) e resolve filhotes lendo os
+        // traits JÁ CALCULADOS dos pais nesta mesma passada (dicionário em memória por Id) —
+        // não a reconstrução antiga por ancestralidade limitada a 2 gerações. Isso corrige de
+        // vez qualquer divergência de profundidade (o próprio bug que motivou esta migração),
+        // porque cada filhote deriva do valor CONGELADO real do pai, sem limite de gerações.
+        var all = await db.CreatureInstances.OrderBy(c => c.CreatedAt).ToListAsync();
+        var resolved = new Dictionary<long, Vivarium.Core.Generation.CreatureTraits>();
+        int count = 0;
         foreach (var c in all)
         {
-            double recalculated;
-            if (c.ParentASeed is { } pa && c.ParentBSeed is { } pb)
+            Vivarium.Core.Generation.CreatureTraits traits;
+            if (c.ParentAId is { } paId && c.ParentBId is { } pbId
+                && resolved.TryGetValue(paId, out var ownA) && resolved.TryGetValue(pbId, out var ownB))
             {
-                var ancestryA = new Vivarium.Core.Generation.TraitGenerator.ParentAncestry(pa, c.ParentAGrandparentASeed, c.ParentAGrandparentBSeed);
-                var ancestryB = new Vivarium.Core.Generation.TraitGenerator.ParentAncestry(pb, c.ParentBGrandparentASeed, c.ParentBGrandparentBSeed);
-                recalculated = Vivarium.Core.Generation.TraitGenerator.BreedTraits(
-                    c.Seed, ancestryA, ancestryB, Vivarium.Core.Generation.TraitConfigV1.Version,
-                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance,
-                    BreedingDefaults.MutationRarityBiasStrength, BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty).RarityScore;
+                (traits, _) = Vivarium.Core.Generation.TraitGenerator.BreedTraits(
+                    c.Seed, ownA, ownB,
+                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength,
+                    BreedingDefaults.MutationRarityBiasStrength, BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty);
             }
             else
             {
-                recalculated = Vivarium.Core.Generation.TraitGenerator.Generate(c.Seed, Vivarium.Core.Generation.TraitConfigV1.Version).RarityScore;
+                traits = Vivarium.Core.Generation.TraitGenerator.Generate(c.Seed, Vivarium.Core.Generation.TraitConfigV1.Version);
             }
-            decimal delta = (decimal)recalculated - c.RarityScore;
-            if (Math.Abs((double)delta) > 0.05 || c.TraitConfigVersion != Vivarium.Core.Generation.TraitConfigV1.Version)
-            {
-                Console.WriteLine($"  #{c.Id,-5} {c.RarityScore,7:0.00} -> {(decimal)recalculated,7:0.00}  (delta {delta,7:+0.00;-0.00})  TraitConfigVersion {c.TraitConfigVersion} -> {Vivarium.Core.Generation.TraitConfigV1.Version}");
-                c.RarityScore = (decimal)recalculated;
-                c.TraitConfigVersion = Vivarium.Core.Generation.TraitConfigV1.Version;
-                fixedCount++;
-                totalDelta += delta;
-            }
+            c.TraitsJson = Vivarium.Core.Generation.TraitsSerialization.Serialize(traits);
+            c.TraitConfigVersion = Vivarium.Core.Generation.TraitConfigV1.Version;
+            decimal newScore = (decimal)traits.RarityScore;
+            if (newScore != c.RarityScore)
+                Console.WriteLine($"  #{c.Id,-5} RarityScore {c.RarityScore,7:0.00} -> {newScore,7:0.00}");
+            c.RarityScore = newScore;
+            resolved[c.Id] = traits;
+            count++;
         }
         await db.SaveChangesAsync();
-        Console.WriteLine($"\n{fixedCount} criatura(s) corrigida(s). Delta total={totalDelta:0.0}.");
+        Console.WriteLine($"\n{count} criatura(s) com TraitsJson preenchido.");
         return 0;
+    }
+    case "audit-ancestry":
+    {
+        // Só leitura — verifica, pra TODA criatura, se TraitsJson bate com o que o motor
+        // produziria a partir do Seed (fresco) ou de BreedTraits(seed, traits-do-pai-A,
+        // traits-do-pai-B) (filhote, usando os traits DO PAI já verificados na mesma
+        // passada). Percorre a ancestralidade real via ParentAId/ParentBId, sem limite de
+        // profundidade — detecta tanto bug futuro quanto adulteração direta no banco.
+        var all = await db.CreatureInstances.OrderBy(c => c.CreatedAt).ToListAsync();
+        var verified = new Dictionary<long, Vivarium.Core.Generation.CreatureTraits>();
+        int mismatches = 0;
+        foreach (var c in all)
+        {
+            Vivarium.Core.Generation.CreatureTraits expected;
+            if (c.ParentAId is { } paId && c.ParentBId is { } pbId
+                && verified.TryGetValue(paId, out var ownA) && verified.TryGetValue(pbId, out var ownB))
+            {
+                (expected, _) = Vivarium.Core.Generation.TraitGenerator.BreedTraits(
+                    c.Seed, ownA, ownB,
+                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength,
+                    BreedingDefaults.MutationRarityBiasStrength, BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty);
+            }
+            else
+            {
+                expected = Vivarium.Core.Generation.TraitGenerator.Generate(c.Seed, Vivarium.Core.Generation.TraitConfigV1.Version);
+            }
+
+            if (string.IsNullOrEmpty(c.TraitsJson))
+            {
+                Console.WriteLine($"#{c.Id}: TraitsJson vazio (rodar backfill-traits)");
+                mismatches++;
+                verified[c.Id] = expected;
+                continue;
+            }
+            var stored = Vivarium.Core.Generation.TraitsSerialization.DeserializeTraits(c.TraitsJson);
+            if (!stored.Equals(expected))
+            {
+                Console.WriteLine($"#{c.Id}: TraitsJson NÃO bate com o esperado (gravado score={stored.RarityScore:0.0000}, esperado={expected.RarityScore:0.0000})");
+                mismatches++;
+            }
+            // Segue a cadeia com o valor GRAVADO (é o que realmente vale pros filhos) — assim
+            // uma divergência num ancestral não mascara nem duplica divergências nos filhos.
+            verified[c.Id] = stored;
+        }
+        Console.WriteLine($"\n{all.Count} criatura(s) verificada(s), {mismatches} divergente(s).");
+        return mismatches == 0 ? 0 : 1;
     }
     case "list-creatures":
     {

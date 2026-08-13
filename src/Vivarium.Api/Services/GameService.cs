@@ -181,9 +181,7 @@ public class GameService(VivariumDbContext db)
             .Select(c => new CreatureInstance
             {
                 Id = c.Id, Seed = c.Seed, RarityScore = c.RarityScore, TraitConfigVersion = c.TraitConfigVersion,
-                ParentASeed = c.ParentASeed, ParentBSeed = c.ParentBSeed,
-                ParentAGrandparentASeed = c.ParentAGrandparentASeed, ParentAGrandparentBSeed = c.ParentAGrandparentBSeed,
-                ParentBGrandparentASeed = c.ParentBGrandparentASeed, ParentBGrandparentBSeed = c.ParentBGrandparentBSeed,
+                TraitsJson = c.TraitsJson,
             })
             .ToListAsync();
         var list = new List<FishIncome>(rows.Count);
@@ -298,6 +296,7 @@ public class GameService(VivariumDbContext db)
             Seed = collected.Seed,
             TraitConfigVersion = collected.TraitConfigVersion,
             RarityScore = collected.RarityScore,
+            TraitsJson = TraitsSerialization.Serialize(collected.Traits),
             CreatedAt = nowUtc,
         };
         db.CreatureInstances.Add(creature);

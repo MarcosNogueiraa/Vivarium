@@ -60,11 +60,10 @@ public class BreedingService(VivariumDbContext db, GameService game)
         var now = DateTime.UtcNow;
         double hours = BreedingCalculator.GestationHours(parentA.RarityScore, parentB.RarityScore);
         decimal cost = BreedingCalculator.CostSoft(parentA.RarityScore, parentB.RarityScore);
-        var ancestryA = new TraitGenerator.ParentAncestry(parentA.Seed, parentA.ParentASeed, parentA.ParentBSeed);
-        var ancestryB = new TraitGenerator.ParentAncestry(parentB.Seed, parentB.ParentASeed, parentB.ParentBSeed);
+        var ownA = TraitsSerialization.DeserializeTraits(parentA.TraitsJson!);
+        var ownB = TraitsSerialization.DeserializeTraits(parentB.TraitsJson!);
         var tierDist = TraitGenerator.ChildTierDistribution(
-            ancestryA, ancestryB, TraitConfigV1.Version, BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength,
-            BreedingDefaults.MutationRarityBiasStrength, BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty);
+            ownA, ownB, BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
 
         double chanceA = BreedingCalculator.DeathChance(BreedingCalculator.EffectiveBreedCount(parentA.BreedCount, parentA.LastBredAt, now));
         double chanceB = BreedingCalculator.DeathChance(BreedingCalculator.EffectiveBreedCount(parentB.BreedCount, parentB.LastBredAt, now));
@@ -294,15 +293,15 @@ public class BreedingService(VivariumDbContext db, GameService game)
         bool childToTank = active < mainHabitat.Capacity;
 
         long childSeed = CreatureCollector.NewRandomSeed();
-        // Ancestralidade de cada pai: se ele mesmo é filhote, ParentASeed/BSeed (já carregados
-        // nesta entidade, zero query extra) SÃO os seeds dos avós do lado dele — habilita a
-        // chance de herdar um traço de um avô em vez do pai direto (8.8, 31/07/2026) e evita
-        // reconstruir esse pai com Generate(seed) quando na verdade ele é um filhote.
-        var ancestryA = new TraitGenerator.ParentAncestry(parentA.Seed, parentA.ParentASeed, parentA.ParentBSeed);
-        var ancestryB = new TraitGenerator.ParentAncestry(parentB.Seed, parentB.ParentASeed, parentB.ParentBSeed);
-        var traits = TraitGenerator.BreedTraits(
-            childSeed, ancestryA, ancestryB, TraitConfigV1.Version,
-            BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance,
+        // 13/08/2026 — traits congelados no nascimento (CLAUDE.md §8.19.1): lê os traits JÁ
+        // RESOLVIDOS de cada pai (TraitsJson, já carregado nesta entidade, zero query extra) em
+        // vez de reconstruir a partir do seed + ancestralidade — elimina o bug de profundidade
+        // por completo (sem limite de gerações).
+        var ownA = TraitsSerialization.DeserializeTraits(parentA.TraitsJson!);
+        var ownB = TraitsSerialization.DeserializeTraits(parentB.TraitsJson!);
+        var (traits, sourceTrace) = TraitGenerator.BreedTraits(
+            childSeed, ownA, ownB,
+            BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength,
             BreedingDefaults.MutationRarityBiasStrength, BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty);
 
         var child = new CreatureInstance
@@ -313,15 +312,14 @@ public class BreedingService(VivariumDbContext db, GameService game)
             Seed = childSeed,
             TraitConfigVersion = TraitConfigV1.Version,
             RarityScore = (decimal)traits.RarityScore,
+            TraitsJson = TraitsSerialization.Serialize(traits),
+            BreedingSourceJson = TraitsSerialization.SerializeSource(sourceTrace),
             ParentAId = parentA.Id,
             ParentBId = parentB.Id,
-            // Denormalizado no filho pra reconstruir os traits herdados (BreedTraits)
-            // sem precisar de join — os seeds dos pais nunca mudam.
+            // Seeds denormalizados — histórico/curiosidade, não usados mais pra reconstruir
+            // traits (ver TraitsJson acima).
             ParentASeed = parentA.Seed,
             ParentBSeed = parentB.Seed,
-            // Idem, uma geração mais fundo: se ESTE filhote virar pai de outro cruzamento no
-            // futuro, esses seeds são os avós daquele filho — sem eles, `BreedTraits` teria que
-            // reconstruir este filhote com Generate(seed), o mesmo bug corrigido aqui.
             ParentAGrandparentASeed = parentA.ParentASeed,
             ParentAGrandparentBSeed = parentA.ParentBSeed,
             ParentBGrandparentASeed = parentB.ParentASeed,

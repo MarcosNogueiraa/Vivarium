@@ -2,6 +2,8 @@
 // hora, em vez de esperar os 4s — às vezes ela fica em cima de um botão que o jogador
 // quer clicar. API mockada via cy.intercept.
 
+import { generateTraits } from "../../src/lib/generator.js";
+
 function fakeJwt(sub = "1", username = "jogador1") {
   const b64 = (obj) => btoa(JSON.stringify(obj)).replace(/=+$/, "");
   return `${b64({ alg: "none", typ: "JWT" })}.${b64({ sub, unique_name: username })}.sig`;
@@ -10,6 +12,7 @@ function fakeJwt(sub = "1", username = "jogador1") {
 function creature(id, seed, rarityScore) {
   return {
     id, speciesId: 1, seed: String(seed), traitConfigVersion: 1, rarityScore,
+    traits: generateTraits(BigInt(seed)), breedingSource: null,
     createdAt: "2026-01-01T00:00:00Z", isBred: false, parentASeed: null, parentBSeed: null, breedCount: 0,
   };
 }

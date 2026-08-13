@@ -34,12 +34,7 @@ export function FishDetail({ creature, onClose, children, inTank = false, bandFa
     <Modal onClose={onClose}>
       <div className="detail-head">
         <div className="detail-fish">
-          <FishCanvas
-            seed={seed} width={280} isBred={creature.isBred}
-            parentASeed={creature.parentASeed} parentBSeed={creature.parentBSeed}
-            parentAGrandparentASeed={creature.parentAGrandparentASeed} parentAGrandparentBSeed={creature.parentAGrandparentBSeed}
-            parentBGrandparentASeed={creature.parentBGrandparentASeed} parentBGrandparentBSeed={creature.parentBGrandparentBSeed}
-          />
+          <FishCanvas creature={creature} width={280} />
         </div>
         <div className="detail-meta">
           <span className="badge big" style={{ "--tier": band.color }}><span className="gem" /> {band.name}</span>

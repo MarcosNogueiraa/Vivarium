@@ -70,76 +70,49 @@ public static class TraitGenerator
         return new CreatureTraits(tier, shimmerColor, shimmerOpacity, tail, dorsal, pectoral, movement, score);
     }
 
-    /// <summary>
-    /// Cruza dois peixes: cada trait é herdado 50/50 de um dos pais ou, com pequena
-    /// chance, mutado (sorteado do zero pelas mesmas tabelas de peso — legendário
-    /// continua raro mesmo mutando, sem lógica assimétrica extra). RarityScore é
-    /// recalculado a partir da probabilidade real de cada valor herdado/mutado —
-    /// nunca copiado dos pais. Subtraits condicionais (cor/opacidade de shimmer,
-    /// cor/tamanho/opacidade de padrão) seguem a MESMA fonte do trait pai (tier ou
-    /// tipo de padrão) pra nunca herdar um subtrait de um pai que não o tinha.
-    /// O tier de brilho do corpo E a cor/padrão de cada parte usam <paramref name="rarityBias"/>
-    /// pra favorecer o valor mais raro entre os pais (raridade "hereditária", sem virar garantia —
-    /// mutação continua sem viés). Movimento (velocidade/amplitude de cauda e nadadeira) continua
-    /// 50/50 puro — contribui pouco pro score (só os extremos, peso reduzido) e enviesar não traria
-    /// ganho perceptível (31/07/2026: estendido de "só shimmer" pra também cor/padrão — corrige
-    /// filhotes "regredindo" perto do piso da população mesmo vindo de pais decentes, já que antes
-    /// só o brilho puxava pra raridade e cor/padrão de parte, que dominam o score, eram 50/50 cego).
-    /// </summary>
-    public static CreatureTraits BreedTraits(
-        long childSeed, long parentASeed, long parentBSeed, int configVersion, double mutationChance, double rarityBias)
-        => BreedTraits(childSeed, new ParentAncestry(parentASeed, null, null), new ParentAncestry(parentBSeed, null, null),
-            configVersion, mutationChance, rarityBias, grandparentReachChance: 0,
-            mutationRarityBiasStrength: -1, antiDuplicationDecay: 0, antiDuplicationMaxPenalty: 0);
+    /// <summary>De qual lado (ou mutação) um slot do filhote veio — CLAUDE.md §8.19/§8.19.1 (13/08/2026).</summary>
+    public enum BreedSource { ParentA, ParentB, Mutation }
 
     /// <summary>
-    /// Um pai pro cruzamento: o próprio seed + (se ele mesmo for um filhote) os seeds dos
-    /// AVÓS do lado do filho sendo gerado agora — habilita <see cref="GrandparentReachChance"/>
-    /// e evita reconstruir esse pai com Generate(seed) quando ele na verdade é um filhote com
-    /// traits reais diferentes (bug corrigido 31/07/2026 — CLAUDE.md 8.8).
+    /// Um registro de origem de UM slot do filhote (tier de brilho, ou cor/padrão de uma parte).
+    /// <paramref name="Part"/> é null pro tier (não pertence a nenhuma parte).
     /// </summary>
-    public readonly record struct ParentAncestry(long Seed, long? GrandparentASeed, long? GrandparentBSeed);
+    public readonly record struct TraitSourceEntry(string Key, string? Part, BreedSource Source);
 
     /// <summary>
-    /// Cruza dois peixes — mesma mecânica que a sobrecarga simples (mutação/herança/viés,
-    /// documentados ali), mas quando um pai é ele mesmo um filhote (<paramref name="parentA"/>/
-    /// <paramref name="parentB"/> trazem os seeds dos avós), cada "slot" (tier de brilho, cauda,
-    /// dorsal, peitoral) tem <paramref name="grandparentReachChance"/> de chance de vir de um dos
-    /// AVÓS em vez do pai direto — um traço "pulando uma geração", com chance MENOR que herdar do
-    /// pai (31/07/2026, a pedido do usuário: em vez de só corrigir o bug de traits fantasma,
-    /// virou mecânica de jogo). Resolve exatamente 2 gerações de profundidade (pai real + avô
-    /// real); além disso, avô é tratado como Generate(seed) puro — a "genética" rastreada com
-    /// precisão para aí, decisão de escopo deliberada.
+    /// Cruza dois peixes JÁ RESOLVIDOS — <paramref name="ownA"/>/<paramref name="ownB"/> são os
+    /// traits REAIS dos pais (o que cada um exibe hoje na tela), não seeds. Cada trait é herdado
+    /// 50/50 de um dos pais ou, com pequena chance, mutado. RarityScore é recalculado a partir da
+    /// probabilidade real de cada valor herdado/mutado — nunca copiado dos pais. Subtraits
+    /// condicionais (cor/opacidade de shimmer, cor/tamanho/opacidade de padrão) seguem a MESMA
+    /// fonte do trait pai (tier ou tipo de padrão) pra nunca herdar um subtrait de um pai que não
+    /// o tinha. O tier de brilho do corpo E a cor/padrão de cada parte usam
+    /// <paramref name="rarityBias"/> pra favorecer o valor mais raro entre os pais. Movimento
+    /// continua 50/50 puro — contribui pouco pro score.
+    ///
+    /// **13/08/2026 — traits congelados no nascimento (CLAUDE.md §8.19.1):** até aqui, um pai que
+    /// era ele mesmo um filhote precisava ser RECONSTRUÍDO a partir do seed dele + até 2 gerações
+    /// de avós denormalizadas — limitado por profundidade, e a fonte de uma sequência real de bugs
+    /// (o valor reconstruído podia divergir do que o pai realmente exibia). Agora o CHAMADOR
+    /// (`BreedingService`) já resolve os pais uma vez, lê o `TraitsJson` congelado de cada um e
+    /// passa os `CreatureTraits` prontos aqui — sem limite de profundidade, sem reconstrução,
+    /// porque cada peixe já nasceu com o próprio valor definitivo gravado. O mecanismo de "puxar
+    /// um traço de um avô" (`GrandparentReachChance`) foi removido junto — já estava em 0.1% de
+    /// chance (a pedido do usuário) e exigiria carregar os avós como entidades extras, complexidade
+    /// desproporcional ao efeito.
     ///
     /// <paramref name="mutationRarityBiasStrength"/>/<paramref name="antiDuplicationDecay"/>/
-    /// <paramref name="antiDuplicationMaxPenalty"/> (13/08/2026): ver
+    /// <paramref name="antiDuplicationMaxPenalty"/>: ver
     /// <see cref="BreedingDefaults.MutationRarityBiasStrength"/>/<see cref="BreedingDefaults.AntiDuplicationDecay"/>/
-    /// <see cref="BreedingDefaults.AntiDuplicationMaxPenalty"/> pro raciocínio completo — passados
-    /// explicitamente (não lidos direto de `BreedingDefaults`) pra manter este motor desacoplado
-    /// de `Vivarium.Core.Gameplay`, mesmo padrão já usado por `mutationChance`/`rarityBias`.
+    /// <see cref="BreedingDefaults.AntiDuplicationMaxPenalty"/> pro raciocínio completo.
     /// </summary>
-    public static CreatureTraits BreedTraits(
-        long childSeed, ParentAncestry parentA, ParentAncestry parentB,
-        int configVersion, double mutationChance, double rarityBias, double grandparentReachChance,
+    public static (CreatureTraits Traits, IReadOnlyList<TraitSourceEntry> Source) BreedTraits(
+        long childSeed, CreatureTraits ownA, CreatureTraits ownB,
+        double mutationChance, double rarityBias,
         double mutationRarityBiasStrength, double antiDuplicationDecay, double antiDuplicationMaxPenalty)
     {
-        // Mesmo relaxamento de Generate acima — só bloqueia versão maior que a atual.
-        if (configVersion > TraitConfigV1.Version)
-            throw new ArgumentException($"Versão de config desconhecida: {configVersion}", nameof(configVersion));
-
-        // Traits REAIS de cada pai: se ele é filhote (avós conhecidos), recomputa via a
-        // sobrecarga simples (sem reach-back — só 1 nível abaixo); senão, Generate direto.
-        CreatureTraits ownA = ResolveOwnTraits(parentA, configVersion, mutationChance, rarityBias,
-            mutationRarityBiasStrength, antiDuplicationDecay, antiDuplicationMaxPenalty);
-        CreatureTraits ownB = ResolveOwnTraits(parentB, configVersion, mutationChance, rarityBias,
-            mutationRarityBiasStrength, antiDuplicationDecay, antiDuplicationMaxPenalty);
-        CreatureTraits? gpA1 = parentA.GrandparentASeed is { } gA1 ? Generate(gA1, configVersion) : null;
-        CreatureTraits? gpA2 = parentA.GrandparentBSeed is { } gA2 ? Generate(gA2, configVersion) : null;
-        CreatureTraits? gpB1 = parentB.GrandparentASeed is { } gB1 ? Generate(gB1, configVersion) : null;
-        CreatureTraits? gpB2 = parentB.GrandparentBSeed is { } gB2 ? Generate(gB2, configVersion) : null;
-
-        CreatureTraits effA(string slotSalt) => EffectiveParentTraits(childSeed, slotSalt + "_a", ownA, gpA1, gpA2, grandparentReachChance);
-        CreatureTraits effB(string slotSalt) => EffectiveParentTraits(childSeed, slotSalt + "_b", ownB, gpB1, gpB2, grandparentReachChance);
+        var trace = new List<TraitSourceEntry>(7);
+        static BreedSource SourceOf(bool mutated, bool fromA) => mutated ? BreedSource.Mutation : fromA ? BreedSource.ParentA : BreedSource.ParentB;
 
         // Anti-duplicação (13/08/2026): 1 sequência POR cruzamento, atravessando os 7 slots com
         // viés de raridade abaixo (tier, cauda cor/padrão, dorsal cor/padrão, peitoral cor/padrão)
@@ -148,17 +121,17 @@ public static class TraitGenerator
 
         double score = 0;
 
-        var (shimmerA, shimmerB) = (effA("body_shimmer"), effB("body_shimmer"));
-        var tierPick = InheritOrMutate(childSeed, "body_shimmer", mutationChance, shimmerA.ShimmerTier, shimmerB.ShimmerTier,
+        var tierPick = InheritOrMutate(childSeed, "body_shimmer", mutationChance, ownA.ShimmerTier, ownB.ShimmerTier,
             TraitConfigV1.ShimmerTiers, rarityBias, mutationRarityBiasStrength, streak);
         score += TraitConfigV1.ShimmerScoreWeight * SelfInformation(tierPick.Probability);
         ShimmerTier tier = tierPick.Value;
+        trace.Add(new TraitSourceEntry("shimmerTier", null, SourceOf(tierPick.Mutated, tierPick.FromA)));
 
         ShimmerColor? shimmerColor = null;
         double shimmerOpacity = 0;
         if (tier != ShimmerTier.None)
         {
-            var tierSource = tierPick.FromA ? shimmerA : shimmerB;
+            var tierSource = tierPick.FromA ? ownA : ownB;
             if (!tierPick.Mutated && tierSource.ShimmerTier == tier)
             {
                 shimmerColor = tierSource.ShimmerColor;
@@ -178,17 +151,13 @@ public static class TraitGenerator
             : null;
         var partColorTable = ApplyCorrelation(TraitConfigV1.PartColors, boosted);
 
-        var (tailA, tailB) = (effA("tail"), effB("tail"));
-        var tail = BreedPart(childSeed, "tail", mutationChance, rarityBias, mutationRarityBiasStrength, streak, tailA.Tail, tailB.Tail, partColorTable, ref score);
-        var (dorsalA, dorsalB) = (effA("dorsal"), effB("dorsal"));
-        var dorsal = BreedPart(childSeed, "dorsal", mutationChance, rarityBias, mutationRarityBiasStrength, streak, dorsalA.Dorsal, dorsalB.Dorsal, partColorTable, ref score);
-        var (pectoralA, pectoralB) = (effA("pectoral"), effB("pectoral"));
-        var pectoral = BreedPart(childSeed, "pectoral", mutationChance, rarityBias, mutationRarityBiasStrength, streak, pectoralA.Pectoral, pectoralB.Pectoral, partColorTable, ref score);
+        var tail = BreedPart(childSeed, "tail", mutationChance, rarityBias, mutationRarityBiasStrength, streak, ownA.Tail, ownB.Tail, partColorTable, trace, ref score);
+        var dorsal = BreedPart(childSeed, "dorsal", mutationChance, rarityBias, mutationRarityBiasStrength, streak, ownA.Dorsal, ownB.Dorsal, partColorTable, trace, ref score);
+        var pectoral = BreedPart(childSeed, "pectoral", mutationChance, rarityBias, mutationRarityBiasStrength, streak, ownA.Pectoral, ownB.Pectoral, partColorTable, trace, ref score);
 
         score += SetBonus(tail, dorsal, pectoral);
 
-        // Movimento: sem viés nem reach-back de avós (contribuição pequena no score — decisão
-        // já tomada na rodada anterior), sempre a partir dos traits REAIS do pai direto.
+        // Movimento: sem viés, sempre a partir dos traits REAIS do pai direto — já resolvidos.
         double tailSpeed = BreedContinuousNormal(childSeed, "tail_speed", mutationChance,
             ownA.Movement.TailSpeed, ownB.Movement.TailSpeed, TraitConfigV1.MovementSpeedMean, TraitConfigV1.MovementSpeedStdDev);
         score += MovementExtremeInfo(tailSpeed);
@@ -203,75 +172,38 @@ public static class TraitGenerator
 
         var movement = new MovementTraits(tailSpeed, tailAmplitude, finSpeed, finAmplitude);
 
-        return new CreatureTraits(tier, shimmerColor, shimmerOpacity, tail, dorsal, pectoral, movement, score);
+        var traits = new CreatureTraits(tier, shimmerColor, shimmerOpacity, tail, dorsal, pectoral, movement, score);
+        return (traits, trace);
     }
 
     /// <summary>
-    /// Traits reais de um pai — Generate direto se fresco, ou recomputa 1 nível (sem reach-back)
-    /// se ele é filhote. Passa adiante os MESMOS `mutationRarityBiasStrength`/
-    /// `antiDuplicationDecay`/`antiDuplicationMaxPenalty` recebidos (não zera) — um pai filhote
-    /// deve ser aproximado com as mesmas mecânicas de anti-duplicação/piso de mutação que
-    /// qualquer outro cruzamento, só que com 1 nível a menos de ancestralidade (mesma limitação
-    /// já documentada — CLAUDE.md 8.19.1).
+    /// Conveniência pra cruzar 2 seeds FRESCOS diretamente (sem ancestralidade nenhuma) — usada
+    /// por testes/simulação que não precisam de pais reais. Produção sempre usa a sobrecarga com
+    /// `CreatureTraits` já resolvidos (`BreedingService`, que lê o `TraitsJson` dos pais).
     /// </summary>
-    internal static CreatureTraits ResolveOwnTraits(
-        ParentAncestry ancestry, int configVersion, double mutationChance, double rarityBias,
-        double mutationRarityBiasStrength, double antiDuplicationDecay, double antiDuplicationMaxPenalty)
-        => ancestry.GrandparentASeed is { } gA && ancestry.GrandparentBSeed is { } gB
-            ? BreedTraits(ancestry.Seed, new ParentAncestry(gA, null, null), new ParentAncestry(gB, null, null),
-                configVersion, mutationChance, rarityBias, grandparentReachChance: 0,
-                mutationRarityBiasStrength, antiDuplicationDecay, antiDuplicationMaxPenalty)
-            : Generate(ancestry.Seed, configVersion);
+    public static (CreatureTraits Traits, IReadOnlyList<TraitSourceEntry> Source) BreedTraits(
+        long childSeed, long parentASeed, long parentBSeed, double mutationChance, double rarityBias)
+        => BreedTraits(childSeed, Generate(parentASeed), Generate(parentBSeed), mutationChance, rarityBias,
+            mutationRarityBiasStrength: -1, antiDuplicationDecay: 0, antiDuplicationMaxPenalty: 0);
 
     /// <summary>
-    /// Com <paramref name="reachChance"/> de chance (só se os avós existirem), troca o "candidato"
-    /// desse lado pelo de um dos avós (50/50 entre eles) em vez dos traits reais do pai direto.
-    /// Retorna o CreatureTraits INTEIRO (não um trait solto) pra manter subtraits coerentes com
-    /// a mesma fonte, igual já acontece hoje entre pai A/B.
-    /// </summary>
-    internal static CreatureTraits EffectiveParentTraits(
-        long childSeed, string salt, CreatureTraits own, CreatureTraits? grandparent1, CreatureTraits? grandparent2, double reachChance)
-    {
-        if (grandparent1 is null || grandparent2 is null) return own;
-        if (DeterministicHash.Roll01(childSeed, salt + "_reach") >= reachChance) return own;
-        bool first = DeterministicHash.Roll01(childSeed, salt + "_reach_which") < 0.5;
-        return first ? grandparent1 : grandparent2;
-    }
-
-    /// <summary>
-    /// Probabilidade de cada tier de brilho sair no filho, dado os pais e as
-    /// constantes de mutação/viés — cálculo fechado, sem sortear nada (usado no
-    /// preview "chances do filhote" antes de confirmar o cruzamento). Mesma
-    /// matemática de <see cref="InheritOrMutate{T}"/>: com `mutationChance` de
-    /// chance o tier vem do sorteio livre pela tabela base; senão, do viés entre
-    /// os dois pais.
+    /// Probabilidade de cada tier de brilho sair no filho, dado os traits REAIS dos pais (já
+    /// resolvidos, lidos do `TraitsJson` deles) — cálculo fechado, sem sortear nada (usado no
+    /// preview "chances do filhote" antes de confirmar o cruzamento). Mesma matemática de
+    /// <see cref="InheritOrMutate{T}"/>: com `mutationChance` de chance o tier vem do sorteio
+    /// livre pela tabela base; senão, do viés entre os dois pais.
     ///
-    /// <paramref name="parentA"/>/<paramref name="parentB"/> usam <see cref="ResolveOwnTraits"/>
-    /// (não <see cref="Generate"/> direto) — bug real corrigido 12/08/2026: se um pai É ele mesmo
-    /// um filhote (ex: um Épico que herdou brilho Lendário Iridescente dos avós), `Generate(seed)`
-    /// puro devolve um tier ALEATÓRIO sem relação nenhuma com o tier REAL desse pai (78% de chance
-    /// de sair "Sem brilho" do zero) — a prévia mostrava algo como 98% de chance de o filhote sair
-    /// sem brilho quando na verdade a chance real de manter Lendário era alta. Mesma classe de bug
-    /// já corrigida em `BreedTraits`/`FishCanvas` (31/07 e 10/08/2026) — sempre que uma criatura
-    /// "completa" ganha ancestralidade, checar todo lugar que ainda deriva traits de um seed cru.
-    ///
-    /// **Simplificação aceita (13/08/2026):** não modela o piso de mutação (`MutationRarityBiasStrength`
-    /// /CLAUDE.md 8.8) — o branch de mutação aqui ainda assume sorteio livre pela tabela cheia
-    /// (`pBaseline`), então a prévia fica levemente otimista pra "sem brilho" e pessimista pros
-    /// tiers raros quando pelo menos um pai já tem um tier não-trivial. Mesmo padrão de
-    /// simplificação já aceito nesta função (boost de correlação cor↔shimmer também fica de fora).
+    /// **Simplificação aceita:** não modela o piso de mutação (`MutationRarityBiasStrength`) — o
+    /// branch de mutação aqui ainda assume sorteio livre pela tabela cheia (`pBaseline`), então a
+    /// prévia fica levemente otimista pra "sem brilho" e pessimista pros tiers raros quando pelo
+    /// menos um pai já tem um tier não-trivial. Mesmo padrão de simplificação já aceito nesta
+    /// função (boost de correlação cor↔shimmer também fica de fora).
     /// </summary>
     public static IReadOnlyDictionary<ShimmerTier, double> ChildTierDistribution(
-        ParentAncestry parentA, ParentAncestry parentB, int configVersion, double mutationChance, double rarityBias,
-        double mutationRarityBiasStrength, double antiDuplicationDecay, double antiDuplicationMaxPenalty)
+        CreatureTraits ownA, CreatureTraits ownB, double mutationChance, double rarityBias)
     {
-        var a = ResolveOwnTraits(parentA, configVersion, mutationChance, rarityBias,
-            mutationRarityBiasStrength, antiDuplicationDecay, antiDuplicationMaxPenalty);
-        var b = ResolveOwnTraits(parentB, configVersion, mutationChance, rarityBias,
-            mutationRarityBiasStrength, antiDuplicationDecay, antiDuplicationMaxPenalty);
-
-        double probA = WeightedTable.ProbabilityOf(TraitConfigV1.ShimmerTiers, a.ShimmerTier);
-        double probB = WeightedTable.ProbabilityOf(TraitConfigV1.ShimmerTiers, b.ShimmerTier);
+        double probA = WeightedTable.ProbabilityOf(TraitConfigV1.ShimmerTiers, ownA.ShimmerTier);
+        double probB = WeightedTable.ProbabilityOf(TraitConfigV1.ShimmerTiers, ownB.ShimmerTier);
         double pFromA = WeightedTable.BiasedInheritProbability(probA, probB, rarityBias);
         double pFromB = 1 - pFromA;
 
@@ -279,7 +211,7 @@ public static class TraitGenerator
         foreach (var entry in TraitConfigV1.ShimmerTiers)
         {
             double pBaseline = entry.Weight / TraitConfigV1.ShimmerTiers.Sum(e => e.Weight);
-            double pInherit = (entry.Value == a.ShimmerTier ? pFromA : 0) + (entry.Value == b.ShimmerTier ? pFromB : 0);
+            double pInherit = (entry.Value == ownA.ShimmerTier ? pFromA : 0) + (entry.Value == ownB.ShimmerTier ? pFromB : 0);
             result[entry.Value] = mutationChance * pBaseline + (1 - mutationChance) * pInherit;
         }
         return result;
@@ -291,8 +223,7 @@ public static class TraitGenerator
     /// Estado da "sequência de duplicação" dentro de UM cruzamento (CLAUDE.md 8.8, 13/08/2026):
     /// conta quantos slots CONSECUTIVOS já vieram herdados do MESMO pai sem mutar — ver
     /// <see cref="BreedingDefaults.AntiDuplicationDecay"/> pro raciocínio completo. Uma instância
-    /// nova por chamada de <see cref="BreedTraits(long,ParentAncestry,ParentAncestry,int,double,double,double,double,double,double)"/>,
-    /// nunca compartilhada entre cruzamentos diferentes.
+    /// nova por chamada de `BreedTraits`, nunca compartilhada entre cruzamentos diferentes.
     /// </summary>
     internal sealed class DuplicationStreak(double decay, double maxPenalty)
     {
@@ -418,17 +349,22 @@ public static class TraitGenerator
     private static PartTraits BreedPart(
         long childSeed, string partSalt, double mutationChance, double rarityBias, double mutationRarityBiasStrength,
         DuplicationStreak? streak,
-        PartTraits a, PartTraits b, IReadOnlyList<WeightedValue<PartColor>> colorTable, ref double score)
+        PartTraits a, PartTraits b, IReadOnlyList<WeightedValue<PartColor>> colorTable,
+        List<TraitSourceEntry> trace, ref double score)
     {
         var colorPick = InheritOrMutate(childSeed, partSalt + "_color", mutationChance, a.Color, b.Color, colorTable,
             rarityBias, mutationRarityBiasStrength, streak);
         score += SelfInformation(colorPick.Probability);
         PartColor color = colorPick.Value;
+        trace.Add(new TraitSourceEntry("color", partSalt,
+            colorPick.Mutated ? BreedSource.Mutation : colorPick.FromA ? BreedSource.ParentA : BreedSource.ParentB));
 
         var patternPick = InheritOrMutate(childSeed, partSalt + "_pattern", mutationChance, a.Pattern, b.Pattern, TraitConfigV1.PatternTypes,
             rarityBias, mutationRarityBiasStrength, streak);
         score += SelfInformation(patternPick.Probability);
         PatternType pattern = patternPick.Value;
+        trace.Add(new TraitSourceEntry("pattern", partSalt,
+            patternPick.Mutated ? BreedSource.Mutation : patternPick.FromA ? BreedSource.ParentA : BreedSource.ParentB));
 
         if (pattern == PatternType.None)
             return new PartTraits(color, pattern, null, null, null);

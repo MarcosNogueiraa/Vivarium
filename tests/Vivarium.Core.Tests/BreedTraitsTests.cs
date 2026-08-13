@@ -13,8 +13,8 @@ public class BreedTraitsTests
     {
         for (long childSeed = 1; childSeed <= 200; childSeed++)
         {
-            var x = TraitGenerator.BreedTraits(childSeed, ParentASeed, ParentBSeed, TraitConfigV1.Version, 0.08, 0.0);
-            var y = TraitGenerator.BreedTraits(childSeed, ParentASeed, ParentBSeed, TraitConfigV1.Version, 0.08, 0.0);
+            var (x, _) = TraitGenerator.BreedTraits(childSeed, ParentASeed, ParentBSeed, 0.08, 0.0);
+            var (y, _) = TraitGenerator.BreedTraits(childSeed, ParentASeed, ParentBSeed, 0.08, 0.0);
             Assert.Equal(x, y);
         }
     }
@@ -28,7 +28,7 @@ public class BreedTraitsTests
         // breeding está corretamente alinhada com a do motor normal.
         foreach (long childSeed in ManySeeds(300))
         {
-            var bred = TraitGenerator.BreedTraits(childSeed, ParentASeed, ParentBSeed, TraitConfigV1.Version, 1.0, 0.0);
+            var (bred, _) = TraitGenerator.BreedTraits(childSeed, ParentASeed, ParentBSeed, 1.0, 0.0);
             var generated = TraitGenerator.Generate(childSeed);
             Assert.Equal(generated, bred);
         }
@@ -44,7 +44,7 @@ public class BreedTraitsTests
 
             foreach (long childSeed in ManySeeds(20))
             {
-                var child = TraitGenerator.BreedTraits(childSeed, parentA, parentB, TraitConfigV1.Version, 0.0, 0.0);
+                var (child, _) = TraitGenerator.BreedTraits(childSeed, parentA, parentB, 0.0, 0.0);
 
                 Assert.True(child.ShimmerTier == a.ShimmerTier || child.ShimmerTier == b.ShimmerTier);
 
@@ -97,8 +97,8 @@ public class BreedTraitsTests
         int foraDosPais = 0;
         for (long childSeed = 1; childSeed <= n; childSeed++)
         {
-            var tier = TraitGenerator.BreedTraits(childSeed, parentA, parentB, TraitConfigV1.Version, mutationChance, 0.0).ShimmerTier;
-            if (tier != ShimmerTier.Subtle && tier != ShimmerTier.Rare)
+            var (traits, _) = TraitGenerator.BreedTraits(childSeed, parentA, parentB, mutationChance, 0.0);
+            if (traits.ShimmerTier != ShimmerTier.Subtle && traits.ShimmerTier != ShimmerTier.Rare)
                 foraDosPais++;
         }
 
@@ -121,7 +121,7 @@ public class BreedTraitsTests
         {
             long parentA = childSeed * 13 + 1;
             long parentB = childSeed * 13 + 2;
-            var child = TraitGenerator.BreedTraits(childSeed, parentA, parentB, TraitConfigV1.Version, 0.08, 0.0);
+            var (child, _) = TraitGenerator.BreedTraits(childSeed, parentA, parentB, 0.08, 0.0);
             scores.Add(Math.Round(child.RarityScore, 6));
         }
         Assert.True(scores.Count > 50, $"esperava boa variação de score, só {scores.Count} valores distintos em 500 filhos");
@@ -142,7 +142,7 @@ public class BreedTraitsTests
         {
             long parentA = childSeed * 97 + 1;
             long parentB = childSeed * 97 + 2;
-            var child = TraitGenerator.BreedTraits(childSeed, parentA, parentB, TraitConfigV1.Version,
+            var (child, _) = TraitGenerator.BreedTraits(childSeed, parentA, parentB,
                 BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
             if (child.ShimmerTier == ShimmerTier.Legendary)
                 legendarios++;
@@ -165,8 +165,8 @@ public class BreedTraitsTests
         int rareCount = 0;
         for (long childSeed = 1; childSeed <= n; childSeed++)
         {
-            var tier = TraitGenerator.BreedTraits(childSeed, subtleParent, rareParent, TraitConfigV1.Version, 0.0, rarityBias).ShimmerTier;
-            if (tier == ShimmerTier.Rare) rareCount++;
+            var (traits, _) = TraitGenerator.BreedTraits(childSeed, subtleParent, rareParent, 0.0, rarityBias);
+            if (traits.ShimmerTier == ShimmerTier.Rare) rareCount++;
         }
 
         double expected = WeightedTable.BiasedInheritProbability(0.013, 0.15, rarityBias); // P(escolher o valor com prob 0.013 = Rare)
@@ -190,9 +190,9 @@ public class BreedTraitsTests
             int count = 0;
             for (long childSeed = 1; childSeed <= n; childSeed++)
             {
-                var tier = TraitGenerator.BreedTraits(childSeed + seedOffset, parentA, parentB, TraitConfigV1.Version,
-                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength).ShimmerTier;
-                if (tier == ShimmerTier.Legendary) count++;
+                var (traits, _) = TraitGenerator.BreedTraits(childSeed + seedOffset, parentA, parentB,
+                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
+                if (traits.ShimmerTier == ShimmerTier.Legendary) count++;
             }
             return count / (double)n;
         }
@@ -219,120 +219,36 @@ public class BreedTraitsTests
         // tier real bem diferente do que o seed cru geraria (78% de chance de "Sem brilho" do
         // zero) — a prévia mostrava ~98% de chance de o filhote sair sem brilho quando os dois
         // pais tinham Lendário de verdade (herdado via ancestralidade), quase o oposto do
-        // resultado real. Mesma classe de bug já corrigida em BreedTraits/FishCanvas (31/07 e
-        // 10/08/2026).
+        // resultado real.
+        //
+        // 13/08/2026 — traits congelados no nascimento: não existe mais "reconstruir a
+        // ancestralidade de um pai filhote" — o chamador (BreedingService) já lê os traits
+        // REAIS e congelados do pai direto do TraitsJson dele. Aqui simulamos exatamente isso:
+        // construímos os traits reais de 2 pais-filhotes cruzando avós lendários, e alimentamos
+        // ChildTierDistribution com esses traits JÁ RESOLVIDOS — não com seeds crus.
         long grandparent = FindSeedWithTier(ShimmerTier.Legendary, 200_000);
 
-        long ResolvedLegendaryParentSeed(long searchOffset)
+        CreatureTraits ResolvedLegendaryParent(long searchOffset)
         {
             foreach (long candidate in ManySeeds(5_000).Select(s => s + searchOffset))
             {
-                var resolved = TraitGenerator.BreedTraits(candidate, grandparent, grandparent,
-                    TraitConfigV1.Version, BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
-                if (resolved.ShimmerTier == ShimmerTier.Legendary) return candidate;
+                var (resolved, _) = TraitGenerator.BreedTraits(candidate, grandparent, grandparent,
+                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
+                if (resolved.ShimmerTier == ShimmerTier.Legendary) return resolved;
             }
             throw new InvalidOperationException("Seed de pai lendário não encontrado.");
         }
 
-        long parentASeed = ResolvedLegendaryParentSeed(0);
-        long parentBSeed = ResolvedLegendaryParentSeed(50_000_000);
+        var ownA = ResolvedLegendaryParent(0);
+        var ownB = ResolvedLegendaryParent(50_000_000);
 
-        // Confirma a premissa do teste: o seed CRU desses pais não é lendário (senão o bug não
-        // seria exercitado) — o tier real só existe por causa da ancestralidade.
-        Assert.NotEqual(ShimmerTier.Legendary, TraitGenerator.Generate(parentASeed).ShimmerTier);
-        Assert.NotEqual(ShimmerTier.Legendary, TraitGenerator.Generate(parentBSeed).ShimmerTier);
-
-        var ancestryA = new TraitGenerator.ParentAncestry(parentASeed, grandparent, grandparent);
-        var ancestryB = new TraitGenerator.ParentAncestry(parentBSeed, grandparent, grandparent);
-        var dist = TraitGenerator.ChildTierDistribution(ancestryA, ancestryB, TraitConfigV1.Version,
-            BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength,
-            BreedingDefaults.MutationRarityBiasStrength, BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty);
+        var dist = TraitGenerator.ChildTierDistribution(ownA, ownB,
+            BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
 
         Assert.True(dist[ShimmerTier.Legendary] > 0.5,
             $"pais realmente lendários deveriam manter o tier na maioria das vezes, saiu {dist[ShimmerTier.Legendary]:P1}");
         Assert.True(dist[ShimmerTier.None] < 0.1,
             $"chance de 'sem brilho' deveria ser baixa com pais lendários de verdade, saiu {dist[ShimmerTier.None]:P1}");
-    }
-
-    [Fact]
-    public void RetencaoDeLendario_ComAvosNaoLendarios_AindaAltaMasMenorQuePaisFrescos()
-    {
-        // Investigação (12/08/2026): usuário relatou que o FILHOTE REAL (não só a prévia, já
-        // corrigida acima) nasceu sem o brilho lendário ao cruzar 2 pais filhotes com Lendário
-        // real. Medido (na época, GrandparentReachChance=0.15): 83% de retenção com avós comuns
-        // (vs 92% pra pais "frescos", mesmo par).
-        // Reduzido de 0.15 pra 0.03, depois pra 0.01 no mesmo dia (12/08/2026, usuário pediu
-        // herança mais confiável em cruzamentos multi-geração — "filhotes de filhotes" perdendo
-        // traço raro com frequência demais). A chance é sorteada 8x independentes por cruzamento
-        // (4 slots × 2 lados) — com 0.15, a chance de PELO MENOS UM traço vir de avô em qualquer
-        // cruzamento era ~72.8%. Com 0.01, cai pra ~7.7%. No mesmo ajuste, MutationChance também
-        // caiu de 0.08 pra 0.04 (mesmo motivo). Efeito colateral esperado e correto: retenção de
-        // Lendário com avós comuns SOBE de 83% (baseline original, GrandparentReachChance=0.15)
-        // pra ~95% (menos chance de "escapar" pro avô não-lendário, menos mutação também).
-        long FindNoneSeed(long searchOffset) => ManySeeds(5_000).Select(s => s + searchOffset)
-            .First(s => TraitGenerator.Generate(s).ShimmerTier == ShimmerTier.None);
-        long grandparentA1 = FindNoneSeed(0);
-        long grandparentA2 = FindNoneSeed(1_000_000);
-        long grandparentB1 = FindNoneSeed(2_000_000);
-        long grandparentB2 = FindNoneSeed(3_000_000);
-
-        long ResolvedLegendaryParentSeed(long gpA, long gpB, long searchOffset)
-        {
-            // 40k (era 5k): com MutationChance mais baixo (12/08/2026, 0.08->0.04), achar um
-            // Lendário raro (só via mutação, já que os avós são "Sem brilho") precisa de um
-            // espaço de busca maior pro mesmo conjunto fixo de seeds continuar achando um match.
-            foreach (long candidate in ManySeeds(40_000).Select(s => s + searchOffset))
-            {
-                var resolved = TraitGenerator.BreedTraits(candidate, gpA, gpB,
-                    TraitConfigV1.Version, BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
-                if (resolved.ShimmerTier == ShimmerTier.Legendary) return candidate;
-            }
-            throw new InvalidOperationException("Seed de pai lendário não encontrado.");
-        }
-
-        long parentASeed = ResolvedLegendaryParentSeed(grandparentA1, grandparentA2, 0);
-        long parentBSeed = ResolvedLegendaryParentSeed(grandparentB1, grandparentB2, 50_000_000);
-
-        var ancestryA = new TraitGenerator.ParentAncestry(parentASeed, grandparentA1, grandparentA2);
-        var ancestryB = new TraitGenerator.ParentAncestry(parentBSeed, grandparentB1, grandparentB2);
-
-        const int n = 50_000;
-        int legendaryCount = 0;
-        for (long childSeed = 1; childSeed <= n; childSeed++)
-        {
-            var child = TraitGenerator.BreedTraits(childSeed, ancestryA, ancestryB, TraitConfigV1.Version,
-                BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance,
-                BreedingDefaults.MutationRarityBiasStrength, BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty);
-            if (child.ShimmerTier == ShimmerTier.Legendary) legendaryCount++;
-        }
-        double pct = legendaryCount / (double)n;
-
-        // Comparação com o caso "pais frescos" (sem avós, mesmo par) — mede o efeito ISOLADO
-        // do grandparentReachChance na retenção. Usa a MESMA chamada com piso de mutação
-        // habilitado (13/08/2026) que `pct` acima, pra manter a comparação justa (mesmas
-        // mecânicas ativas dos dois lados — só a presença de avós difere).
-        int legendaryCountFresh = 0;
-        for (long childSeed = 1; childSeed <= n; childSeed++)
-        {
-            var child = TraitGenerator.BreedTraits(childSeed,
-                new TraitGenerator.ParentAncestry(parentASeed, null, null), new TraitGenerator.ParentAncestry(parentBSeed, null, null),
-                TraitConfigV1.Version, BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance,
-                BreedingDefaults.MutationRarityBiasStrength, BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty);
-            if (child.ShimmerTier == ShimmerTier.Legendary) legendaryCountFresh++;
-        }
-        double pctFresh = legendaryCountFresh / (double)n;
-
-        // 13/08/2026: com o piso de mutação (CLAUDE.md 8.8), quando os DOIS pais já compartilham
-        // o valor MAIS RARO da tabela (Lendário, 0.2%), uma mutação nesse slot não tem PRA ONDE
-        // ir (nada é mais raro que Lendário) — só pode sair Lendário de novo. Isso elimina quase
-        // toda a via de "escape" que antes existia (mutação livre + avô comum), então a retenção
-        // sobe pra perto do teto nos dois cenários (com e sem avós) — o piso passou a dominar o
-        // efeito que antes vinha só do GrandparentReachChance. Faixas alargadas pra refletir isso;
-        // a comparação estrita "pct < pctFresh" virou pouco significativa (os dois perto do teto,
-        // a ordem entre eles pode inverter por ruído estatístico) — trocada por uma checagem
-        // frouxa de que nenhum dos dois caiu abaixo do esperado.
-        Assert.InRange(pct, 0.99, 1.00);
-        Assert.InRange(pctFresh, 0.99, 1.00);
     }
 
     [Fact]
@@ -351,8 +267,8 @@ public class BreedTraitsTests
         int whiteCount = 0;
         for (long childSeed = 1; childSeed <= n; childSeed++)
         {
-            var color = TraitGenerator.BreedTraits(childSeed, whiteParent, orangeParent, TraitConfigV1.Version, 0.0, rarityBias).Tail.Color;
-            if (color == PartColor.PureWhite) whiteCount++;
+            var (traits, _) = TraitGenerator.BreedTraits(childSeed, whiteParent, orangeParent, 0.0, rarityBias);
+            if (traits.Tail.Color == PartColor.PureWhite) whiteCount++;
         }
 
         double expected = WeightedTable.BiasedInheritProbability(0.01, 0.22, rarityBias);
@@ -375,9 +291,9 @@ public class BreedTraitsTests
             int count = 0;
             for (long childSeed = 1; childSeed <= n; childSeed++)
             {
-                var color = TraitGenerator.BreedTraits(childSeed + seedOffset, parentA, parentB, TraitConfigV1.Version,
-                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength).Tail.Color;
-                if (color == PartColor.PureWhite) count++;
+                var (traits, _) = TraitGenerator.BreedTraits(childSeed + seedOffset, parentA, parentB,
+                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
+                if (traits.Tail.Color == PartColor.PureWhite) count++;
             }
             return count / (double)n;
         }
@@ -404,7 +320,7 @@ public class BreedTraitsTests
         {
             long parentA = childSeed * 6997 + 1;
             long parentB = childSeed * 6997 + 2;
-            var child = TraitGenerator.BreedTraits(childSeed, parentA, parentB, TraitConfigV1.Version,
+            var (child, _) = TraitGenerator.BreedTraits(childSeed, parentA, parentB,
                 BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
             minScore = Math.Min(minScore, child.RarityScore);
         }
@@ -412,83 +328,22 @@ public class BreedTraitsTests
     }
 
     [Fact]
-    public void SemAncestralidade_ComportamentoIdenticoAoOverloadAntigo()
+    public void SobrecargaDeConveniencia_BateComAChamadaExplicitaComOsPaisJaResolvidos()
     {
-        // A sobrecarga de conveniência (3 seeds) e a nova (com ParentAncestry vazia) devem
-        // produzir exatamente o mesmo resultado — garante que nenhum código existente
-        // (Vivarium.Simulation, testes acima) precisou mudar pra continuar correto.
+        // A sobrecarga de conveniência (2 seeds, usada por testes/simulação sem pais reais)
+        // e a chamada explícita (CreatureTraits já resolvidos, o caminho que a produção usa
+        // via BreedingService lendo TraitsJson) devem produzir exatamente o mesmo resultado
+        // quando os dois pais são "frescos" — garante que a conveniência não é um caminho
+        // de cálculo paralelo, só um atalho pra montar os CreatureTraits antes de chamar a
+        // mesma implementação.
         for (long childSeed = 1; childSeed <= 200; childSeed++)
         {
-            var viaOverloadAntigo = TraitGenerator.BreedTraits(childSeed, ParentASeed, ParentBSeed, TraitConfigV1.Version, 0.08, 0.15);
-            var viaNovoExplicito = TraitGenerator.BreedTraits(childSeed,
-                new TraitGenerator.ParentAncestry(ParentASeed, null, null),
-                new TraitGenerator.ParentAncestry(ParentBSeed, null, null),
-                TraitConfigV1.Version, 0.08, 0.15, grandparentReachChance: 0.15,
-                mutationRarityBiasStrength: -1, antiDuplicationDecay: 0, antiDuplicationMaxPenalty: 0);
-            Assert.Equal(viaOverloadAntigo, viaNovoExplicito);
+            var (viaConveniencia, _) = TraitGenerator.BreedTraits(childSeed, ParentASeed, ParentBSeed, 0.08, 0.15);
+            var (viaExplicito, _) = TraitGenerator.BreedTraits(childSeed,
+                TraitGenerator.Generate(ParentASeed), TraitGenerator.Generate(ParentBSeed),
+                0.08, 0.15, mutationRarityBiasStrength: -1, antiDuplicationDecay: 0, antiDuplicationMaxPenalty: 0);
+            Assert.Equal(viaConveniencia, viaExplicito);
         }
-    }
-
-    // Os 3 testes abaixo testam EffectiveParentTraits/ResolveOwnTraits diretamente (internal,
-    // via InternalsVisibleTo) em vez de tentar isolar o sinal na saída ponta-a-ponta de
-    // BreedTraits — o "próprio" valor de um pai bred já reflete os mesmos avós que o
-    // reach-back alcançaria (são o mesmo par), então distinguir "veio do pai" de "veio do
-    // avô" observando só a cor final do filhote é ambíguo/confuso. Testar a peça certa.
-
-    [Fact]
-    public void EffectiveParentTraits_SemAvos_SempreRetornaOProprio()
-    {
-        var own = TraitGenerator.Generate(1);
-        for (long childSeed = 1; childSeed <= 500; childSeed++)
-            Assert.Equal(own, TraitGenerator.EffectiveParentTraits(childSeed, "salt", own, null, null, reachChance: 1.0));
-    }
-
-    [Fact]
-    public void EffectiveParentTraits_ComAvos_AproximaAChanceDeReach()
-    {
-        var own = TraitGenerator.Generate(1);
-        var grandparent1 = TraitGenerator.Generate(2);
-        var grandparent2 = TraitGenerator.Generate(3);
-        const double reachChance = 0.3;
-        const int n = 20_000;
-
-        int reached = 0;
-        for (long childSeed = 1; childSeed <= n; childSeed++)
-        {
-            var result = TraitGenerator.EffectiveParentTraits(childSeed, "salt", own, grandparent1, grandparent2, reachChance);
-            if (!result.Equals(own)) reached++;
-        }
-        Assert.InRange(reached / (double)n, reachChance - 0.02, reachChance + 0.02);
-    }
-
-    [Fact]
-    public void EffectiveParentTraits_ReachChance0_NuncaAlcancaOAvoMesmoComAvosConhecidos()
-    {
-        var own = TraitGenerator.Generate(1);
-        var grandparent1 = TraitGenerator.Generate(2);
-        var grandparent2 = TraitGenerator.Generate(3);
-        for (long childSeed = 1; childSeed <= 5_000; childSeed++)
-            Assert.Equal(own, TraitGenerator.EffectiveParentTraits(childSeed, "salt", own, grandparent1, grandparent2, reachChance: 0.0));
-    }
-
-    [Fact]
-    public void ResolveOwnTraits_PaiFresco_UsaGenerateDireto()
-    {
-        var ancestry = new TraitGenerator.ParentAncestry(42, null, null);
-        Assert.Equal(TraitGenerator.Generate(42), TraitGenerator.ResolveOwnTraits(ancestry, TraitConfigV1.Version, 0.08, 0.15, -1, 0, 0));
-    }
-
-    [Fact]
-    public void ResolveOwnTraits_PaiFilhote_RecomputaViaAvosNaoGenerateDoProprioSeed()
-    {
-        // O bug corrigido nesta rodada: ANTES, um pai que era filhote virava
-        // Generate(seed) (traits fantasma). Agora, com os avós conhecidos, deve bater com
-        // o que o próprio cruzamento dos avós produziria — nunca com Generate(seed) direto.
-        var ancestry = new TraitGenerator.ParentAncestry(999, 1, 2);
-        var resolved = TraitGenerator.ResolveOwnTraits(ancestry, TraitConfigV1.Version, 0.08, 0.15, -1, 0, 0);
-
-        Assert.Equal(TraitGenerator.BreedTraits(999, 1, 2, TraitConfigV1.Version, 0.08, 0.15), resolved);
-        Assert.NotEqual(TraitGenerator.Generate(999), resolved);
     }
 
     [Fact]
@@ -505,7 +360,7 @@ public class BreedTraitsTests
         bool foundInherited = false;
         for (long childSeed = 1; childSeed <= 20_000; childSeed++)
         {
-            var child = TraitGenerator.BreedTraits(childSeed, parentA, parentB, TraitConfigV1.Version, mutationChance: 0.0, rarityBias: 0.0);
+            var (child, _) = TraitGenerator.BreedTraits(childSeed, parentA, parentB, mutationChance: 0.0, rarityBias: 0.0);
             if (child.Tail.Pattern != PatternType.Gradient) continue;
             if (child.Tail.PatternColor != traitsA.Tail.PatternColor) continue;
             if (child.Tail.PatternSize != traitsA.Tail.PatternSize) continue;
@@ -581,6 +436,8 @@ public class BreedTraitsTests
                 && tb.Dorsal.Color != ta.Dorsal.Color
                 && tb.Pectoral.Color != ta.Pectoral.Color;
         });
+        var ownA = TraitGenerator.Generate(parentASeed);
+        var ownB = TraitGenerator.Generate(parentBSeed);
 
         const int n = 30_000;
         int CountCloneOfA(double decay, double maxPenalty)
@@ -588,9 +445,8 @@ public class BreedTraitsTests
             int clones = 0;
             for (long childSeed = 1; childSeed <= n; childSeed++)
             {
-                var child = TraitGenerator.BreedTraits(childSeed,
-                    new TraitGenerator.ParentAncestry(parentASeed, null, null), new TraitGenerator.ParentAncestry(parentBSeed, null, null),
-                    TraitConfigV1.Version, mutationChance: 0, rarityBias: 0, grandparentReachChance: 0,
+                var (child, _) = TraitGenerator.BreedTraits(childSeed, ownA, ownB,
+                    mutationChance: 0, rarityBias: 0,
                     mutationRarityBiasStrength: -1, antiDuplicationDecay: decay, antiDuplicationMaxPenalty: maxPenalty);
                 if (child.ShimmerTier == ta.ShimmerTier && child.Tail.Color == ta.Tail.Color
                     && child.Dorsal.Color == ta.Dorsal.Color && child.Pectoral.Color == ta.Pectoral.Color)
@@ -632,15 +488,16 @@ public class BreedTraitsTests
         // relação com o mecanismo do piso em si, que continua correto nesses casos também.
         long parentASeed = FindSeedWithTailColor(colorA);
         long parentBSeed = FindSeedWithTailColor(colorB);
+        var ownA = TraitGenerator.Generate(parentASeed);
+        var ownB = TraitGenerator.Generate(parentBSeed);
         double floorWeight = Math.Max(
             WeightedTable.WeightOf(TraitConfigV1.PartColors, colorA),
             WeightedTable.WeightOf(TraitConfigV1.PartColors, colorB));
 
         for (long childSeed = 1; childSeed <= 5_000; childSeed++)
         {
-            var child = TraitGenerator.BreedTraits(childSeed,
-                new TraitGenerator.ParentAncestry(parentASeed, null, null), new TraitGenerator.ParentAncestry(parentBSeed, null, null),
-                TraitConfigV1.Version, mutationChance: 1.0, rarityBias: 0, grandparentReachChance: 0,
+            var (child, _) = TraitGenerator.BreedTraits(childSeed, ownA, ownB,
+                mutationChance: 1.0, rarityBias: 0,
                 BreedingDefaults.MutationRarityBiasStrength, antiDuplicationDecay: 0, antiDuplicationMaxPenalty: 0);
             if (child.ShimmerTier is ShimmerTier.Vibrant or ShimmerTier.Rare or ShimmerTier.Legendary)
                 continue;

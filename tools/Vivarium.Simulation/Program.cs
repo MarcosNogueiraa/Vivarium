@@ -90,28 +90,6 @@ if (args.Length >= 1 && args[0] == "mutationfloor")
     return;
 }
 
-if (args.Length >= 1 && args[0] == "grandparentdump")
-{
-    // Crosscheck do mecanismo de avós (31/07/2026) contra o port JS — mesmo princípio do
-    // breeddump: seeds determinísticos, alguns pares COM ancestralidade de avós (pai é
-    // filhote), outros sem (pai fresco), pra cobrir os dois ramos de EffectiveParentTraits.
-    int count = args.Length > 1 && int.TryParse(args[1], out var gc) ? gc : 500;
-    for (int i = 1; i <= count; i++)
-    {
-        long parentASeed = i * 7919L - i;
-        long parentBSeed = -(i * 104729L + 3);
-        long childSeed = i * 131071L + 17;
-        // Metade dos casos com avós no lado A, outra metade também no lado B — cobre pai
-        // fresco/pai-filhote nas duas posições.
-        long? gpAA = i % 2 == 0 ? i * 271L + 11 : null;
-        long? gpAB = i % 2 == 0 ? -(i * 379L + 13) : null;
-        long? gpBA = i % 3 == 0 ? i * 431L + 17 : null;
-        long? gpBB = i % 3 == 0 ? -(i * 521L + 19) : null;
-        GrandparentDumpLine(childSeed, parentASeed, gpAA, gpAB, parentBSeed, gpBA, gpBB);
-    }
-    return;
-}
-
 int n = args.Length > 0 && int.TryParse(args[0], out var parsed) ? parsed : 100_000;
 Console.WriteLine($"Gerando {n:N0} criaturas...\n");
 
@@ -219,41 +197,11 @@ static void DumpLine(long seed)
 
 static void BreedDumpLine(long childSeed, long parentASeed, long parentBSeed)
 {
-    var t = TraitGenerator.BreedTraits(childSeed, parentASeed, parentBSeed, TraitConfigV1.Version,
+    var (t, _) = TraitGenerator.BreedTraits(childSeed, parentASeed, parentBSeed,
         BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
     var inv = CultureInfo.InvariantCulture;
     var sb = new System.Text.StringBuilder();
     sb.Append(childSeed).Append(';').Append(parentASeed).Append(';').Append(parentBSeed)
-      .Append(';').Append(t.ShimmerTier)
-      .Append(';').Append(t.ShimmerColor?.ToString() ?? "-")
-      .Append(';').Append(t.ShimmerOpacity.ToString("F6", inv));
-    foreach (var p in new[] { t.Tail, t.Dorsal, t.Pectoral })
-    {
-        sb.Append(';').Append(p.Color).Append(';').Append(p.Pattern)
-          .Append(';').Append(p.PatternColor?.ToString() ?? "-")
-          .Append(';').Append(p.PatternSize?.ToString("F6", inv) ?? "-")
-          .Append(';').Append(p.PatternOpacity?.ToString("F6", inv) ?? "-")
-          .Append(';').Append(p.Mix?.ToString() ?? "-");
-    }
-    sb.Append(';').Append(t.Movement.TailSpeed.ToString("F6", inv))
-      .Append(';').Append(t.Movement.TailAmplitude.ToString("F6", inv))
-      .Append(';').Append(t.Movement.FinSpeed.ToString("F6", inv))
-      .Append(';').Append(t.Movement.FinAmplitude.ToString("F6", inv));
-    sb.Append(';').Append(t.RarityScore.ToString("F6", inv));
-    Console.WriteLine(sb.ToString());
-}
-
-static void GrandparentDumpLine(long childSeed, long parentASeed, long? gpAA, long? gpAB, long parentBSeed, long? gpBA, long? gpBB)
-{
-    var ancestryA = new TraitGenerator.ParentAncestry(parentASeed, gpAA, gpAB);
-    var ancestryB = new TraitGenerator.ParentAncestry(parentBSeed, gpBA, gpBB);
-    var t = TraitGenerator.BreedTraits(childSeed, ancestryA, ancestryB, TraitConfigV1.Version,
-        BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance,
-        BreedingDefaults.MutationRarityBiasStrength, BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty);
-    var inv = CultureInfo.InvariantCulture;
-    var sb = new System.Text.StringBuilder();
-    sb.Append(childSeed).Append(';').Append(parentASeed).Append(';').Append(gpAA?.ToString() ?? "-").Append(';').Append(gpAB?.ToString() ?? "-")
-      .Append(';').Append(parentBSeed).Append(';').Append(gpBA?.ToString() ?? "-").Append(';').Append(gpBB?.ToString() ?? "-")
       .Append(';').Append(t.ShimmerTier)
       .Append(';').Append(t.ShimmerColor?.ToString() ?? "-")
       .Append(';').Append(t.ShimmerOpacity.ToString("F6", inv));
@@ -435,8 +383,9 @@ static void BreedReport()
         var a = TraitGenerator.Generate(seedA);
         var b = TraitGenerator.Generate(seedB);
         long childSeed = rngPairs.NextInt64();
-        var child = TraitGenerator.BreedTraits(childSeed, seedA, seedB, TraitConfigV1.Version,
-            BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
+        var (child, _) = TraitGenerator.BreedTraits(childSeed, a, b,
+            BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength,
+            BreedingDefaults.MutationRarityBiasStrength, BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty);
 
         gestationHours.Add(BreedingCalculator.GestationHours((decimal)a.RarityScore, (decimal)b.RarityScore));
         if (child.ShimmerTier == ShimmerTier.Legendary) childLegendary++;
@@ -465,7 +414,6 @@ static void BreedReport()
 
     ReportTierBiasScenarios();
     ReportPartColorBiasScenarios();
-    ReportGrandparentReachEffect();
     ReportCostSustainability();
     ReportDeathRiskCurve();
 }
@@ -550,7 +498,7 @@ static void ReportTierBiasScenarios()
         for (int i = 0; i < n; i++)
         {
             long childSeed = rng.NextInt64();
-            var child = TraitGenerator.BreedTraits(childSeed, seedA, seedB, TraitConfigV1.Version,
+            var (child, _) = TraitGenerator.BreedTraits(childSeed, seedA, seedB,
                 BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
             if (child.ShimmerTier == ShimmerTier.Legendary) count++;
         }
@@ -676,7 +624,7 @@ static void RunPlayerSimulation(string label, double hoursOnlinePerDay, int days
             if (!bDied) ReturnParent(g.SeedB, g.ScoreB, g.BreedCountB);
 
             long childSeed = rng.NextInt64();
-            var child = TraitGenerator.BreedTraits(childSeed, g.SeedA, g.SeedB, TraitConfigV1.Version,
+            var (child, _) = TraitGenerator.BreedTraits(childSeed, g.SeedA, g.SeedB,
                 BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
             fishCollected++;
             if ((decimal)child.RarityScore >= 14.0m) legendariesFound++;
@@ -778,7 +726,7 @@ static void ReportPartColorBiasScenarios()
         for (int i = 0; i < n; i++)
         {
             long childSeed = rng.NextInt64();
-            var child = TraitGenerator.BreedTraits(childSeed, seedA, seedB, TraitConfigV1.Version,
+            var (child, _) = TraitGenerator.BreedTraits(childSeed, seedA, seedB,
                 BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
             if (child.Tail.Color == PartColor.PureWhite) count++;
         }
@@ -796,37 +744,6 @@ static long FindSeedWithTailColor(PartColor color, int searchLimit)
     for (long s = 1; s <= searchLimit; s++)
         if (TraitGenerator.Generate(s).Tail.Color == color) return s;
     throw new InvalidOperationException($"Nenhum seed com cor de cauda {color} nos primeiros {searchLimit}");
-}
-
-/// <summary>
-/// Mede o efeito prático do "reach-back" de avós (31/07/2026, CLAUDE.md 8.8) direto no
-/// mecanismo interno (`EffectiveParentTraits`), não na saída ponta-a-ponta — o valor "próprio"
-/// de um pai bred já reflete os mesmos avós que o reach alcançaria, então isolar o sinal
-/// observando só a cor final do filhote é ambíguo (mesma lição dos testes automatizados).
-/// </summary>
-static void ReportGrandparentReachEffect()
-{
-    var own = TraitGenerator.Generate(FindSeedWithTailColor(PartColor.Orange, 20));
-    var grandparent1 = TraitGenerator.Generate(FindSeedWithTailColor(PartColor.PureWhite, 5_000));
-    var grandparent2 = TraitGenerator.Generate(FindSeedWithTailColor(PartColor.Blue, 20));
-    const int n = 30_000;
-
-    int Reached(double reachChance, int seed)
-    {
-        var rng = new Random(seed);
-        int count = 0;
-        for (int i = 0; i < n; i++)
-        {
-            long childSeed = rng.NextInt64();
-            var result = TraitGenerator.EffectiveParentTraits(childSeed, "tail", own, grandparent1, grandparent2, reachChance);
-            if (!result.Equals(own)) count++;
-        }
-        return count;
-    }
-
-    Console.WriteLine($"\nCHANCE DE HERDAR TRAÇO DE UM AVÔ (GrandparentReachChance = {BreedingDefaults.GrandparentReachChance:0.00}):");
-    Console.WriteLine($"  Reach observado (produção): {Reached(BreedingDefaults.GrandparentReachChance, 1) / (double)n * 100:0.0}%  (esperado ~{BreedingDefaults.GrandparentReachChance * 100:0.0}%)");
-    Console.WriteLine($"  Reach observado (0.0, controle): {Reached(0.0, 2) / (double)n * 100:0.0}%  (deve ficar em 0%)");
 }
 
 static long FindSeedWithTier(ShimmerTier tier, int searchLimit)
@@ -865,7 +782,7 @@ static void MutationFloorImpactReport()
         {
             long s = rng.NextInt64();
             var t = TraitGenerator.Generate(s);
-            pop.Add(new PopMember(s, null, null, t.RarityScore, t.ShimmerTier));
+            pop.Add(new PopMember(s, t, t.RarityScore, t.ShimmerTier));
         }
         return pop;
     }
@@ -884,12 +801,10 @@ static void MutationFloorImpactReport()
                 var a = pop[pairRng.Next(pop.Count)];
                 var b = pop[pairRng.Next(pop.Count)];
                 long childSeed = pairRng.NextInt64();
-                var ancestryA = new TraitGenerator.ParentAncestry(a.Seed, a.OwnParentASeed, a.OwnParentBSeed);
-                var ancestryB = new TraitGenerator.ParentAncestry(b.Seed, b.OwnParentASeed, b.OwnParentBSeed);
-                var child = TraitGenerator.BreedTraits(childSeed, ancestryA, ancestryB, TraitConfigV1.Version,
-                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength, BreedingDefaults.GrandparentReachChance,
+                var (child, _) = TraitGenerator.BreedTraits(childSeed, a.Traits, b.Traits,
+                    BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength,
                     mutationRarityBiasStrength, BreedingDefaults.AntiDuplicationDecay, BreedingDefaults.AntiDuplicationMaxPenalty);
-                next.Add(new PopMember(childSeed, a.Seed, b.Seed, child.RarityScore, child.ShimmerTier));
+                next.Add(new PopMember(childSeed, child, child.RarityScore, child.ShimmerTier));
             }
             pop = next;
             double avgScore = pop.Average(m => m.RarityScore);
@@ -929,8 +844,8 @@ static void MutationFloorImpactReport()
 }
 
 /// <summary>
-/// Membro de uma população sintética — só o suficiente pra reproduzir o mesmo cap de 2 gerações
-/// do schema real (CreatureInstance: Seed + os 2 seeds dos PRÓPRIOS pais diretos, nunca mais
-/// fundo). Espelha exatamente o que fica denormalizado numa criatura real.
+/// Membro de uma população sintética — desde 13/08/2026 (traits congelados no nascimento)
+/// carrega os `CreatureTraits` já resolvidos, o mesmo que ficaria em `TraitsJson` numa
+/// criatura real — sem limite de gerações pra reconstruir ancestralidade.
 /// </summary>
-readonly record struct PopMember(long Seed, long? OwnParentASeed, long? OwnParentBSeed, double RarityScore, ShimmerTier Tier);
+readonly record struct PopMember(long Seed, CreatureTraits Traits, double RarityScore, ShimmerTier Tier);

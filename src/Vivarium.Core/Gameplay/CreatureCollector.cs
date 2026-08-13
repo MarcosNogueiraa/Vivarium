@@ -2,7 +2,7 @@ using Vivarium.Core.Generation;
 
 namespace Vivarium.Core.Gameplay;
 
-public sealed record CollectedCreature(long Seed, int TraitConfigVersion, decimal RarityScore);
+public sealed record CollectedCreature(long Seed, int TraitConfigVersion, decimal RarityScore, CreatureTraits Traits);
 
 /// <summary>
 /// Coleta de um item da fila: o seed é sorteado AQUI (momento da coleta, não da
@@ -28,7 +28,7 @@ public static class CreatureCollector
             }
         }
 
-        return new CollectedCreature(seed, configVersion, (decimal)traits.RarityScore);
+        return new CollectedCreature(seed, configVersion, (decimal)traits.RarityScore, traits);
     }
 
     /// <summary>Seed aleatório criptográfico, positivo (63 bits), pra uso em produção.</summary>

@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Vivarium.Core.Domain;
+using Vivarium.Core.Generation;
 
 namespace Vivarium.Api.Tests;
 
@@ -27,7 +28,9 @@ public class BackpackTests : IClassFixture<VivariumApiFactory>
                 db.CreatureInstances.Add(new CreatureInstance
                 {
                     SpeciesId = 1, OwnerId = userId, HabitatId = habitatId,
-                    Seed = 5000 + i, TraitConfigVersion = 1, RarityScore = 4m, CreatedAt = DateTime.UtcNow,
+                    Seed = 5000 + i, TraitConfigVersion = 1, RarityScore = 4m,
+                    TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(5000 + i)),
+                    CreatedAt = DateTime.UtcNow,
                 });
             return Task.CompletedTask;
         });
@@ -85,7 +88,9 @@ public class BackpackTests : IClassFixture<VivariumApiFactory>
             var c = new CreatureInstance
             {
                 SpeciesId = 1, OwnerId = sellerId, HabitatId = habitat.Id,
-                Seed = 8888, TraitConfigVersion = 1, RarityScore = 5m, CreatedAt = DateTime.UtcNow,
+                Seed = 8888, TraitConfigVersion = 1, RarityScore = 5m,
+                TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(8888)),
+                CreatedAt = DateTime.UtcNow,
             };
             db.CreatureInstances.Add(c);
             await db.SaveChangesAsync();
