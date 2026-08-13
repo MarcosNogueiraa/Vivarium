@@ -252,6 +252,16 @@ public class GameService(VivariumDbContext db)
         return (CollectOne(habitat, item, nowUtc, toTank), null);
     }
 
+    /// <summary>
+    /// Bug real corrigido (12/08/2026, relatado pelo usuário): quando o tanque enchia, a
+    /// coleta automática VIP simplesmente PARAVA (`break` no primeiro item sem espaço) — ao
+    /// contrário da coleta MANUAL (`CollectInternalAsync`), que sempre cai pra mochila se o
+    /// tanque estiver cheio. Resultado: um VIP com o tanque cheio ficava com a fila
+    /// PERMANENTEMENTE travada (nunca mais coletava sozinho, mesmo com espaço de sobra na
+    /// mochila) até abrir espaço manualmente no tanque — justamente o cenário que a coleta
+    /// automática deveria evitar. Agora, com o tanque cheio, os itens prontos vão pra
+    /// mochila (até ela também encher, aí sim para).
+    /// </summary>
     private async Task CollectAllReadyAsync(Habitat habitat, DateTime nowUtc)
     {
         var ready = await db.GenerationQueueItems
@@ -263,12 +273,15 @@ public class GameService(VivariumDbContext db)
             q.Id == 0 && q.HabitatId == habitat.Id && q.Status == QueueItemStatus.Pending));
 
         int active = await CountActiveCreaturesAsync(habitat);
+        int backpackCount = await CountBackpackAsync(habitat.UserId);
         foreach (var item in ready)
         {
-            if (active >= habitat.Capacity)
-                break;
-            CollectOne(habitat, item, nowUtc, toTank: true);
-            active++;
+            bool toTank = active < habitat.Capacity;
+            if (!toTank && backpackCount >= HabitatDefaults.BackpackCapacity)
+                break; // tanque e mochila cheios — só aí a coleta automática realmente para
+
+            CollectOne(habitat, item, nowUtc, toTank);
+            if (toTank) active++; else backpackCount++;
         }
     }
 
