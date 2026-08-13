@@ -104,7 +104,10 @@ export function BackpackView({ refreshTank, notify }) {
       // Cor = cor da cauda, mesma convenção usada em tankMath.js (sinergia de cor, §8.6).
       .filter((c) => colorFilter === "all" || traitsOf(c).tail.color === colorFilter)
       .filter((c) => !onlyBred || c.isBred)
-      .sort(SORTS[sortBy].cmp);
+      // Peixe novo (ainda não revelado) sempre primeiro, não importa a ordenação escolhida —
+      // senão ele podia ficar perdido no meio da lista, escondido atrás de "???" sem chamar
+      // atenção. Dentro de cada grupo (novo/já visto), mantém a ordenação normal.
+      .sort((a, b) => (b.isNew - a.isNew) || SORTS[sortBy].cmp(a, b));
   }, [data, sortBy, bandFilter, colorFilter, onlyBred]);
 
   const selectedCreatures = visible.filter((c) => selected.has(c.id));

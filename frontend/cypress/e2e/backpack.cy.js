@@ -188,4 +188,17 @@ describe("Mochila", () => {
     cy.get(".modal-close").click();
     cy.contains(".card", "??? — clique pra revelar").should("not.exist");
   });
+
+  it("peixe novo (não revelado) sempre aparece primeiro na lista, não importa a ordenação", () => {
+    // Score baixo mas isNew=true — se a ordenação por raridade fosse aplicada sem prioridade
+    // pro "novo", esse peixe ficaria por último, escondido atrás de "???".
+    const veteran = creature(401, 1111, 18.9, false, false); // Lendário, já visto
+    const fresh = creature(402, 2222, 3.0, false, true); // Comum, ainda não revelado
+    cy.intercept("GET", "/api/game/backpack", { body: { capacity: 50, creatures: [veteran, fresh] } }).as("backpack");
+    login();
+    cy.wait("@backpack");
+
+    // Ordenação padrão é "Raridade (maior primeiro)" — sem a prioridade, o Lendário viria antes.
+    cy.get(".card").first().should("contain.text", "??? — clique pra revelar");
+  });
 });
