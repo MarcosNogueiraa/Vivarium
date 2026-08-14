@@ -436,10 +436,19 @@ static void EconomyReport()
 
 static List<FishIncome> MakeTank(int n, decimal score, bool sameColor)
 {
+    // Dorsal/peitoral variam por peixe (nunca repetem em bloco) — só a cauda representa o
+    // cenário "mesma cor" destes relatórios, senão a sinergia por parte (14/08/2026) somaria
+    // bônus de dorsal/peitoral por acaso, distorcendo a comparação que este relatório quer
+    // mostrar (efeito de sinergia de UMA parte só).
     var colors = Enum.GetValues<PartColor>();
     var list = new List<FishIncome>(n);
     for (int i = 0; i < n; i++)
-        list.Add(new FishIncome(score, sameColor ? PartColor.Blue : colors[i % colors.Length]));
+    {
+        var tail = sameColor ? PartColor.Blue : colors[i % colors.Length];
+        var dorsal = colors[(i * 3 + 1) % colors.Length];
+        var pectoral = colors[(i * 5 + 2) % colors.Length];
+        list.Add(new FishIncome(score, tail, dorsal, pectoral));
+    }
     return list;
 }
 
@@ -637,7 +646,7 @@ static void RunPlayerSimulation(string label, double hoursOnlinePerDay, int days
     decimal progress = 0m;
     decimal filterCapacity = 0m;
 
-    var tank = new List<(long Seed, decimal Score, PartColor TailColor, int BreedCount)>();
+    var tank = new List<(long Seed, decimal Score, PartColor TailColor, PartColor DorsalColor, PartColor PectoralColor, int BreedCount)>();
     int backpackOverflow = 0;
 
     decimal spentFilter = 0, spentUpgrade = 0, spentBreeding = 0, totalEarned = 0;
@@ -675,7 +684,7 @@ static void RunPlayerSimulation(string label, double hoursOnlinePerDay, int days
         var outcome = HabitatTicker.ProcessTick(state, hourEnd, rng, cfg);
         progress = outcome.GenerationProgressMinutes;
 
-        var fishIncome = tank.Select(f => new FishIncome(f.Score, f.TailColor)).ToList();
+        var fishIncome = tank.Select(f => new FishIncome(f.Score, f.TailColor, f.DorsalColor, f.PectoralColor)).ToList();
         decimal earned = IncomeCalculator.Accrue(fishIncome, outcome.MaintenanceAtStart, outcome.MaintenanceLevel,
             outcome.OnlineMinutes, outcome.OfflineMinutes,
             HabitatDefaults.OnlineGenerationRate, HabitatDefaults.OfflineGenerationRate, cfg);
@@ -690,7 +699,7 @@ static void RunPlayerSimulation(string label, double hoursOnlinePerDay, int days
             if (collected.RarityScore >= 14.0m) legendariesFound++;
             var traits = TraitGenerator.Generate(collected.Seed, collected.TraitConfigVersion);
             if (tank.Count < capacity)
-                tank.Add((collected.Seed, collected.RarityScore, traits.Tail.Color, 0));
+                tank.Add((collected.Seed, collected.RarityScore, traits.Tail.Color, traits.Dorsal.Color, traits.Pectoral.Color, 0));
             else
                 backpackOverflow++;
         }
@@ -705,7 +714,7 @@ static void RunPlayerSimulation(string label, double hoursOnlinePerDay, int days
             void ReturnParent(long parentSeed, decimal score, int breedCountBefore)
             {
                 var t = TraitGenerator.Generate(parentSeed);
-                if (tank.Count < capacity) tank.Add((parentSeed, score, t.Tail.Color, breedCountBefore + 1));
+                if (tank.Count < capacity) tank.Add((parentSeed, score, t.Tail.Color, t.Dorsal.Color, t.Pectoral.Color, breedCountBefore + 1));
                 else backpackOverflow++;
             }
             if (!aDied) ReturnParent(g.SeedA, g.ScoreA, g.BreedCountA);
@@ -716,7 +725,7 @@ static void RunPlayerSimulation(string label, double hoursOnlinePerDay, int days
                 BreedingDefaults.MutationChance, BreedingDefaults.RarityBiasStrength);
             fishCollected++;
             if ((decimal)child.RarityScore >= 14.0m) legendariesFound++;
-            if (tank.Count < capacity) tank.Add((childSeed, (decimal)child.RarityScore, child.Tail.Color, 0));
+            if (tank.Count < capacity) tank.Add((childSeed, (decimal)child.RarityScore, child.Tail.Color, child.Dorsal.Color, child.Pectoral.Color, 0));
             else backpackOverflow++;
 
             gestation = null;

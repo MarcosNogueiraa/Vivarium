@@ -2,8 +2,11 @@ using Vivarium.Core.Generation;
 
 namespace Vivarium.Core.Gameplay;
 
-/// <summary>Entrada por peixe pro cálculo de renda: raridade + cor da cauda (pra sinergia).</summary>
-public readonly record struct FishIncome(decimal RarityScore, PartColor TailColor);
+/// <summary>
+/// Entrada por peixe pro cálculo de renda: raridade + cor das 3 partes (pra sinergia, 14/08/2026
+/// — cauda/dorsal/peitoral contam separadamente, ver <see cref="IncomeCalculator.PartSynergyBonus"/>).
+/// </summary>
+public readonly record struct FishIncome(decimal RarityScore, PartColor TailColor, PartColor DorsalColor, PartColor PectoralColor);
 
 /// <summary>
 /// Renda passiva de moedas (soft) por raridade + sinergia de cor. Lógica pura:
@@ -40,20 +43,47 @@ public static class IncomeCalculator
         return Math.Pow(scaled, config.IncomeWaterExp);
     }
 
-    /// <summary>Multiplicador de sinergia pra N peixes da mesma cor: 1 + s·(N-1), com teto.</summary>
-    public static double SynergyMultiplier(int sameColorCount, TickConfig config)
-        => 1.0 + Math.Min(config.SynergyMaxBonus, config.SynergyPerMatch * Math.Max(0, sameColorCount - 1));
+    /// <summary>
+    /// Bônus de sinergia (não o multiplicador — só a fração extra) pra N peixes com a MESMA cor
+    /// numa única parte: 0 se N&lt;2; senão SynergyBaseBonus + SynergyPerExtraMatch·(N-2), com
+    /// teto SynergyMaxBonus. Cauda/dorsal/peitoral usam essa MESMA fórmula, cada um contado
+    /// separadamente (ver <see cref="PerFishRates"/>).
+    /// </summary>
+    public static double PartSynergyBonus(int sameColorCount, TickConfig config)
+    {
+        if (sameColorCount < 2) return 0;
+        double bonus = config.SynergyBaseBonus + config.SynergyPerExtraMatch * (sameColorCount - 2);
+        return Math.Min(config.SynergyMaxBonus, bonus);
+    }
 
-    /// <summary>Renda/hora de cada peixe (base × sinergia), já agrupada por cor de cauda.</summary>
+    /// <summary>
+    /// Multiplicador de sinergia total do peixe: 1 + soma dos bônus das 3 partes (cauda, dorsal,
+    /// peitoral), cada uma calculada dentro do próprio grupo de cor — não precisa as 3 partes
+    /// baterem no mesmo grupo de peixes pra contar.
+    /// </summary>
+    public static double SynergyMultiplier(int tailCount, int dorsalCount, int pectoralCount, TickConfig config)
+        => 1.0 + PartSynergyBonus(tailCount, config) + PartSynergyBonus(dorsalCount, config) + PartSynergyBonus(pectoralCount, config);
+
+    /// <summary>Renda/hora de cada peixe (base × sinergia), já agrupada por cor de cada parte.</summary>
     private static double[] PerFishRates(IReadOnlyList<FishIncome> fish, TickConfig config)
     {
-        var counts = new Dictionary<PartColor, int>();
+        var tailCounts = new Dictionary<PartColor, int>();
+        var dorsalCounts = new Dictionary<PartColor, int>();
+        var pectoralCounts = new Dictionary<PartColor, int>();
         foreach (var f in fish)
-            counts[f.TailColor] = counts.GetValueOrDefault(f.TailColor) + 1;
+        {
+            tailCounts[f.TailColor] = tailCounts.GetValueOrDefault(f.TailColor) + 1;
+            dorsalCounts[f.DorsalColor] = dorsalCounts.GetValueOrDefault(f.DorsalColor) + 1;
+            pectoralCounts[f.PectoralColor] = pectoralCounts.GetValueOrDefault(f.PectoralColor) + 1;
+        }
 
         var rates = new double[fish.Count];
         for (int i = 0; i < fish.Count; i++)
-            rates[i] = CoinsPerHour(fish[i].RarityScore, config) * SynergyMultiplier(counts[fish[i].TailColor], config);
+        {
+            var f = fish[i];
+            double synergy = SynergyMultiplier(tailCounts[f.TailColor], dorsalCounts[f.DorsalColor], pectoralCounts[f.PectoralColor], config);
+            rates[i] = CoinsPerHour(f.RarityScore, config) * synergy;
+        }
         return rates;
     }
 

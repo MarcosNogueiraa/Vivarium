@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   biasedInheritProbability, breedingPreview, CONFIG, coinsPerHourOf, generateTraits,
-  probabilityOf, rarityBreakdownOf, roll01, synergyMultiplier, traitDistribution, traitsOf,
+  partSynergyBonus, probabilityOf, rarityBreakdownOf, roll01, synergyMultiplier, traitDistribution, traitsOf,
   vendorPriceOf, waterDegradationPerFishPerHour,
 } from "./generator.js";
 
@@ -173,16 +173,29 @@ describe("vendorPriceOf", () => {
   });
 });
 
-describe("synergyMultiplier", () => {
+// 14/08/2026: sinergia por PARTE — cada parte (cauda/dorsal/peitoral) soma um bônus
+// independente (partSynergyBonus), synergyMultiplier(tail, dorsal, pectoral) soma os 3.
+describe("partSynergyBonus", () => {
   it("1 peixe (ou 0) não tem bônus", () => {
-    expect(synergyMultiplier(1)).toBe(1);
-    expect(synergyMultiplier(0)).toBe(1);
+    expect(partSynergyBonus(1)).toBe(0);
+    expect(partSynergyBonus(0)).toBe(0);
   });
 
   it("cresce com mais peixes da mesma cor, até o teto", () => {
-    expect(synergyMultiplier(2)).toBeGreaterThan(1);
-    expect(synergyMultiplier(3)).toBeGreaterThan(synergyMultiplier(2));
-    expect(synergyMultiplier(1000)).toBeLessThanOrEqual(1.8); // maxBonus 0.80
+    expect(partSynergyBonus(2)).toBeGreaterThan(0);
+    expect(partSynergyBonus(3)).toBeGreaterThan(partSynergyBonus(2));
+    expect(partSynergyBonus(1000)).toBeLessThanOrEqual(0.15); // maxBonus por parte
+  });
+});
+
+describe("synergyMultiplier", () => {
+  it("sem match em nenhuma parte não tem bônus", () => {
+    expect(synergyMultiplier(1, 1, 1)).toBe(1);
+  });
+
+  it("soma o bônus das 3 partes, até o teto combinado", () => {
+    expect(synergyMultiplier(2, 1, 1)).toBeCloseTo(1 + partSynergyBonus(2), 10);
+    expect(synergyMultiplier(1000, 1000, 1000)).toBeLessThanOrEqual(1.45); // 3 × 0.15
   });
 });
 
