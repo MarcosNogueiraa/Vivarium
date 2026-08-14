@@ -159,16 +159,20 @@ public static class TraitGenerator
 
         // Movimento: sem viés, sempre a partir dos traits REAIS do pai direto — já resolvidos.
         double tailSpeed = BreedContinuousNormal(childSeed, "tail_speed", mutationChance,
-            ownA.Movement.TailSpeed, ownB.Movement.TailSpeed, TraitConfigV1.MovementSpeedMean, TraitConfigV1.MovementSpeedStdDev);
+            ownA.Movement.TailSpeed, ownB.Movement.TailSpeed, TraitConfigV1.MovementSpeedMean, TraitConfigV1.MovementSpeedStdDev,
+            TraitConfigV1.MovementSpeedInheritJitterStdDev);
         score += MovementExtremeInfo(tailSpeed);
         double tailAmplitude = BreedContinuousUniform(childSeed, "tail_wag_amplitude", mutationChance,
-            ownA.Movement.TailAmplitude, ownB.Movement.TailAmplitude, TraitConfigV1.TailAmplitudeMin, TraitConfigV1.TailAmplitudeMax);
+            ownA.Movement.TailAmplitude, ownB.Movement.TailAmplitude, TraitConfigV1.TailAmplitudeMin, TraitConfigV1.TailAmplitudeMax,
+            TraitConfigV1.MovementAmplitudeInheritJitterStdDev);
 
         double finSpeed = BreedContinuousNormal(childSeed, "fin_speed", mutationChance,
-            ownA.Movement.FinSpeed, ownB.Movement.FinSpeed, TraitConfigV1.MovementSpeedMean, TraitConfigV1.MovementSpeedStdDev);
+            ownA.Movement.FinSpeed, ownB.Movement.FinSpeed, TraitConfigV1.MovementSpeedMean, TraitConfigV1.MovementSpeedStdDev,
+            TraitConfigV1.MovementSpeedInheritJitterStdDev);
         score += MovementExtremeInfo(finSpeed);
         double finAmplitude = BreedContinuousUniform(childSeed, "fin_wag_amplitude", mutationChance,
-            ownA.Movement.FinAmplitude, ownB.Movement.FinAmplitude, TraitConfigV1.FinAmplitudeMin, TraitConfigV1.FinAmplitudeMax);
+            ownA.Movement.FinAmplitude, ownB.Movement.FinAmplitude, TraitConfigV1.FinAmplitudeMin, TraitConfigV1.FinAmplitudeMax,
+            TraitConfigV1.MovementAmplitudeInheritJitterStdDev);
 
         var movement = new MovementTraits(tailSpeed, tailAmplitude, finSpeed, finAmplitude);
 
@@ -331,19 +335,25 @@ public static class TraitGenerator
     }
 
     private static double BreedContinuousNormal(
-        long childSeed, string salt, double mutationChance, double valueA, double valueB, double mean, double stdDev)
+        long childSeed, string salt, double mutationChance, double valueA, double valueB, double mean, double stdDev,
+        double inheritJitterStdDev)
     {
         if (DeterministicHash.Roll01(childSeed, salt + "_source") < mutationChance)
             return NormalPick(childSeed, salt, mean, stdDev);
-        return DeterministicHash.Roll01(childSeed, salt + "_inherit") < 0.5 ? valueA : valueB;
+        double inherited = DeterministicHash.Roll01(childSeed, salt + "_inherit") < 0.5 ? valueA : valueB;
+        // Jitter em vez de cópia exata (13/08/2026) — mesmo princípio já aplicado aos
+        // subtraits de padrão (TraitConfigV1.PatternSubtraitInheritJitterStdDev).
+        return NormalPick(childSeed, salt + "_jitter", inherited, inheritJitterStdDev);
     }
 
     private static double BreedContinuousUniform(
-        long childSeed, string salt, double mutationChance, double valueA, double valueB, double min, double max)
+        long childSeed, string salt, double mutationChance, double valueA, double valueB, double min, double max,
+        double inheritJitterStdDev)
     {
         if (DeterministicHash.Roll01(childSeed, salt + "_source") < mutationChance)
             return min + DeterministicHash.Roll01(childSeed, salt) * (max - min);
-        return DeterministicHash.Roll01(childSeed, salt + "_inherit") < 0.5 ? valueA : valueB;
+        double inherited = DeterministicHash.Roll01(childSeed, salt + "_inherit") < 0.5 ? valueA : valueB;
+        return NormalPick(childSeed, salt + "_jitter", inherited, inheritJitterStdDev, min, max);
     }
 
     private static PartTraits BreedPart(

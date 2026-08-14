@@ -133,6 +133,17 @@ public static class TraitConfigV1
     public const double FinAmplitudeMin = 0.15;
     public const double FinAmplitudeMax = 0.75;
 
+    /// <summary>
+    /// Mesmo princípio do jitter de padrão (13/08/2026) — velocidade/amplitude de nado
+    /// herdadas também copiavam o valor exato de um dos pais. Velocidade usa a mesma
+    /// escala/desvio de PatternSize (normal 0-100, dp 20), então reaproveita o mesmo
+    /// sigma=5 (~25% do espalhamento natural). Amplitude é uniforme numa faixa bem menor
+    /// (~0.55-0.60) — 0.04 mantém a mesma proporção (~25% do espalhamento uniforme
+    /// equivalente, faixa/√12 ≈ 0.16-0.17).
+    /// </summary>
+    public const double MovementSpeedInheritJitterStdDev = 5.0;
+    public const double MovementAmplitudeInheritJitterStdDev = 0.04;
+
     /// <summary>Cor da paleta mais próxima do tom do brilho, para a regra de correlação.</summary>
     public static PartColor ClosestPartColor(ShimmerColor shimmer) => shimmer switch
     {

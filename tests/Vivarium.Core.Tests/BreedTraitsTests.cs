@@ -73,11 +73,13 @@ public class BreedTraitsTests
                     }
                 }
 
-                // Movimento (sem condicional de subtrait) sempre bate com um dos pais.
-                Assert.True(child.Movement.TailSpeed == a.Movement.TailSpeed || child.Movement.TailSpeed == b.Movement.TailSpeed);
-                Assert.True(child.Movement.FinSpeed == a.Movement.FinSpeed || child.Movement.FinSpeed == b.Movement.FinSpeed);
-                Assert.True(child.Movement.TailAmplitude == a.Movement.TailAmplitude || child.Movement.TailAmplitude == b.Movement.TailAmplitude);
-                Assert.True(child.Movement.FinAmplitude == a.Movement.FinAmplitude || child.Movement.FinAmplitude == b.Movement.FinAmplitude);
+                // Movimento herdado leva jitter (13/08/2026, mesmo princípio dos subtraits de
+                // padrão) — não bate mais exatamente com nenhum dos pais, só fica dentro da
+                // faixa válida do trait.
+                Assert.InRange(child.Movement.TailSpeed, 0, 100);
+                Assert.InRange(child.Movement.FinSpeed, 0, 100);
+                Assert.InRange(child.Movement.TailAmplitude, TraitConfigV1.TailAmplitudeMin, TraitConfigV1.TailAmplitudeMax);
+                Assert.InRange(child.Movement.FinAmplitude, TraitConfigV1.FinAmplitudeMin, TraitConfigV1.FinAmplitudeMax);
             }
         }
     }
