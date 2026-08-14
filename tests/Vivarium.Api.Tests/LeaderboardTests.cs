@@ -33,7 +33,7 @@ public class LeaderboardTests : IClassFixture<VivariumApiFactory>
         {
             db.CreatureInstances.Add(new CreatureInstance
             {
-                SpeciesId = 1, OwnerId = ownerId, HabitatId = habitatId,
+                SpeciesId = 1, OwnerId = ownerId, OriginalOwnerId = ownerId, HabitatId = habitatId,
                 Seed = seed, TraitConfigVersion = 1, RarityScore = rarityScore, CreatedAt = DateTime.UtcNow,
                 TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(seed)),
                 ParentASeed = parentASeed, ParentBSeed = parentBSeed,
@@ -63,7 +63,11 @@ public class LeaderboardTests : IClassFixture<VivariumApiFactory>
                 // Decimal na fórmula exponencial de renda (IncomeCalculator.CoinsPerHour).
                 db.CreatureInstances.Add(new CreatureInstance
                 {
-                    SpeciesId = 1, Owner = user, Habitat = habitat,
+                    // OriginalOwnerId=0 só satisfaz o `required` do compilador — o fixup do EF
+                    // resolve o valor de verdade a partir da navegação `OriginalOwner`, mesmo
+                    // mecanismo já usado aqui por `Owner`/`Habitat` (User/Habitat também ainda
+                    // não têm Id, só ganham depois do SaveChangesAsync no fim do loop).
+                    SpeciesId = 1, Owner = user, OriginalOwnerId = 0, OriginalOwner = user, Habitat = habitat,
                     Seed = 5_000_000 + i, TraitConfigVersion = 1, RarityScore = startingRarity + i * 0.01m, CreatedAt = DateTime.UtcNow,
                     TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(5_000_000 + i)),
                 });

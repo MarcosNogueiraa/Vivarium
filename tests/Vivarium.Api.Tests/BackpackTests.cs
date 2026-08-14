@@ -27,7 +27,7 @@ public class BackpackTests : IClassFixture<VivariumApiFactory>
             for (int i = 0; i < count; i++)
                 db.CreatureInstances.Add(new CreatureInstance
                 {
-                    SpeciesId = 1, OwnerId = userId, HabitatId = habitatId,
+                    SpeciesId = 1, OwnerId = userId, OriginalOwnerId = userId, HabitatId = habitatId,
                     Seed = 5000 + i, TraitConfigVersion = 1, RarityScore = 4m,
                     TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(5000 + i)),
                     CreatedAt = DateTime.UtcNow,
@@ -77,9 +77,16 @@ public class BackpackTests : IClassFixture<VivariumApiFactory>
         Assert.Empty(backpack!.Creatures);
     }
 
+    private record InboxEntryRow(long Id, string Kind, InboxCreatureRow? Creature);
+    private record InboxCreatureRow(long Id);
+    private record InboxListRow(List<InboxEntryRow> Entries);
+
     [Fact]
-    public async Task ComprarComTanqueCheio_PeixeVaiParaMochilaDoComprador()
+    public async Task Comprar_VaiProCaixaDeEntrada_ResgatarComTanqueCheioCaiNaMochila()
     {
+        // 14/08/2026 (CLAUDE.md §8.23/§8.24): comprar não checa mais espaço — o peixe sempre
+        // vai pra Caixa de Entrada; falta de espaço no tanque só afeta ONDE o resgate coloca o
+        // peixe (mochila em vez de tanque), nunca bloqueia a compra em si.
         var (seller, sellerId) = await _factory.RegisterAsync("mvendedor");
         long creatureId = 0;
         await _factory.WithDbAsync(async db =>
@@ -87,7 +94,7 @@ public class BackpackTests : IClassFixture<VivariumApiFactory>
             var habitat = await db.Habitats.FirstAsync(h => h.UserId == sellerId && h.HabitatType!.Code == "Aquarium");
             var c = new CreatureInstance
             {
-                SpeciesId = 1, OwnerId = sellerId, HabitatId = habitat.Id,
+                SpeciesId = 1, OwnerId = sellerId, OriginalOwnerId = sellerId, HabitatId = habitat.Id,
                 Seed = 8888, TraitConfigVersion = 1, RarityScore = 5m,
                 TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(8888)),
                 CreatedAt = DateTime.UtcNow,
@@ -102,13 +109,22 @@ public class BackpackTests : IClassFixture<VivariumApiFactory>
 
         var (buyer, buyerId) = await _factory.RegisterAsync("mcomprador");
         long buyerHabitat = await HabitatIdOf(buyerId);
-        await FillTank(buyerId, buyerHabitat, 3); // tanque do comprador cheio
+        await FillTank(buyerId, buyerHabitat, 3); // tanque do comprador cheio — mesmo assim a compra passa
 
         (await buyer.PostAsync($"/api/market/listings/{listingId}/buy", null)).EnsureSuccessStatusCode();
+
+        var backpackBeforeClaim = await buyer.GetFromJsonAsync<BackpackDto>("/api/game/backpack");
+        Assert.DoesNotContain(backpackBeforeClaim!.Creatures, c => c.Id == creatureId);
+
+        var inbox = await buyer.GetFromJsonAsync<InboxListRow>("/api/inbox/");
+        var entry = Assert.Single(inbox!.Entries, e => e.Creature?.Id == creatureId);
+        Assert.Equal("MarketPurchase", entry.Kind);
+
+        (await buyer.PostAsync($"/api/inbox/{entry.Id}/claim", null)).EnsureSuccessStatusCode();
 
         var backpack = await buyer.GetFromJsonAsync<BackpackDto>("/api/game/backpack");
         Assert.Contains(backpack!.Creatures, c => c.Id == creatureId);
         var tank = await buyer.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
-        Assert.Equal(3, tank!.Creatures.Count);
+        Assert.Equal(3, tank!.Creatures.Count); // tanque continua cheio, não estourou — foi pra mochila
     }
 }

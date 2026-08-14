@@ -166,7 +166,7 @@ public class TogglesTests : IClassFixture<VivariumApiFactory>
             var habitat = await db.Habitats.FirstAsync(h => h.UserId == userId && h.HabitatType!.Code == "Aquarium");
             var c = new CreatureInstance
             {
-                SpeciesId = 1, OwnerId = userId, HabitatId = null,
+                SpeciesId = 1, OwnerId = userId, OriginalOwnerId = userId, HabitatId = null,
                 Seed = 111, TraitConfigVersion = 1, RarityScore = 4m, IsNew = true,
                 TraitsJson = Vivarium.Core.Generation.TraitsSerialization.Serialize(Vivarium.Core.Generation.TraitGenerator.Generate(111)),
                 CreatedAt = DateTime.UtcNow,
@@ -195,7 +195,7 @@ public class TogglesTests : IClassFixture<VivariumApiFactory>
         {
             var c = new CreatureInstance
             {
-                SpeciesId = 1, OwnerId = ownerId, HabitatId = null,
+                SpeciesId = 1, OwnerId = ownerId, OriginalOwnerId = ownerId, HabitatId = null,
                 Seed = 222, TraitConfigVersion = 1, RarityScore = 4m, IsNew = true,
                 TraitsJson = Vivarium.Core.Generation.TraitsSerialization.Serialize(Vivarium.Core.Generation.TraitGenerator.Generate(222)),
                 CreatedAt = DateTime.UtcNow,

@@ -40,5 +40,16 @@ public static class AdminEndpoints
                 await db.SaveChangesAsync();
             return result.ToHttp();
         });
+
+        group.MapPost("/inbox/send", async (
+            AdminSendInboxMessageRequest body, ClaimsPrincipal principal, InboxService inbox, VivariumDbContext db) =>
+        {
+            var result = await inbox.AdminSendMessageAsync(
+                TokenService.GetUserId(principal), body.Title, body.Body, body.Audience,
+                body.Usernames, body.RewardCurrencyCode, body.RewardCurrencyAmount, DateTime.UtcNow);
+            if (result.Ok)
+                await db.SaveChangesAsync();
+            return result.ToHttp();
+        });
     }
 }

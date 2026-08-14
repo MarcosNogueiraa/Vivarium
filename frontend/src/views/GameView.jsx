@@ -3,6 +3,7 @@ import { api, clearToken } from "../lib/api.js";
 import { useGame } from "../hooks/useGame.js";
 import { useToast } from "../hooks/useToast.js";
 import { useDailyReward } from "../hooks/useDailyReward.js";
+import { useInbox } from "../hooks/useInbox.js";
 import { Coin } from "../components/Coin.jsx";
 import { Toast } from "../components/Toast.jsx";
 import { TankView } from "./TankView.jsx";
@@ -10,6 +11,7 @@ import { BackpackView } from "./BackpackView.jsx";
 import { MarketView } from "./MarketView.jsx";
 import { StoreView } from "./StoreView.jsx";
 import { BreedingView } from "./BreedingView.jsx";
+import { InboxView } from "./InboxView.jsx";
 import { RankingView } from "./RankingView.jsx";
 import { HowItWorksGuide } from "./HowItWorksGuide.jsx";
 import { RarityGuide } from "./RarityGuide.jsx";
@@ -21,6 +23,9 @@ export function GameView({ onLogout }) {
   const { tank, userId, refreshTank, syncError, bandUpgrade, dismissBandUpgrade } = useGame();
   const { toast, notify, dismiss: dismissToast } = useToast();
   const { status: dailyReward, refresh: refreshDailyReward } = useDailyReward();
+  // Compartilhado entre o badge da aba e a InboxView (recebe entries/refresh via props, não
+  // chama useInbox() de novo) — evita duplicar o polling batendo no mesmo endpoint.
+  const { entries: inboxEntries, unclaimedCount: inboxUnclaimedCount, refresh: refreshInbox } = useInbox();
   const [tab, setTab] = useState("tank");
   const [rankingExitSignal, setRankingExitSignal] = useState(0);
   // Efeito "cinema" (escurece tudo fora do aquário, §CSS `.cinema-dim`/`.tank-layout::before`)
@@ -82,6 +87,9 @@ export function GameView({ onLogout }) {
         <div className="topbar-tabs">
           <nav className="nav-pills" ref={navRef}>
             <button data-tab="tank" className={tab === "tank" ? "active" : ""} onClick={() => setTab("tank")}>Tanque</button>
+            <button data-tab="inbox" className={tab === "inbox" ? "active" : ""} onClick={() => setTab("inbox")}>
+              📬 Caixa{inboxUnclaimedCount > 0 && <span className="filter-count-badge">{inboxUnclaimedCount}</span>}
+            </button>
             <button data-tab="backpack" className={tab === "backpack" ? "active" : ""} onClick={() => setTab("backpack")}>Mochila</button>
             <button data-tab="market" className={tab === "market" ? "active" : ""} onClick={() => setTab("market")}>Mercado</button>
             <button data-tab="store" className={tab === "store" ? "active" : ""} onClick={() => setTab("store")}>Loja</button>
@@ -146,6 +154,9 @@ export function GameView({ onLogout }) {
           <TankView tank={tank} refresh={refreshTank} notify={notify}
             cinemaEnabled={cinemaEnabled} toggleCinema={toggleCinema} />
         )}
+        {tab === "inbox" && (
+          <InboxView entries={inboxEntries} refresh={refreshInbox} refreshTank={refreshTank} notify={notify} />
+        )}
         {tab === "backpack" && <BackpackView refreshTank={refreshTank} notify={notify} />}
         {tab === "market" && <MarketView userId={userId} refreshTank={refreshTank} notify={notify} />}
         {tab === "store" && <StoreView tank={tank} refreshTank={refreshTank} notify={notify} />}
@@ -165,7 +176,7 @@ export function GameView({ onLogout }) {
       {showAdminPanel && (
         <AdminPanel
           notify={notify}
-          onClose={async () => { setShowAdminPanel(false); await refreshTank(); }}
+          onClose={async () => { setShowAdminPanel(false); await Promise.all([refreshTank(), refreshInbox()]); }}
         />
       )}
       {bandUpgrade && <TankUpgradeCelebration bandName={bandUpgrade} onClose={dismissBandUpgrade} />}

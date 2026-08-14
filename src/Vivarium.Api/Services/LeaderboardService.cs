@@ -37,7 +37,7 @@ public class LeaderboardService(VivariumDbContext db)
             .Select(c => new CreatureInstance
             {
                 Id = c.Id, Seed = c.Seed, RarityScore = c.RarityScore, TraitConfigVersion = c.TraitConfigVersion,
-                HabitatId = c.HabitatId, TraitsJson = c.TraitsJson,
+                HabitatId = c.HabitatId, TraitsJson = c.TraitsJson, OriginalOwnerId = c.OriginalOwnerId,
             })
             .ToListAsync();
         var byHabitat = creatures.GroupBy(c => c.HabitatId!.Value).ToDictionary(g => g.Key, g => g.ToList());

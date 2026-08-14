@@ -18,6 +18,15 @@ export function AdminPanel({ onClose, notify }) {
   const [busyWallet, setBusyWallet] = useState(false);
   const [walletError, setWalletError] = useState(null);
 
+  const [msgAudience, setMsgAudience] = useState("All");
+  const [msgUsernamesRaw, setMsgUsernamesRaw] = useState("");
+  const [msgTitle, setMsgTitle] = useState("");
+  const [msgBody, setMsgBody] = useState("");
+  const [msgRewardCode, setMsgRewardCode] = useState("");
+  const [msgRewardAmount, setMsgRewardAmount] = useState("");
+  const [busyMsg, setBusyMsg] = useState(false);
+  const [msgError, setMsgError] = useState(null);
+
   async function giveFishToAll() {
     setBusyAll(true);
     try {
@@ -48,6 +57,31 @@ export function AdminPanel({ onClose, notify }) {
       setWalletError(err.message);
     } finally {
       setBusyWallet(false);
+    }
+  }
+
+  async function sendInboxMessage(e) {
+    e.preventDefault();
+    setMsgError(null);
+    setBusyMsg(true);
+    try {
+      const usernames = msgAudience === "Selected"
+        ? msgUsernamesRaw.split(",").map((u) => u.trim()).filter(Boolean)
+        : null;
+      const { recipientCount, notFoundUsernames } = await api.adminSendInboxMessage(
+        msgTitle.trim(), msgBody.trim(), msgAudience, usernames,
+        msgRewardCode || null, msgRewardCode ? Number(msgRewardAmount) : null,
+      );
+      notify(
+        notFoundUsernames?.length
+          ? `Enviado pra ${recipientCount} jogador(es). Não encontrados: ${notFoundUsernames.join(", ")}`
+          : `Enviado pra ${recipientCount} jogador(es).`,
+      );
+      setMsgTitle(""); setMsgBody(""); setMsgUsernamesRaw(""); setMsgRewardCode(""); setMsgRewardAmount("");
+    } catch (err) {
+      setMsgError(err.message);
+    } finally {
+      setBusyMsg(false);
     }
   }
 
@@ -96,6 +130,59 @@ export function AdminPanel({ onClose, notify }) {
           <button type="button" onClick={onClose}>Fechar</button>
           <button type="submit" className="btn-primary" disabled={busyWallet || !username.trim() || amount === ""}>
             {busyWallet ? "…" : "Aplicar"}
+          </button>
+        </div>
+      </form>
+
+      <h4 style={{ marginTop: 24 }}>Mandar mensagem pra Caixa de Entrada</h4>
+      <form className="prompt-form" onSubmit={sendInboxMessage}>
+        <label className="prompt-label">Público</label>
+        <select value={msgAudience} onChange={(e) => setMsgAudience(e.target.value)}>
+          <option value="All">Todos os jogadores</option>
+          <option value="Selected">Lista de usernames</option>
+        </select>
+
+        {msgAudience === "Selected" && (
+          <>
+            <label className="prompt-label">Usernames (separados por vírgula)</label>
+            <input
+              type="text" value={msgUsernamesRaw} placeholder="ex: fulano, beltrano"
+              onChange={(e) => setMsgUsernamesRaw(e.target.value)}
+            />
+          </>
+        )}
+
+        <label className="prompt-label">Título</label>
+        <input type="text" value={msgTitle} onChange={(e) => setMsgTitle(e.target.value)} />
+
+        <label className="prompt-label">Mensagem</label>
+        <textarea value={msgBody} onChange={(e) => setMsgBody(e.target.value)} />
+
+        <label className="prompt-label">Recompensa (opcional)</label>
+        <select value={msgRewardCode} onChange={(e) => setMsgRewardCode(e.target.value)}>
+          <option value="">Sem recompensa</option>
+          <option value="SOFT">Soft</option>
+          <option value="PREMIUM">Premium (💎)</option>
+        </select>
+        {msgRewardCode && (
+          <input
+            type="number" value={msgRewardAmount} placeholder="quantia"
+            onChange={(e) => setMsgRewardAmount(e.target.value)}
+          />
+        )}
+
+        {msgError && <div className="error">{msgError}</div>}
+        <div className="prompt-actions">
+          <button type="button" onClick={onClose}>Fechar</button>
+          <button
+            type="submit" className="btn-primary"
+            disabled={
+              busyMsg || !msgTitle.trim() || !msgBody.trim()
+              || (msgAudience === "Selected" && !msgUsernamesRaw.trim())
+              || (msgRewardCode && !msgRewardAmount)
+            }
+          >
+            {busyMsg ? "…" : "Enviar"}
           </button>
         </div>
       </form>

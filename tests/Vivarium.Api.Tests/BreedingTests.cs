@@ -46,7 +46,7 @@ public class BreedingTests : IClassFixture<VivariumApiFactory>
         {
             var c = new CreatureInstance
             {
-                SpeciesId = 1, OwnerId = userId, HabitatId = habitatId,
+                SpeciesId = 1, OwnerId = userId, OriginalOwnerId = userId, HabitatId = habitatId,
                 Seed = seed, TraitConfigVersion = 1, RarityScore = rarityScore,
                 TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(seed)),
                 CreatedAt = DateTime.UtcNow,
@@ -335,7 +335,7 @@ public class BreedingTests : IClassFixture<VivariumApiFactory>
             for (int i = 0; i < 3; i++)
                 db.CreatureInstances.Add(new CreatureInstance
                 {
-                    SpeciesId = 1, OwnerId = userId, HabitatId = habitatId,
+                    SpeciesId = 1, OwnerId = userId, OriginalOwnerId = userId, HabitatId = habitatId,
                     Seed = 9000 + i, TraitConfigVersion = 1, RarityScore = 4m,
                     TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(9000 + i)),
                     CreatedAt = DateTime.UtcNow,
@@ -343,7 +343,7 @@ public class BreedingTests : IClassFixture<VivariumApiFactory>
             for (int i = 0; i < HabitatDefaults.BackpackCapacity - 1; i++)
                 db.CreatureInstances.Add(new CreatureInstance
                 {
-                    SpeciesId = 1, OwnerId = userId, HabitatId = null,
+                    SpeciesId = 1, OwnerId = userId, OriginalOwnerId = userId, HabitatId = null,
                     Seed = 9100 + i, TraitConfigVersion = 1, RarityScore = 4m,
                     TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(9100 + i)),
                     CreatedAt = DateTime.UtcNow,
@@ -376,7 +376,7 @@ public class BreedingTests : IClassFixture<VivariumApiFactory>
             breedingHabitatId = breedingHabitat.Id;
             var stranded = new CreatureInstance
             {
-                SpeciesId = 1, OwnerId = userId, HabitatId = breedingHabitatId,
+                SpeciesId = 1, OwnerId = userId, OriginalOwnerId = userId, HabitatId = breedingHabitatId,
                 Seed = 7001, TraitConfigVersion = 1, RarityScore = 5m,
                 TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(7001)),
                 CreatedAt = DateTime.UtcNow,

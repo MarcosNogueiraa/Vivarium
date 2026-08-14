@@ -21,6 +21,8 @@ public class VivariumDbContext(DbContextOptions<VivariumDbContext> options) : Db
     public DbSet<TransactionLog> TransactionLogs => Set<TransactionLog>();
     public DbSet<BreedingSlot> BreedingSlots => Set<BreedingSlot>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
+    public DbSet<InboxEntry> InboxEntries => Set<InboxEntry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -126,6 +128,9 @@ public class VivariumDbContext(DbContextOptions<VivariumDbContext> options) : Db
             e.HasIndex(c => c.HabitatId);
             e.HasOne(c => c.ParentA).WithMany().HasForeignKey(c => c.ParentAId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(c => c.ParentB).WithMany().HasForeignKey(c => c.ParentBId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(c => c.OriginalOwner).WithMany().HasForeignKey(c => c.OriginalOwnerId).OnDelete(DeleteBehavior.Restrict);
+            e.Property(c => c.PendingInboxClaim).HasDefaultValue(false);
+            e.HasIndex(c => c.PendingInboxClaim);
         });
 
         modelBuilder.Entity<ItemDefinition>(e =>
@@ -238,6 +243,27 @@ public class VivariumDbContext(DbContextOptions<VivariumDbContext> options) : Db
             e.HasOne(s => s.ParentA).WithMany().HasForeignKey(s => s.ParentAId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(s => s.ParentB).WithMany().HasForeignKey(s => s.ParentBId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(s => s.ChildCreature).WithMany().HasForeignKey(s => s.ChildCreatureId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<InboxMessage>(e =>
+        {
+            e.Property(m => m.Title).HasMaxLength(200);
+            e.Property(m => m.Body).HasMaxLength(4000);
+            e.Property(m => m.Audience).HasConversion<string>().HasMaxLength(16);
+            e.Property(m => m.RewardCurrencyAmount).HasPrecision(18, 2);
+            e.HasOne(m => m.CreatedByAdmin).WithMany().HasForeignKey(m => m.CreatedByAdminId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(m => m.RewardCurrencyType).WithMany().HasForeignKey(m => m.RewardCurrencyTypeId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(m => m.RewardItemDefinition).WithMany().HasForeignKey(m => m.RewardItemDefinitionId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<InboxEntry>(e =>
+        {
+            e.Property(i => i.Kind).HasConversion<string>().HasMaxLength(24);
+            e.HasIndex(i => new { i.RecipientId, i.ClaimedAt }); // consulta mais quente: pendentes de um usuário
+            e.HasOne(i => i.Recipient).WithMany().HasForeignKey(i => i.RecipientId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(i => i.InboxMessage).WithMany().HasForeignKey(i => i.InboxMessageId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(i => i.SenderUser).WithMany().HasForeignKey(i => i.SenderUserId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(i => i.CreatureInstance).WithMany().HasForeignKey(i => i.CreatureInstanceId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

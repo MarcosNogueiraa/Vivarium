@@ -578,57 +578,20 @@ Usuário relatou (conta `marco`) um peixe comum (score ~5.1) "sumido" — não a
 
 **Lição pro processo (ainda não automatizada):** peixes podem nascer DURANTE a janela migration→backend em qualquer deploy que adicione uma coluna preenchida na criação (não só `TraitsJson` — qualquer campo futuro no mesmo padrão). A mitigação real seria rodar `backfill-traits` (ou o equivalente da vez) uma SEGUNDA vez, DEPOIS do backend novo estar no ar, não só antes — cobre tanto os dados pré-existentes (backfill de sempre) quanto qualquer criação que escapou pela janela. Vale adicionar esse passo extra na sequência de deploy documentada em §8.19.2 na próxima vez que uma migration desse tipo (coluna preenchida na criação, não só schema) for feita.
 
-### 8.23 Caixa de entrada — PLANEJADO, ainda não implementado (14/08/2026)
+### 8.23 Caixa de entrada — IMPLEMENTADO (14/08/2026)
 
-Sessão de planejamento (sem código escrito) a pedido do usuário — registrado aqui pra retomar depois. Resolve duas dores reais hoje: (1) admin não tem como avisar/recompensar jogadores em massa ou individualmente; (2) peixe comprado no mercado ou recebido por transferência direta **aparece direto no tanque/mochila sem nenhum aviso** — o jogador só descobre "coincidentemente" abrindo o app. Unificar os dois num só lugar (a Caixa de Entrada) resolve ambos com a mesma UI de "tenho algo pra resgatar".
+Resolve as duas dores documentadas na sessão de planejamento original: (1) admin agora pode avisar/recompensar jogadores em massa ou por lista de usernames; (2) peixe comprado no Mercado ou recebido via "Transferir" **não aparece mais direto no tanque/mochila** — vira uma entrada pendente na Caixa de Entrada, só entregue de verdade (tanque se houver espaço, senão mochila) quando o jogador clica em "Resgatar".
 
-**Escopo funcional pedido pelo usuário:**
-- Admin manda mensagem pra **todos** os jogadores ou pra uma **lista selecionada**, com texto livre (explicar algo, avisar de manutenção, etc.).
-- A mensagem pode ter **recompensa pra resgatar** — e o recurso precisa ser genérico desde o desenho: moeda soft, premium, peixe ou **item novo que ainda nem existe** (a loja de itens premium mencionada no pedido do usuário, §11 "processador de pagamento pra premium" — ainda gap aberto). Não é só "moeda fixa", é "qualquer coisa que o jogo já tem ou vier a ter".
-- Peixe comprado no Mercado ou recebido via "Transferir" (hoje: `POST /api/game/creatures/{id}/transfer`, `MarketService.BuyAsync`) deixa de cair direto no tanque/mochila — passa a ficar **pendente de resgate** na Caixa de Entrada até o jogador confirmar, e só então vai pro tanque (se houver espaço) ou mochila. Resolve a "invisibilidade" de hoje.
-
-**Schema proposto (ainda não criado — nenhuma migration feita):**
-
-```
-InboxMessage  -- 1 linha por envio administrativo (broadcast ou segmentado); a recompensa
-                 (se houver) é a MESMA pra todo mundo que recebeu essa mensagem específica
-- Id (PK)
-- Title, Body
-- CreatedByAdminId (FK -> User)
-- Audience (enum: All | Selected) -- só metadado/auditoria; os destinatários reais já foram
-  materializados em InboxEntry no momento do envio (mesmo princípio de "TransactionLog
-  genérico" do §9.1 — não recalcular quem recebeu depois, gravar de uma vez)
-- RewardCurrencyTypeId (FK -> CurrencyType, nullable), RewardCurrencyAmount (nullable)
-- RewardItemDefinitionId (FK -> ItemDefinition, nullable), RewardItemQuantity (nullable)
-- CreatedAt
-
-InboxEntry  -- 1 linha por (destinatário, evento) — é isso que a tela "Caixa de Entrada"
-               do jogador lista de verdade; cobre TANTO mensagem admin QUANTO entrega de peixe
-- Id (PK)
-- RecipientId (FK -> User)
-- Kind (enum: AdminMessage | MarketPurchase | DirectTransfer — extensível pra futuros tipos,
-  ex. presente de evento)
-- InboxMessageId (FK -> InboxMessage, nullable) -- preenchido só quando Kind=AdminMessage
-- SenderUserId (FK -> User, nullable) -- vendedor (compra) ou remetente (transferência); null
-  pra mensagem de sistema/admin
-- CreatureInstanceId (FK -> CreatureInstance, nullable) -- o peixe entregue, quando aplicável
-- ReadAt (nullable), ClaimedAt (nullable) -- null = ainda não resgatado
-- CreatedAt
-```
-
-**Mudança de fluxo no Mercado/Transferência:** `MarketService.BuyAsync` e `GameService.TransferAsync` (esse já reusa um helper compartilhado, `GameService.TryPlaceAsync` — `BuyAsync` hoje NÃO reusa, duplica a lógica inline; vale unificar nessa mesma leva) deixam de chamar `TryPlaceAsync` na hora da compra/transferência — em vez disso criam o `InboxEntry` (Kind=MarketPurchase/DirectTransfer) e só chamam `TryPlaceAsync` quando o jogador **resgata** da Caixa de Entrada. Enquanto pendente, o peixe já pertence ao novo dono (`OwnerId` trocado na hora — a posse já é real, só a "entrega física" no tanque/mochila que espera confirmação) mas não deve aparecer nas listagens normais de Tanque/Mochila. Precisa de um jeito de marcar isso — proposta: `CreatureInstance.PendingInboxClaim` (bool, default false), e `GameService.BackpackQuery`/query do tanque passam a filtrar `PendingInboxClaim == false`. (Alternativa sem coluna nova: `NOT EXISTS` contra `InboxEntry.ClaimedAt IS NULL` — mais normalizado, mas acopla toda leitura de mochila/tanque à tabela nova; a coluna denormalizada é mais simples de raciocinar e é o padrão já usado no resto do schema, ex. `IsNew` do §8.22.)
-
-**"Primeiro dono" (`OriginalOwnerId`) — pedido explícito do usuário, pensando no futuro suporte a troca de username:** `CreatureInstance` ganha `OriginalOwnerId` (FK -> User, NOT NULL, setado uma única vez na criação — coleta da fila ou nascimento via breeding — e nunca mais alterado, mesmo que o peixe troque de dono depois via mercado/transferência). Guarda o **Id**, não o username — o motivo é exatamente o já documentado pro `SellerName` do Mercado (`MarketService.cs`): username é resolvido **ao vivo** via join (`m.Seller!.Username`), nunca denormalizado como string — então trocar de nome no futuro (feature ainda não implementada, mas já prevista) não deixa nenhum registro histórico desatualizado. Mesmo princípio se aplica aqui: `OriginalOwnerUsername` na `CreatureDto` seria resolvido via join no momento da leitura, nunca armazenado.
-
-**Notificação de "tem algo novo":** badge de contagem (mensagens não lidas + entregas não resgatadas) no ícone da nova aba "📬 Caixa" do topbar — mesmo padrão visual já usado no selo "🆕" da Mochila (§8.22) e no botão "🎁 Recompensa diária".
-
-**Perguntas em aberto pra quando isso for implementado de verdade (não decididas ainda):**
-1. Resgate de uma mensagem com múltiplas recompensas (ex: moeda + item) é tudo de uma vez ou item a item? Chute inicial: tudo de uma vez, mais simples.
-2. Mensagem/entrega expira ou fica pra sempre até resgatar? Chute inicial: sem expiração no MVP (mochila também não expira).
-3. Painel admin (`AdminEndpoints`/tela já existente em §8.14) ganha a UI de compor/mandar mensagem — reaproveitar o modal de admin já existente (`qv` em `GameView.jsx`) em vez de criar tela nova.
-
-**Backlog relacionado (registrado, não implementado, sem desenho ainda):**
-- **Comentários no aquário que o jogador visita** (Ranking → "Visitar", §8.16) — deixar um comentário/recado no aquário de outro jogador. Precisa de moderação básica (nem que seja só "reportar"/apagar o próprio) antes de ir pra produção — não desenhado ainda, só anotado como próximo passo depois da Caixa de Entrada.
+- **Schema:** `InboxMessage` (1 por envio administrativo — título/corpo/público/recompensa opcional em moeda; campos de recompensa em item, `RewardItemDefinitionId`/`RewardItemQuantity`, existem no schema mas ficam **dormentes** — sem UI admin nesta leva, preparados pra quando a loja de itens premium existir) + `InboxEntry` (1 por (destinatário, evento) — `Kind`: `AdminMessage`/`MarketPurchase`/`DirectTransfer`; `ReadAt`/`ClaimedAt` nullable, `ClaimedAt == null` = pendente). `CreatureInstance` ganhou `PendingInboxClaim` (bool) e `OriginalOwnerId` (FK `required`, "primeiro dono" imutável, preparado pro futuro suporte a troca de username — guarda o Id, nunca o nome, mesmo princípio já usado no `SellerName` do Mercado). Migration `AddInboxAndOriginalOwner` fez backfill retroativo de `OriginalOwnerId = OwnerId` pros ~40 peixes já existentes em produção (decisão confirmada: dono atual vira "primeiro dono" retroativo).
+- **Mercado/Transferência:** `MarketService.BuyAsync`/`GameService.TransferAsync` não checam mais espaço do destinatário no momento da ação — a compra/transferência sempre funciona (dado saldo/posse ok); em vez de colocar o peixe direto no tanque/mochila, marcam `PendingInboxClaim = true` e criam um `InboxEntry`. A checagem de espaço migrou inteira pro momento do **resgate** (simplificação de UX intencional, não regressão).
+- **6 bloqueios pra criatura pendente:** enquanto `PendingInboxClaim = true`, o peixe some da Mochila (`BackpackQuery`), não pode ser retransferido, relistado no Mercado, usado como pai de breeding (`GetQuoteAsync`/`StartAsync`), nem vendido ao NPC vendor.
+- **Ações do jogador:** resgate individual (`ClaimAsync`) ou em massa (`ClaimAllAsync`, sequencial no backend — nunca em paralelo, mesma razão de sempre com `xmin`), "Ler tudo" (`MarkAllReadAsync`), "Apagar mensagens lidas" (`ClearClaimedAsync` — só remove entradas com `ClaimedAt` preenchido, nunca uma recompensa em aberto mesmo que já lida). Itens resgatados **continuam visíveis**, marcados, até serem explicitamente apagados.
+- **Admin:** `POST /api/admin/inbox/send` — manda pra todos os usuários ou uma lista de usernames; username inexistente na lista **não bloqueia o envio** (manda pros que existem, loga os não encontrados via `ILogger` e devolve `notFoundUsernames` na resposta pro admin ver na hora). Nova seção no `AdminPanel.jsx` existente.
+- **Endpoints:** `GET /api/inbox/`, `POST /api/inbox/{id}/claim`, `POST /api/inbox/claim-all`, `POST /api/inbox/mark-all-read`, `POST /api/inbox/clear-claimed`, `POST /api/admin/inbox/send`.
+- **Frontend:** nova aba "📬 Caixa" no topbar (badge com contagem de pendentes, mesmo padrão visual do selo "🆕" da Mochila), `InboxView.jsx` (cards por tipo de entrada — mensagem admin vs. entrega de peixe), `useInbox.js` (poll 30s, dado compartilhado entre o badge e a view pra não duplicar polling).
+- **Testes:** 17 casos novos em `InboxTests.cs` (fluxo completo compra→inbox→claim, transferência→inbox→claim, os 6 bloqueios, admin broadcast/lista/username inválido, recompensa credita carteira, `OriginalOwnerId` imutável através de 2 saltos de posse, claim-all misto, mark-all-read, clear-claimed preserva pendentes) + `TransferTests.cs`/`MarketTests.cs`/`BackpackTests.cs` reescritos pro novo fluxo — 279 testes de backend verdes (174 API + 105 Core). `frontend/cypress/e2e/inbox.cy.js` (7 casos) — suíte e2e completa (25 specs, 117 testes) verde.
+- **Ainda não exposto na UI:** `OriginalOwnerId` é capturado e preenchido em toda criação de peixe, mas não aparece em nenhum DTO/tela ainda (decisão de escopo — expor exigiria `.Include` em dezenas de call sites de `CreatureDto.From`, frágil demais pra um campo que hoje é só preparação arquitetural; fica pra quando "criado por" for de fato pedido).
+- **Backlog relacionado (não implementado, sem desenho ainda):** comentários no aquário visitado (Ranking → "Visitar", §8.16) — precisa de moderação básica antes de ir pra produção.
 
 ### 8.24 Perfil do jogador + "esqueci minha senha" (14/08/2026) — IMPLEMENTADO
 

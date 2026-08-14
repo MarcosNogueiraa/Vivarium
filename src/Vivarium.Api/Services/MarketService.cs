@@ -13,7 +13,7 @@ namespace Vivarium.Api.Services;
 /// dos handlers HTTP; devolve <see cref="ServiceResult"/> que o endpoint traduz.
 /// Sem taxa de mercado no MVP; compra é transacional + auditada no TransactionLog.
 /// </summary>
-public class MarketService(VivariumDbContext db, GameService game)
+public class MarketService(VivariumDbContext db)
 {
     // Cortes de raridade espelhados de `frontend/src/lib/fishRenderer.js` BANDS (CLAUDE.md §5) —
     // não existe uma representação de "banda" no backend hoje, só o RarityScore cru. Se os
@@ -132,6 +132,8 @@ public class MarketService(VivariumDbContext db, GameService game)
             return ServiceResult.Bad("Essa criatura não sobreviveu à gestação");
         if (creature.SoldAt is not null)
             return ServiceResult.Bad("Essa criatura já foi vendida ao NPC");
+        if (creature.PendingInboxClaim)
+            return ServiceResult.Bad("Criatura pendente de resgate na Caixa de Entrada");
         // Bug real corrigido (12/08/2026, relatado pelo usuário): `HabitatId is null` também é
         // verdade pra uma criatura na MOCHILA (estado normal, não "em trânsito") — o check
         // bloqueava listar qualquer peixe guardado ali, sempre. O que realmente precisa ser
@@ -207,15 +209,6 @@ public class MarketService(VivariumDbContext db, GameService game)
         if (listing.SellerId == buyerId)
             return ServiceResult.Bad("Você não pode comprar sua própria listagem");
 
-        var buyerHabitat = await game.FindHabitatAsync(buyerId);
-        if (buyerHabitat is null)
-            return ServiceResult.NotFound("Habitat não encontrado");
-        // Espaço no comprador ANTES de cobrar (senão pagaria e o peixe sumiria).
-        bool tankSpace = await db.CreatureInstances.CountAsync(c => c.HabitatId == buyerHabitat.Id) < buyerHabitat.Capacity;
-        bool backpackSpace = await game.CountBackpackAsync(buyerId) < HabitatDefaults.BackpackCapacity;
-        if (!tankSpace && !backpackSpace)
-            return ServiceResult.Bad("Seu tanque e mochila estão cheios.");
-
         int softId = await db.CurrencyTypes.Where(c => c.Code == "SOFT").Select(c => c.Id).FirstAsync();
         var buyerWallet = await db.WalletBalances
             .FirstAsync(w => w.UserId == buyerId && w.CurrencyTypeId == softId);
@@ -229,7 +222,11 @@ public class MarketService(VivariumDbContext db, GameService game)
 
         var creature = listing.CreatureInstance!;
         creature.OwnerId = buyerId;
-        creature.HabitatId = tankSpace ? buyerHabitat.Id : null; // mochila se o tanque estiver cheio
+        // Deixa de cair direto no tanque/mochila — vai pra Caixa de Entrada do comprador,
+        // resgatado explicitamente (CLAUDE.md §8.23/§8.24). Espaço deixa de ser checado
+        // aqui; falta de espaço agora é um erro no momento do resgate, não da compra.
+        creature.HabitatId = null;
+        creature.PendingInboxClaim = true;
 
         listing.Status = ListingStatus.Sold;
         listing.BuyerId = buyerId;
@@ -243,6 +240,14 @@ public class MarketService(VivariumDbContext db, GameService game)
             CreatureInstanceId = creature.Id,
             CurrencyTypeId = softId,
             Amount = listing.PriceSoft,
+            CreatedAt = now,
+        });
+        db.InboxEntries.Add(new InboxEntry
+        {
+            RecipientId = buyerId,
+            Kind = InboxEntryKind.MarketPurchase,
+            SenderUserId = listing.SellerId,
+            CreatureInstanceId = creature.Id,
             CreatedAt = now,
         });
 
