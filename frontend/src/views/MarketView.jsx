@@ -130,24 +130,34 @@ export function MarketView({ userId, refreshTank, notify }) {
   const nothingAtAll = data.listings.length === 0 && data.myListings.length === 0 && page === 0
     && bandFilter === "all" && activeAppearanceFilters === 0;
 
+  const myListingsSection = (
+    // Nasce minimizada (13/08/2026, pedido do usuário) — logo abaixo dos filtros, não mais
+    // acima deles: o mercado dos OUTROS jogadores é o conteúdo principal da tela, os próprios
+    // anúncios são consulta ocasional. Renderizada sempre (mesmo quando o resto do mercado
+    // está totalmente vazio) — é informação própria do jogador, independente do que existe
+    // pra filtrar/navegar no restante da tela.
+    <CollapsibleSection
+      title={
+        <>
+          Meus anúncios ativos{" "}
+          <span className="filter-count-badge">{data.myActiveListingsCount}/{data.maxActiveListings}</span>
+        </>
+      }
+    >
+      {data.myListings.length === 0 ? (
+        <p className="hint">Você não tem anúncios ativos. Vá até o Tanque ou a Mochila e venda um peixe pra listar aqui.</p>
+      ) : (
+        <div className="grid market-mine-grid">
+          {data.myListings.map((l) => (
+            <FishCard key={l.id} l={l} userId={userId} onOpen={setDetail} onBuy={buy} onCancel={cancel} />
+          ))}
+        </div>
+      )}
+    </CollapsibleSection>
+  );
+
   return (
     <>
-      <div className="market-mine">
-        <div className="section-head">
-          <span className="eyebrow">Meus anúncios ativos</span>
-          <span className="count">{data.myActiveListingsCount}/{data.maxActiveListings}</span>
-        </div>
-        {data.myListings.length === 0 ? (
-          <p className="hint">Você não tem anúncios ativos. Vá até o Tanque ou a Mochila e venda um peixe pra listar aqui.</p>
-        ) : (
-          <div className="grid market-mine-grid">
-            {data.myListings.map((l) => (
-              <FishCard key={l.id} l={l} userId={userId} onOpen={setDetail} onBuy={buy} onCancel={cancel} />
-            ))}
-          </div>
-        )}
-      </div>
-
       {nothingAtAll ? (
         <div className="empty-state glass">
           <span className="empty-state-icon">🐠</span>
@@ -240,7 +250,19 @@ export function MarketView({ userId, refreshTank, notify }) {
               ))}
             </div>
           </CollapsibleSection>
+        </>
+      )}
 
+      {/* Posição estável como irmão de nível superior, fora das ramificações condicionais
+          acima e abaixo — se ficasse ANINHADA dentro de uma delas, cancelar o único anúncio
+          ativo (o que costuma fazer nothingAtAll virar true, trocando o ramo renderizado)
+          desmontaria e remontaria esta seção, perdendo o estado local de expandido/recolhido
+          do CollapsibleSection (bug real pego no e2e). Continua "abaixo dos filtros" na
+          posição visual porque é o próximo irmão logo depois do bloco de filtros/estado vazio. */}
+      {myListingsSection}
+
+      {!nothingAtAll && (
+        <>
           {data.listings.length === 0 ? (
             <p className="hint">Nenhum peixe corresponde a esse filtro.</p>
           ) : (

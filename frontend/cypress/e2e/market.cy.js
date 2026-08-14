@@ -89,9 +89,12 @@ describe("Mercado", () => {
     login();
     cy.wait("@listings");
 
-    cy.contains("Meus anúncios ativos");
+    // Nasce minimizada (13/08/2026) — o card só existe no DOM depois de expandir.
+    cy.contains("button.detail-section-head", "Meus anúncios ativos");
     cy.contains("1/50");
-    cy.get(".market-mine .card").within(() => {
+    cy.get(".card").should("not.exist");
+    cy.contains("button.detail-section-head", "Meus anúncios ativos").click();
+    cy.get(".card").within(() => {
       cy.contains("button", "Cancelar").should("be.visible");
       cy.contains("button", "Comprar").should("not.exist");
     });
@@ -101,7 +104,7 @@ describe("Mercado", () => {
     cy.intercept("GET", "/api/market/listings*", { body: envelope() }).as("listingsAfter");
     cy.intercept("GET", "/api/game/tank", { fixture: "tank-empty.json" }).as("tankAfter");
 
-    cy.get(".market-mine").contains("button", "Cancelar").click();
+    cy.get(".card").contains("button", "Cancelar").click();
     cy.wait("@cancel");
     cy.wait("@listingsAfter");
     cy.contains("Você não tem anúncios ativos");

@@ -704,7 +704,6 @@ input:focus {
 /* Painel fixo "Meus anúncios ativos" (Mercado, 13/08/2026) — sempre visível, separado da
    grade paginada/filtrável do resto do mercado (mesmo espírito da linha destacada do próprio
    jogador no Ranking, só que como seção própria em vez de 1 linha). */
-.market-mine { border-bottom: 1px solid var(--line); padding-bottom: 18px; margin-bottom: 18px; }
 .market-mine-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
 
 .empty-state {
