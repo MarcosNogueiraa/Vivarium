@@ -578,6 +578,58 @@ Usuário relatou (conta `marco`) um peixe comum (score ~5.1) "sumido" — não a
 
 **Lição pro processo (ainda não automatizada):** peixes podem nascer DURANTE a janela migration→backend em qualquer deploy que adicione uma coluna preenchida na criação (não só `TraitsJson` — qualquer campo futuro no mesmo padrão). A mitigação real seria rodar `backfill-traits` (ou o equivalente da vez) uma SEGUNDA vez, DEPOIS do backend novo estar no ar, não só antes — cobre tanto os dados pré-existentes (backfill de sempre) quanto qualquer criação que escapou pela janela. Vale adicionar esse passo extra na sequência de deploy documentada em §8.19.2 na próxima vez que uma migration desse tipo (coluna preenchida na criação, não só schema) for feita.
 
+### 8.23 Caixa de entrada — PLANEJADO, ainda não implementado (14/08/2026)
+
+Sessão de planejamento (sem código escrito) a pedido do usuário — registrado aqui pra retomar depois. Resolve duas dores reais hoje: (1) admin não tem como avisar/recompensar jogadores em massa ou individualmente; (2) peixe comprado no mercado ou recebido por transferência direta **aparece direto no tanque/mochila sem nenhum aviso** — o jogador só descobre "coincidentemente" abrindo o app. Unificar os dois num só lugar (a Caixa de Entrada) resolve ambos com a mesma UI de "tenho algo pra resgatar".
+
+**Escopo funcional pedido pelo usuário:**
+- Admin manda mensagem pra **todos** os jogadores ou pra uma **lista selecionada**, com texto livre (explicar algo, avisar de manutenção, etc.).
+- A mensagem pode ter **recompensa pra resgatar** — e o recurso precisa ser genérico desde o desenho: moeda soft, premium, peixe ou **item novo que ainda nem existe** (a loja de itens premium mencionada no pedido do usuário, §11 "processador de pagamento pra premium" — ainda gap aberto). Não é só "moeda fixa", é "qualquer coisa que o jogo já tem ou vier a ter".
+- Peixe comprado no Mercado ou recebido via "Transferir" (hoje: `POST /api/game/creatures/{id}/transfer`, `MarketService.BuyAsync`) deixa de cair direto no tanque/mochila — passa a ficar **pendente de resgate** na Caixa de Entrada até o jogador confirmar, e só então vai pro tanque (se houver espaço) ou mochila. Resolve a "invisibilidade" de hoje.
+
+**Schema proposto (ainda não criado — nenhuma migration feita):**
+
+```
+InboxMessage  -- 1 linha por envio administrativo (broadcast ou segmentado); a recompensa
+                 (se houver) é a MESMA pra todo mundo que recebeu essa mensagem específica
+- Id (PK)
+- Title, Body
+- CreatedByAdminId (FK -> User)
+- Audience (enum: All | Selected) -- só metadado/auditoria; os destinatários reais já foram
+  materializados em InboxEntry no momento do envio (mesmo princípio de "TransactionLog
+  genérico" do §9.1 — não recalcular quem recebeu depois, gravar de uma vez)
+- RewardCurrencyTypeId (FK -> CurrencyType, nullable), RewardCurrencyAmount (nullable)
+- RewardItemDefinitionId (FK -> ItemDefinition, nullable), RewardItemQuantity (nullable)
+- CreatedAt
+
+InboxEntry  -- 1 linha por (destinatário, evento) — é isso que a tela "Caixa de Entrada"
+               do jogador lista de verdade; cobre TANTO mensagem admin QUANTO entrega de peixe
+- Id (PK)
+- RecipientId (FK -> User)
+- Kind (enum: AdminMessage | MarketPurchase | DirectTransfer — extensível pra futuros tipos,
+  ex. presente de evento)
+- InboxMessageId (FK -> InboxMessage, nullable) -- preenchido só quando Kind=AdminMessage
+- SenderUserId (FK -> User, nullable) -- vendedor (compra) ou remetente (transferência); null
+  pra mensagem de sistema/admin
+- CreatureInstanceId (FK -> CreatureInstance, nullable) -- o peixe entregue, quando aplicável
+- ReadAt (nullable), ClaimedAt (nullable) -- null = ainda não resgatado
+- CreatedAt
+```
+
+**Mudança de fluxo no Mercado/Transferência:** `MarketService.BuyAsync` e `GameService.TransferAsync` (esse já reusa um helper compartilhado, `GameService.TryPlaceAsync` — `BuyAsync` hoje NÃO reusa, duplica a lógica inline; vale unificar nessa mesma leva) deixam de chamar `TryPlaceAsync` na hora da compra/transferência — em vez disso criam o `InboxEntry` (Kind=MarketPurchase/DirectTransfer) e só chamam `TryPlaceAsync` quando o jogador **resgata** da Caixa de Entrada. Enquanto pendente, o peixe já pertence ao novo dono (`OwnerId` trocado na hora — a posse já é real, só a "entrega física" no tanque/mochila que espera confirmação) mas não deve aparecer nas listagens normais de Tanque/Mochila. Precisa de um jeito de marcar isso — proposta: `CreatureInstance.PendingInboxClaim` (bool, default false), e `GameService.BackpackQuery`/query do tanque passam a filtrar `PendingInboxClaim == false`. (Alternativa sem coluna nova: `NOT EXISTS` contra `InboxEntry.ClaimedAt IS NULL` — mais normalizado, mas acopla toda leitura de mochila/tanque à tabela nova; a coluna denormalizada é mais simples de raciocinar e é o padrão já usado no resto do schema, ex. `IsNew` do §8.22.)
+
+**"Primeiro dono" (`OriginalOwnerId`) — pedido explícito do usuário, pensando no futuro suporte a troca de username:** `CreatureInstance` ganha `OriginalOwnerId` (FK -> User, NOT NULL, setado uma única vez na criação — coleta da fila ou nascimento via breeding — e nunca mais alterado, mesmo que o peixe troque de dono depois via mercado/transferência). Guarda o **Id**, não o username — o motivo é exatamente o já documentado pro `SellerName` do Mercado (`MarketService.cs`): username é resolvido **ao vivo** via join (`m.Seller!.Username`), nunca denormalizado como string — então trocar de nome no futuro (feature ainda não implementada, mas já prevista) não deixa nenhum registro histórico desatualizado. Mesmo princípio se aplica aqui: `OriginalOwnerUsername` na `CreatureDto` seria resolvido via join no momento da leitura, nunca armazenado.
+
+**Notificação de "tem algo novo":** badge de contagem (mensagens não lidas + entregas não resgatadas) no ícone da nova aba "📬 Caixa" do topbar — mesmo padrão visual já usado no selo "🆕" da Mochila (§8.22) e no botão "🎁 Recompensa diária".
+
+**Perguntas em aberto pra quando isso for implementado de verdade (não decididas ainda):**
+1. Resgate de uma mensagem com múltiplas recompensas (ex: moeda + item) é tudo de uma vez ou item a item? Chute inicial: tudo de uma vez, mais simples.
+2. Mensagem/entrega expira ou fica pra sempre até resgatar? Chute inicial: sem expiração no MVP (mochila também não expira).
+3. Painel admin (`AdminEndpoints`/tela já existente em §8.14) ganha a UI de compor/mandar mensagem — reaproveitar o modal de admin já existente (`qv` em `GameView.jsx`) em vez de criar tela nova.
+
+**Backlog relacionado (registrado, não implementado, sem desenho ainda):**
+- **Comentários no aquário que o jogador visita** (Ranking → "Visitar", §8.16) — deixar um comentário/recado no aquário de outro jogador. Precisa de moderação básica (nem que seja só "reportar"/apagar o próprio) antes de ir pra produção — não desenhado ainda, só anotado como próximo passo depois da Caixa de Entrada.
+
 ---
 
 ## 9. Schema de dados completo (MVP, desacoplado para escalar)
@@ -797,6 +849,7 @@ Falta pra ir ao ar de verdade (depende de contas/decisões do usuário):
 - ⏳ **Assets do designer** (item 2 abaixo) — trocar as formas procedurais do `fishRenderer.js`/protótipo pelos sprites reais
 - ⏳ Domínio próprio (opcional — hoje usa DuckDNS/workers.dev, funcional mas feio); processador de pagamento pra premium (§8.11)
 - ⏳ Trocar heartbeat por WebSocket/SSE (melhoria pós-MVP, seção 8.3); v2: alimentação e breeding (seção 8.6)
+- ⏳ **Caixa de entrada (planejado, 14/08/2026, ver §8.23)** — mensagens de admin (broadcast/segmentada) com recompensa genérica (moeda/item/peixe) + peixe comprado no mercado/recebido por transferência passa a ficar pendente de resgate em vez de cair direto no tanque/mochila. Inclui o campo `OriginalOwnerId` ("primeiro dono") no `CreatureInstance`, pensado pro suporte futuro a troca de username. Nenhum código escrito ainda — só o desenho de schema/fluxo. Backlog anexo: comentários no aquário visitado (§8.16).
 - ✅ **(11/08/2026) VIP — ativação implementada.** Modelo decidido com o usuário: pacotes de dias fixos pagos em moeda **premium** (não dinheiro real direto — reaproveita 100% a infra de premium já existente), **sem renovação automática** (expira sozinho, jogador recompra se quiser — mesmo espírito simples do estabilizador/seguro do Ninho, sem complexidade de cobrança recorrente/cancelamento). Preços definidos pelo usuário: 7 dias = 7 premium, 15 dias = 10 premium, 30 dias = 15 premium (`VipConfig.PackagePricePremium`, `src/Vivarium.Core/Gameplay/VipConfig.cs`) — desconto por dia cresce com o pacote, mesmo princípio do desconto por volume do PIX (§8.17, branch separada). `VipService.SubscribeAsync` **estende** `EndAt` se já houver assinatura ativa (comprar mais dias nunca desperdiça o que já foi pago) em vez de sobrescrever. Endpoints `GET /api/vip` (status + tabela de preços) e `POST /api/vip/subscribe` (`{days}` — só 7/15/30 aceitos). `TankResponse` ganhou `IsVip`/`VipEndAt` pro topbar mostrar um selo "👑 VIP" quando ativo. Frontend: card dedicado na Loja (`StoreView.jsx`, `.vip-card`, estilo `store-card--premium` já existente) com os 3 botões de pacote, desabilitados sem saldo. Nenhuma migration nova — `VipSubscription`/`SubscriptionStatus` já existiam no schema desde o início, só nunca tinham sido usados. Novo valor `VipPurchase` no enum `TransactionType` (sem migration, é coluna string). Testes: `VipCalculatorTests.cs` (Core) + `VipTests.cs` (Api, 5 casos) + `frontend/cypress/e2e/vip.cy.js` (4 casos E2E).
 - ✅ **(08/08/2026) Degradação da água ponderada por raridade — implementado.** Cada peixe agora soma `rarityScore/DegradationRarityRefScore` (peso) à degradação, em vez de sempre 1 fixo — quem rende mais suja mais. `DegradationRarityRefScore=5` calibrado pra um comum (score~5) continuar exatamente como antes (peso 1, ~0,9/h); um raro (score~8,65) sobe pra peso ~1,73 (~1,6/h); um épico/lendário (score~15) chega a peso 3 (~2,7/h). `HabitatTickState.ActiveFishCount` (int) virou `ActiveFishWeight` (decimal) em `HabitatTicker.cs` — `GameService.ApplyTickAsync` computa o peso a partir dos `RarityScore` já carregados (`fish.Sum(f => f.RarityScore) / ref`, zero query extra). Espelhado em `generator.js` (`waterDegradationPerFishPerHour(rarityScore)`, agora recebe o score em vez de ser uma constante fixa) e no `FishDetail.jsx`. Testes: `PeixeMaisRaro_DegradaAguaMaisRapido` (API, compara dois aquários com 1 peixe cada, raridades diferentes) + teste unitário em `generator.test.js`. Revalidado com `Vivarium.Simulation economy`/`simulate`: upkeep de "10 raros" subiu de 2,4→3,3/h, "1 lendário" de 0,8→1,1/h; economia dos 3 perfis continua saudável em 120 dias.
 
