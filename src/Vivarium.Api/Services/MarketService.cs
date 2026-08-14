@@ -27,12 +27,21 @@ public class MarketService(VivariumDbContext db, GameService game)
         _ => "Lendário",
     };
 
-    private static bool MatchesPart(CreatureTraits traits, string part, string? color, string? pattern)
+    // Cada valor pode ser uma lista separada por vírgula (ex: "Red,Green") — dentro do MESMO
+    // atributo/parte, os valores são OU (qualquer um serve); entre partes/atributos diferentes
+    // continua E (precisa bater em todos os filtros ativos). Vazio/null = sem filtro nesse campo.
+    private static bool MatchesAny(string value, string? csv)
+    {
+        if (string.IsNullOrEmpty(csv) || csv == "all") return true;
+        foreach (var candidate in csv.Split(',', StringSplitOptions.RemoveEmptyEntries))
+            if (candidate == value) return true;
+        return false;
+    }
+
+    private static bool MatchesPart(CreatureTraits traits, string part, string? colors, string? patterns)
     {
         var p = part switch { "tail" => traits.Tail, "dorsal" => traits.Dorsal, "pectoral" => traits.Pectoral, _ => traits.Tail };
-        if (!string.IsNullOrEmpty(color) && color != "all" && p.Color.ToString() != color) return false;
-        if (!string.IsNullOrEmpty(pattern) && pattern != "all" && p.Pattern.ToString() != pattern) return false;
-        return true;
+        return MatchesAny(p.Color.ToString(), colors) && MatchesAny(p.Pattern.ToString(), patterns);
     }
 
     public async Task<MarketListingsResponse> ListingsAsync(

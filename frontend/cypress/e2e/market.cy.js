@@ -89,9 +89,12 @@ describe("Mercado", () => {
     login();
     cy.wait("@listings");
 
-    cy.contains("Meus anúncios ativos");
+    // Nasce minimizada (13/08/2026) — o card só existe no DOM depois de expandir.
+    cy.contains("button.detail-section-head", "Meus anúncios ativos");
     cy.contains("1/50");
-    cy.get(".market-mine .card").within(() => {
+    cy.get(".card").should("not.exist");
+    cy.contains("button.detail-section-head", "Meus anúncios ativos").click();
+    cy.get(".card").within(() => {
       cy.contains("button", "Cancelar").should("be.visible");
       cy.contains("button", "Comprar").should("not.exist");
     });
@@ -101,7 +104,7 @@ describe("Mercado", () => {
     cy.intercept("GET", "/api/market/listings*", { body: envelope() }).as("listingsAfter");
     cy.intercept("GET", "/api/game/tank", { fixture: "tank-empty.json" }).as("tankAfter");
 
-    cy.get(".market-mine").contains("button", "Cancelar").click();
+    cy.get(".card").contains("button", "Cancelar").click();
     cy.wait("@cancel");
     cy.wait("@listingsAfter");
     cy.contains("Você não tem anúncios ativos");
@@ -161,5 +164,39 @@ describe("Mercado", () => {
     });
     cy.wait("@listings").its("request.url").should("include", "tailColor=Blue");
     cy.contains("button.detail-section-head", "Filtros avançados (1)");
+  });
+
+  it("marcar duas cores na mesma parte manda os dois valores (OU) pra API", () => {
+    const l = listing(702, 2, "vendedor", 1111, 5.0, 10);
+    cy.intercept("GET", "/api/market/listings*", { body: envelope({ listings: [l] }) }).as("listings");
+    login();
+    cy.wait("@listings");
+
+    cy.contains("button.detail-section-head", "Filtros avançados").click();
+    cy.get(".appearance-filter-part").first().within(() => {
+      cy.get('.color-chip[title="Azul"]').click();
+    });
+    cy.wait("@listings");
+    cy.get(".appearance-filter-part").first().within(() => {
+      cy.get('.color-chip[title="Vermelho"]').click();
+    });
+    cy.wait("@listings").its("request.url").should("match", /tailColor=(Blue%2CRed|Red%2CBlue)/);
+    cy.contains("button.detail-section-head", "Filtros avançados (2)");
+  });
+
+  it("botão de redefinir filtros limpa banda e filtros de parte", () => {
+    const l = listing(703, 2, "vendedor", 1111, 5.0, 10);
+    cy.intercept("GET", "/api/market/listings*", { body: envelope({ listings: [l] }) }).as("listings");
+    login();
+    cy.wait("@listings");
+
+    cy.contains(".filter-chips", "Todos").contains("button", "Raro").click();
+    cy.wait("@listings");
+    cy.contains("button", "↺ Redefinir filtros").should("be.visible");
+
+    cy.contains("button", "↺ Redefinir filtros").click();
+    cy.wait("@listings").its("request.url").should("not.include", "band=");
+    cy.contains("button", "↺ Redefinir filtros").should("not.exist");
+    cy.contains(".filter-chips", "Todos").contains("button.active", "Todos");
   });
 });
