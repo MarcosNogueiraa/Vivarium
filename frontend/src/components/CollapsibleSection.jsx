@@ -9,7 +9,7 @@ import { useState } from "react";
  * hierarquizado, ex: FishDetail). Sem `variant`, o comportamento/visual continua EXATAMENTE
  * igual ao original — não regride nenhum uso existente.
  */
-export function CollapsibleSection({ title, children, variant, hint }) {
+export function CollapsibleSection({ title, children, variant, hint, icon = "🎛️" }) {
   const [open, setOpen] = useState(false);
   const prominent = variant === "prominent";
   return (
@@ -20,7 +20,7 @@ export function CollapsibleSection({ title, children, variant, hint }) {
         aria-expanded={open}
       >
         <span className="detail-section-head-title">
-          {prominent && <span className="detail-section-icon" aria-hidden="true">🎛️</span>}
+          {prominent && <span className="detail-section-icon" aria-hidden="true">{icon}</span>}
           <span className="eyebrow">{title}</span>
         </span>
         <span className={`chevron${open ? " open" : ""}`}>▾</span>

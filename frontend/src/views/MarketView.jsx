@@ -137,6 +137,9 @@ export function MarketView({ userId, refreshTank, notify }) {
     // está totalmente vazio) — é informação própria do jogador, independente do que existe
     // pra filtrar/navegar no restante da tela.
     <CollapsibleSection
+      variant="prominent"
+      icon="🏷️"
+      hint="Seus próprios anúncios ativos no mercado — toque pra ver, editar preço ou cancelar."
       title={
         <>
           Meus anúncios ativos{" "}
