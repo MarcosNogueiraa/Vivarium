@@ -10,6 +10,10 @@ services:
       Jwt__Key: "${JWT__KEY}"
       Cors__AllowedOrigins__0: "https://${FRONTEND_DOMAIN}"
       ForwardedHeaders__Enabled: "true"
+      # Opcional — sem essa chave, o app cai pra NullEmailSender (só loga, não quebra
+      # nada). CLAUDE.md §8.24: sandbox do Resend sem domínio verificado só entrega
+      # pro dono da conta Resend, não pra qualquer jogador ainda.
+      Resend__ApiKey: "${RESEND__APIKEY}"
     restart: unless-stopped
     # sem "ports" — só acessível via Caddy, na rede interna do compose.
 
