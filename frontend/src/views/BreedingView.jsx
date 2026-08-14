@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api.js";
 import { useBreeding } from "../hooks/useBreeding.js";
+import { usePartFilters } from "../hooks/usePartFilters.js";
 import { AquariumCanvas } from "../components/AquariumCanvas.jsx";
 import { RarityBadge } from "../components/RarityBadge.jsx";
 import { FishCanvas } from "../components/FishCanvas.jsx";
@@ -8,23 +9,22 @@ import { Modal } from "../components/Modal.jsx";
 import { ConfirmModal } from "../components/ConfirmModal.jsx";
 import { Coin } from "../components/Coin.jsx";
 import { Select } from "../components/Select.jsx";
+import { AppearanceFilters } from "../components/AppearanceFilters.jsx";
 import { CollectCelebration } from "../components/CollectCelebration.jsx";
 import { PeekPanel } from "../components/PeekPanel.jsx";
 import { BreedingHistory } from "../components/BreedingHistory.jsx";
-import { CollapsibleSection } from "../components/CollapsibleSection.jsx";
-import { bandOf, BANDS, PART_HEX, PT } from "../lib/fishRenderer.js";
-import { breedingPreview, coinsPerHourOf, traitsOf, CONFIG } from "../lib/generator.js";
+import { bandOf, BANDS, PT } from "../lib/fishRenderer.js";
+import { breedingPreview, coinsPerHourOf } from "../lib/generator.js";
 import { PART_PT, partSummary } from "../lib/format.js";
-
-const PARTS = ["tail", "dorsal", "pectoral"];
-const PATTERN_VALUES = CONFIG.patternTypes.map(([v]) => v);
-const emptyPartFilter = { color: "all", pattern: "all" };
 
 const SORTS = {
   "rarity-desc": { label: "Raridade (maior primeiro)", cmp: (a, b) => Number(b.rarityScore) - Number(a.rarityScore) },
   "rarity-asc": { label: "Raridade (menor primeiro)", cmp: (a, b) => Number(a.rarityScore) - Number(b.rarityScore) },
   "production-desc": { label: "Produção (maior primeiro)", cmp: (a, b) => coinsPerHourOf(Number(b.rarityScore)) - coinsPerHourOf(Number(a.rarityScore)) },
   "production-asc": { label: "Produção (menor primeiro)", cmp: (a, b) => coinsPerHourOf(Number(a.rarityScore)) - coinsPerHourOf(Number(b.rarityScore)) },
+  // 14/08/2026, pedido do usuário: Ninho era a única tela de filtro/ordenação sem essa opção.
+  "newest": { label: "Mais recentes primeiro", cmp: (a, b) => new Date(b.createdAt) - new Date(a.createdAt) },
+  "oldest": { label: "Mais antigos primeiro", cmp: (a, b) => new Date(a.createdAt) - new Date(b.createdAt) },
 };
 
 function ParentPreviewCard({ label, creature, traits }) {
@@ -92,9 +92,7 @@ export function BreedingView({ tank, refreshTank, notify }) {
   const [, forceTick] = useState(0);
   const [sortBy, setSortBy] = useState("rarity-desc");
   const [bandFilter, setBandFilter] = useState("all");
-  const [partFilters, setPartFilters] = useState({
-    tail: { ...emptyPartFilter }, dorsal: { ...emptyPartFilter }, pectoral: { ...emptyPartFilter },
-  });
+  const appearance = usePartFilters();
   const [onlyBred, setOnlyBred] = useState(false);
 
   const softBalance = Number(tank.wallet?.SOFT ?? 0);
@@ -122,35 +120,17 @@ export function BreedingView({ tank, refreshTank, notify }) {
   const visibleCandidates = useMemo(() => candidates
     .filter((c) => c.id === pickA?.id || c.id === pickB?.id
       || (bandFilter === "all" || bandOf(Number(c.rarityScore)).name === bandFilter))
-    .filter((c) => {
-      if (c.id === pickA?.id || c.id === pickB?.id) return true;
-      const t = traitsOf(c);
-      return PARTS.every((part) => {
-        const f = partFilters[part];
-        return (f.color === "all" || t[part].color === f.color)
-          && (f.pattern === "all" || t[part].pattern === f.pattern);
-      });
-    })
+    .filter((c) => c.id === pickA?.id || c.id === pickB?.id || appearance.matches(c))
     .filter((c) => c.id === pickA?.id || c.id === pickB?.id || !onlyBred || c.isBred)
     .sort(SORTS[sortBy].cmp),
-  [candidates, bandFilter, partFilters, onlyBred, sortBy, pickA, pickB]);
+  [candidates, bandFilter, appearance.matches, onlyBred, sortBy, pickA, pickB]);
 
-  const activeAppearanceFilters = PARTS.reduce(
-    (n, part) => n + (partFilters[part].color !== "all" ? 1 : 0) + (partFilters[part].pattern !== "all" ? 1 : 0),
-    0
-  );
-  function setPartColor(part, color) {
-    setPartFilters((prev) => ({ ...prev, [part]: { ...prev[part], color } }));
-  }
-  function setPartPattern(part, pattern) {
-    setPartFilters((prev) => ({ ...prev, [part]: { ...prev[part], pattern } }));
-  }
   function resetFilters() {
     setBandFilter("all");
-    setPartFilters({ tail: { ...emptyPartFilter }, dorsal: { ...emptyPartFilter }, pectoral: { ...emptyPartFilter } });
+    appearance.reset();
     setOnlyBred(false);
   }
-  const filtersActive = activeAppearanceFilters > 0 || bandFilter !== "all" || onlyBred;
+  const filtersActive = appearance.activeCount > 0 || bandFilter !== "all" || onlyBred;
 
   if (status === null || backpack === null) return <p className="hint">Carregando o ninho…</p>;
 
@@ -334,60 +314,15 @@ export function BreedingView({ tank, refreshTank, notify }) {
               </button>
             )}
           </div>
-          <CollapsibleSection
-            variant="prominent"
+          <AppearanceFilters
+            partFilters={appearance.partFilters}
+            activeCount={appearance.activeCount}
+            onToggleColor={appearance.toggleColor}
+            onTogglePattern={appearance.togglePattern}
+            onClearColors={appearance.clearColors}
+            onClearPatterns={appearance.clearPatterns}
             hint="Filtre por cor e padrão de cada parte — cauda, dorsal e peitoral, de forma independente. Útil pra escolher pais que combinem traços específicos."
-            title={
-              <>
-                Filtros avançados{" "}
-                {activeAppearanceFilters > 0 && <span className="filter-count-badge">({activeAppearanceFilters})</span>}
-              </>
-            }
-          >
-            <div className="appearance-filter-group">
-              {PARTS.map((part) => (
-                <div className="appearance-filter-part" key={part}>
-                  <strong>{PART_PT[part]}</strong>
-                  <div className="filter-chips">
-                    <button
-                      className={`filter-chip${partFilters[part].color === "all" ? " active" : ""}`}
-                      onClick={() => setPartColor(part, "all")}
-                    >
-                      Toda cor
-                    </button>
-                    {Object.keys(PART_HEX).map((color) => (
-                      <button
-                        key={color}
-                        className={`filter-chip color-chip${partFilters[part].color === color ? " active" : ""}`}
-                        style={{ "--tier": PART_HEX[color] }}
-                        title={PT.color[color]}
-                        onClick={() => setPartColor(part, color)}
-                      >
-                        <span className="dot-color" style={{ background: PART_HEX[color] }} />
-                      </button>
-                    ))}
-                  </div>
-                  <div className="filter-chips">
-                    <button
-                      className={`filter-chip${partFilters[part].pattern === "all" ? " active" : ""}`}
-                      onClick={() => setPartPattern(part, "all")}
-                    >
-                      Todo padrão
-                    </button>
-                    {PATTERN_VALUES.map((pattern) => (
-                      <button
-                        key={pattern}
-                        className={`filter-chip${partFilters[part].pattern === pattern ? " active" : ""}`}
-                        onClick={() => setPartPattern(part, pattern)}
-                      >
-                        {PT.pattern[pattern]}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CollapsibleSection>
+          />
           {visibleCandidates.length === 0 ? (
             <p className="hint">Nenhum peixe corresponde a esse filtro.</p>
           ) : (

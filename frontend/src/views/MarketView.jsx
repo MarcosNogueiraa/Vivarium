@@ -1,28 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../lib/api.js";
-import { CONFIG, coinsPerHourOf } from "../lib/generator.js";
-import { bandOf, BANDS, PART_HEX, PT } from "../lib/fishRenderer.js";
-import { PART_PT } from "../lib/format.js";
+import { coinsPerHourOf } from "../lib/generator.js";
+import { bandOf, BANDS } from "../lib/fishRenderer.js";
 import { RarityBadge } from "../components/RarityBadge.jsx";
 import { Coin } from "../components/Coin.jsx";
 import { FishCanvas } from "../components/FishCanvas.jsx";
 import { Select } from "../components/Select.jsx";
+import { AppearanceFilters } from "../components/AppearanceFilters.jsx";
 import { CollapsibleSection } from "../components/CollapsibleSection.jsx";
 import { Pagination } from "../components/Pagination.jsx";
+import { usePartFilters } from "../hooks/usePartFilters.js";
 import { FishDetail } from "./FishDetail.jsx";
 
 const PAGE_SIZE = 24;
-
-// Mesmo padrão de filtro por parte já usado 2x (BackpackView, BreedingView) — 3º lugar,
-// ainda não justifica extrair hook compartilhado (mantém o escopo desta tarefa enxuto).
-const PARTS = ["tail", "dorsal", "pectoral"];
-const PATTERN_VALUES = CONFIG.patternTypes.map(([v]) => v);
-// Multi-seleção (13/08/2026, pedido do usuário): dentro do MESMO atributo/parte (ex: cor da
-// dorsal) os valores marcados são OU — "dorsal verde OU vermelha" — array vazio = sem filtro
-// nesse campo (mostra qualquer valor). Serializado pro backend como CSV (api.js já ignora
-// string vazia, então array vazio some da query sozinho).
-const emptyPartFilter = { colors: [], patterns: [] };
-const emptyPartFilters = { tail: { ...emptyPartFilter }, dorsal: { ...emptyPartFilter }, pectoral: { ...emptyPartFilter } };
 
 const SORTS = {
   "newest": { label: "Mais recentes primeiro" },
@@ -66,35 +56,12 @@ export function MarketView({ userId, refreshTank, notify }) {
   // já destacando os peixes mais valiosos, em vez de ordenado por data de listagem.
   const [sortBy, setSortBy] = useState("rarity-desc");
   const [bandFilter, setBandFilter] = useState("all");
-  const [partFilters, setPartFilters] = useState(emptyPartFilters);
+  const appearance = usePartFilters();
+  const { partFilters } = appearance;
 
-  const activeAppearanceFilters = PARTS.reduce(
-    (n, part) => n + partFilters[part].colors.length + partFilters[part].patterns.length,
-    0
-  );
-  function toggleColor(part, color) {
-    setPartFilters((prev) => {
-      const cur = prev[part].colors;
-      const colors = cur.includes(color) ? cur.filter((c) => c !== color) : [...cur, color];
-      return { ...prev, [part]: { ...prev[part], colors } };
-    });
-  }
-  function togglePattern(part, pattern) {
-    setPartFilters((prev) => {
-      const cur = prev[part].patterns;
-      const patterns = cur.includes(pattern) ? cur.filter((p) => p !== pattern) : [...cur, pattern];
-      return { ...prev, [part]: { ...prev[part], patterns } };
-    });
-  }
-  function clearPartColors(part) {
-    setPartFilters((prev) => ({ ...prev, [part]: { ...prev[part], colors: [] } }));
-  }
-  function clearPartPatterns(part) {
-    setPartFilters((prev) => ({ ...prev, [part]: { ...prev[part], patterns: [] } }));
-  }
   function resetFilters() {
     setBandFilter("all");
-    setPartFilters(emptyPartFilters);
+    appearance.reset();
   }
 
   const refresh = useCallback(async () => {
@@ -130,7 +97,7 @@ export function MarketView({ userId, refreshTank, notify }) {
   if (data === null) return <p className="hint">Carregando mercado…</p>;
 
   const nothingAtAll = data.listings.length === 0 && data.myListings.length === 0 && page === 0
-    && bandFilter === "all" && activeAppearanceFilters === 0;
+    && bandFilter === "all" && appearance.activeCount === 0;
 
   const myListingsSection = (
     // Nasce minimizada (13/08/2026, pedido do usuário) — logo abaixo dos filtros, não mais
@@ -195,66 +162,20 @@ export function MarketView({ userId, refreshTank, notify }) {
               ))}
             </div>
             <span className="spacer" />
-            {(activeAppearanceFilters > 0 || bandFilter !== "all") && (
+            {(appearance.activeCount > 0 || bandFilter !== "all") && (
               <button type="button" className="filter-reset-btn" onClick={resetFilters}>
                 ↺ Redefinir filtros
               </button>
             )}
           </div>
-          <CollapsibleSection
-            variant="prominent"
-            hint="Marque quantos valores quiser em cada atributo — dentro do mesmo atributo funciona como OU (ex: dorsal verde OU vermelha)."
-            title={
-              <>
-                Filtros avançados{" "}
-                {activeAppearanceFilters > 0 && <span className="filter-count-badge">({activeAppearanceFilters})</span>}
-              </>
-            }
-          >
-            <div className="appearance-filter-group">
-              {PARTS.map((part) => (
-                <div className="appearance-filter-part" key={part}>
-                  <strong>{PART_PT[part]}</strong>
-                  <div className="filter-chips">
-                    <button
-                      className={`filter-chip${partFilters[part].colors.length === 0 ? " active" : ""}`}
-                      onClick={() => clearPartColors(part)}
-                    >
-                      Toda cor
-                    </button>
-                    {Object.keys(PART_HEX).map((color) => (
-                      <button
-                        key={color}
-                        className={`filter-chip color-chip${partFilters[part].colors.includes(color) ? " active" : ""}`}
-                        style={{ "--tier": PART_HEX[color] }}
-                        title={PT.color[color]}
-                        onClick={() => toggleColor(part, color)}
-                      >
-                        <span className="dot-color" style={{ background: PART_HEX[color] }} />
-                      </button>
-                    ))}
-                  </div>
-                  <div className="filter-chips">
-                    <button
-                      className={`filter-chip${partFilters[part].patterns.length === 0 ? " active" : ""}`}
-                      onClick={() => clearPartPatterns(part)}
-                    >
-                      Todo padrão
-                    </button>
-                    {PATTERN_VALUES.map((pattern) => (
-                      <button
-                        key={pattern}
-                        className={`filter-chip${partFilters[part].patterns.includes(pattern) ? " active" : ""}`}
-                        onClick={() => togglePattern(part, pattern)}
-                      >
-                        {PT.pattern[pattern]}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CollapsibleSection>
+          <AppearanceFilters
+            partFilters={appearance.partFilters}
+            activeCount={appearance.activeCount}
+            onToggleColor={appearance.toggleColor}
+            onTogglePattern={appearance.togglePattern}
+            onClearColors={appearance.clearColors}
+            onClearPatterns={appearance.clearPatterns}
+          />
         </>
       )}
 

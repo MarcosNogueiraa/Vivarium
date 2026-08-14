@@ -1,20 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api.js";
-import { CONFIG, coinsPerHourOf, traitsOf, vendorPriceOf } from "../lib/generator.js";
-import { bandOf, BANDS, PART_HEX, PT } from "../lib/fishRenderer.js";
-import { PART_PT } from "../lib/format.js";
+import { coinsPerHourOf, vendorPriceOf } from "../lib/generator.js";
+import { bandOf, BANDS } from "../lib/fishRenderer.js";
 import { RarityBadge } from "../components/RarityBadge.jsx";
 import { FishCanvas } from "../components/FishCanvas.jsx";
 import { Select } from "../components/Select.jsx";
 import { PromptModal } from "../components/PromptModal.jsx";
 import { ConfirmModal } from "../components/ConfirmModal.jsx";
-import { CollapsibleSection } from "../components/CollapsibleSection.jsx";
+import { AppearanceFilters } from "../components/AppearanceFilters.jsx";
 import { CollectCelebration } from "../components/CollectCelebration.jsx";
+import { usePartFilters } from "../hooks/usePartFilters.js";
 import { FishDetail } from "./FishDetail.jsx";
-
-const PARTS = ["tail", "dorsal", "pectoral"];
-const PATTERN_VALUES = CONFIG.patternTypes.map(([v]) => v);
-const emptyPartFilter = { color: "all", pattern: "all" };
 
 const SORTS = {
   "rarity-desc": { label: "Raridade (maior primeiro)", cmp: (a, b) => Number(b.rarityScore) - Number(a.rarityScore) },
@@ -32,9 +28,7 @@ export function BackpackView({ refreshTank, notify }) {
   const [prompt, setPrompt] = useState(null); // { kind: "sell"|"transfer"|"vendor", creature }
   const [sortBy, setSortBy] = useState("rarity-desc");
   const [bandFilter, setBandFilter] = useState("all");
-  const [partFilters, setPartFilters] = useState({
-    tail: { ...emptyPartFilter }, dorsal: { ...emptyPartFilter }, pectoral: { ...emptyPartFilter },
-  });
+  const appearance = usePartFilters();
   const [onlyBred, setOnlyBred] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
@@ -106,42 +100,24 @@ export function BackpackView({ refreshTank, notify }) {
     }
   }
 
-  const activeAppearanceFilters = PARTS.reduce(
-    (n, part) => n + (partFilters[part].color !== "all" ? 1 : 0) + (partFilters[part].pattern !== "all" ? 1 : 0),
-    0
-  );
-
   const visible = useMemo(() => {
     if (!data) return [];
     return data.creatures
       .filter((c) => bandFilter === "all" || bandOf(Number(c.rarityScore)).name === bandFilter)
-      .filter((c) => {
-        const t = traitsOf(c);
-        return PARTS.every((part) => {
-          const f = partFilters[part];
-          return (f.color === "all" || t[part].color === f.color)
-            && (f.pattern === "all" || t[part].pattern === f.pattern);
-        });
-      })
+      .filter(appearance.matches)
       .filter((c) => !onlyBred || c.isBred)
       // Peixe novo (ainda não revelado) sempre primeiro, não importa a ordenação escolhida —
       // senão ele podia ficar perdido no meio da lista, escondido atrás de "???" sem chamar
       // atenção. Dentro de cada grupo (novo/já visto), mantém a ordenação normal.
       .sort((a, b) => (b.isNew - a.isNew) || SORTS[sortBy].cmp(a, b));
-  }, [data, sortBy, bandFilter, partFilters, onlyBred]);
+  }, [data, sortBy, bandFilter, appearance.matches, onlyBred]);
 
-  function setPartColor(part, color) {
-    setPartFilters((prev) => ({ ...prev, [part]: { ...prev[part], color } }));
-  }
-  function setPartPattern(part, pattern) {
-    setPartFilters((prev) => ({ ...prev, [part]: { ...prev[part], pattern } }));
-  }
   function resetFilters() {
     setBandFilter("all");
-    setPartFilters({ tail: { ...emptyPartFilter }, dorsal: { ...emptyPartFilter }, pectoral: { ...emptyPartFilter } });
+    appearance.reset();
     setOnlyBred(false);
   }
-  const filtersActive = activeAppearanceFilters > 0 || bandFilter !== "all" || onlyBred;
+  const filtersActive = appearance.activeCount > 0 || bandFilter !== "all" || onlyBred;
 
   const selectedCreatures = visible.filter((c) => selected.has(c.id));
   const selectedTotal = selectedCreatures.reduce((sum, c) => sum + vendorPriceOf(Number(c.rarityScore)), 0);
@@ -229,60 +205,15 @@ export function BackpackView({ refreshTank, notify }) {
               </span>
             </button>
           </div>
-          <CollapsibleSection
-            variant="prominent"
+          <AppearanceFilters
+            partFilters={appearance.partFilters}
+            activeCount={appearance.activeCount}
+            onToggleColor={appearance.toggleColor}
+            onTogglePattern={appearance.togglePattern}
+            onClearColors={appearance.clearColors}
+            onClearPatterns={appearance.clearPatterns}
             hint="Filtre por cor e padrão de cada parte — cauda, dorsal e peitoral, de forma independente."
-            title={
-              <>
-                Filtros avançados{" "}
-                {activeAppearanceFilters > 0 && <span className="filter-count-badge">({activeAppearanceFilters})</span>}
-              </>
-            }
-          >
-            <div className="appearance-filter-group">
-              {PARTS.map((part) => (
-                <div className="appearance-filter-part" key={part}>
-                  <strong>{PART_PT[part]}</strong>
-                  <div className="filter-chips">
-                    <button
-                      className={`filter-chip${partFilters[part].color === "all" ? " active" : ""}`}
-                      onClick={() => setPartColor(part, "all")}
-                    >
-                      Toda cor
-                    </button>
-                    {Object.keys(PART_HEX).map((color) => (
-                      <button
-                        key={color}
-                        className={`filter-chip color-chip${partFilters[part].color === color ? " active" : ""}`}
-                        style={{ "--tier": PART_HEX[color] }}
-                        title={PT.color[color]}
-                        onClick={() => setPartColor(part, color)}
-                      >
-                        <span className="dot-color" style={{ background: PART_HEX[color] }} />
-                      </button>
-                    ))}
-                  </div>
-                  <div className="filter-chips">
-                    <button
-                      className={`filter-chip${partFilters[part].pattern === "all" ? " active" : ""}`}
-                      onClick={() => setPartPattern(part, "all")}
-                    >
-                      Todo padrão
-                    </button>
-                    {PATTERN_VALUES.map((pattern) => (
-                      <button
-                        key={pattern}
-                        className={`filter-chip${partFilters[part].pattern === pattern ? " active" : ""}`}
-                        onClick={() => setPartPattern(part, pattern)}
-                      >
-                        {PT.pattern[pattern]}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CollapsibleSection>
+          />
           {selectMode && (
             <div className="select-toolbar">
               <span className="muted">{selected.size} selecionado(s)</span>
