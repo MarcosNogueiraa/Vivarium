@@ -18,3 +18,16 @@ public record ListingDto(
     string? ParentAGrandparentASeed, string? ParentAGrandparentBSeed,
     string? ParentBGrandparentASeed, string? ParentBGrandparentBSeed,
     CreatureTraits? Traits, IReadOnlyList<TraitGenerator.TraitSourceEntry>? BreedingSource);
+
+/// <summary>
+/// Resposta de <c>GET /api/market/listings</c> (13/08/2026) — envelope estruturado em vez de um
+/// array plano: <see cref="Listings"/> é a página filtrada/ordenada (exclui o próprio vendedor,
+/// que tem seu painel fixo à parte); <see cref="MyListings"/> são TODOS os anúncios ativos do
+/// requisitante (sujeitos aos mesmos filtros de aparência/raridade, sem paginação — é um painel
+/// de controle, não faz sentido paginar); <see cref="MyActiveListingsCount"/> é o total REAL
+/// (sem filtro) do vendedor, pro contador "X/Y" bater com o limite de verdade mesmo com um
+/// filtro escondendo alguns.
+/// </summary>
+public record MarketListingsResponse(
+    IReadOnlyList<ListingDto> Listings, int TotalCount,
+    IReadOnlyList<ListingDto> MyListings, int MyActiveListingsCount, int MaxActiveListings);

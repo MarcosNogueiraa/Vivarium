@@ -3,6 +3,7 @@ import { api } from "../lib/api.js";
 import { Coin } from "../components/Coin.jsx";
 import { ConfirmModal } from "../components/ConfirmModal.jsx";
 import { FILTER_WARN_THRESHOLD, tankFishWeight } from "../lib/tankMath.js";
+import { useAutoToggles } from "../hooks/useAutoToggles.js";
 
 const DESCRIPTIONS = {
   filter_basic: "Uso único: limpa a água na hora, restaurando para 100%.",
@@ -67,35 +68,22 @@ function WaterSensorSlider({ tank, notify, onSaved }) {
 
 /// Opt-out da coleta automática/Limpeza Automática de VIP — checkboxes simples (sem debounce,
 /// diferente do slider do sensor, já que aqui é um só clique por vez, não arrasto contínuo).
-/// Salva na hora; qualquer erro volta o checkbox pro estado anterior via refreshTank.
+/// Salva na hora via useAutoToggles (compartilhado com os ícones rápidos do Tanque).
 function AutoToggles({ tank, notify, onSaved }) {
-  const [busy, setBusy] = useState(false);
-  async function onChange(field, checked) {
-    setBusy(true);
-    try {
-      const autoCollectEnabled = field === "collect" ? checked : (tank?.autoCollectEnabled ?? true);
-      const autoCleanEnabled = field === "clean" ? checked : (tank?.autoCleanEnabled ?? true);
-      await api.setToggles(autoCollectEnabled, autoCleanEnabled);
-      await onSaved();
-    } catch (err) {
-      notify(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
+  const { busy, setCollect, setClean } = useAutoToggles(tank, notify, onSaved);
   return (
     <div className="card-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: 6 }}>
       <label className="filter-toggle">
         <input
           type="checkbox" checked={tank?.autoCollectEnabled ?? true} disabled={busy}
-          onChange={(e) => onChange("collect", e.target.checked)}
+          onChange={(e) => setCollect(e.target.checked)}
         />
         Coleta automática
       </label>
       <label className="filter-toggle">
         <input
           type="checkbox" checked={tank?.autoCleanEnabled ?? true} disabled={busy}
-          onChange={(e) => onChange("clean", e.target.checked)}
+          onChange={(e) => setClean(e.target.checked)}
         />
         Limpeza automática
       </label>

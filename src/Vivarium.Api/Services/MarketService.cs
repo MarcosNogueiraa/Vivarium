@@ -15,16 +15,39 @@ namespace Vivarium.Api.Services;
 /// </summary>
 public class MarketService(VivariumDbContext db, GameService game)
 {
-    public async Task<List<ListingDto>> ListingsAsync(int skip, int take)
+    // Cortes de raridade espelhados de `frontend/src/lib/fishRenderer.js` BANDS (CLAUDE.md §5) —
+    // não existe uma representação de "banda" no backend hoje, só o RarityScore cru. Se os
+    // cortes mudarem lá (recalibração via Vivarium.Simulation), espelhar aqui também.
+    private static string BandNameOf(decimal score) => score switch
+    {
+        < 5.4m => "Comum",
+        < 7.5m => "Incomum",
+        < 9.8m => "Raro",
+        < 14.0m => "Épico",
+        _ => "Lendário",
+    };
+
+    private static bool MatchesPart(CreatureTraits traits, string part, string? color, string? pattern)
+    {
+        var p = part switch { "tail" => traits.Tail, "dorsal" => traits.Dorsal, "pectoral" => traits.Pectoral, _ => traits.Tail };
+        if (!string.IsNullOrEmpty(color) && color != "all" && p.Color.ToString() != color) return false;
+        if (!string.IsNullOrEmpty(pattern) && pattern != "all" && p.Pattern.ToString() != pattern) return false;
+        return true;
+    }
+
+    public async Task<MarketListingsResponse> ListingsAsync(
+        long userId, int skip, int take, string sort,
+        string? band, string? tailColor, string? tailPattern,
+        string? dorsalColor, string? dorsalPattern, string? pectoralColor, string? pectoralPattern)
     {
         take = Math.Clamp(take, 1, 100);
-        return (await db.MarketListings
+        skip = Math.Max(0, skip);
+
+        var all = (await db.MarketListings
             .Where(m => m.Status == ListingStatus.Active)
-            .OrderByDescending(m => m.CreatedAt)
-            .Skip(Math.Max(0, skip)).Take(take)
             .Select(m => new
             {
-                m.Id, m.PriceSoft, m.SellerId, SellerName = m.Seller!.Username,
+                m.Id, m.PriceSoft, m.SellerId, SellerName = m.Seller!.Username, m.CreatedAt,
                 CreatureId = m.CreatureInstanceId, m.CreatureInstance!.SpeciesId,
                 m.CreatureInstance.Seed, m.CreatureInstance.TraitConfigVersion,
                 m.CreatureInstance.RarityScore, m.CreatureInstance.ParentAId,
@@ -34,16 +57,56 @@ public class MarketService(VivariumDbContext db, GameService game)
                 m.CreatureInstance.TraitsJson, m.CreatureInstance.BreedingSourceJson,
             })
             .ToListAsync())
-            .Select(m => new ListingDto(
-                m.Id, m.PriceSoft, m.SellerId, m.SellerName,
-                m.CreatureId, m.SpeciesId, m.Seed.ToString(),
-                m.TraitConfigVersion, m.RarityScore, m.ParentAId.HasValue,
-                m.ParentASeed?.ToString(), m.ParentBSeed?.ToString(),
-                m.ParentAGrandparentASeed?.ToString(), m.ParentAGrandparentBSeed?.ToString(),
-                m.ParentBGrandparentASeed?.ToString(), m.ParentBGrandparentBSeed?.ToString(),
-                m.TraitsJson is not null ? TraitsSerialization.DeserializeTraits(m.TraitsJson) : null,
-                m.BreedingSourceJson is not null ? TraitsSerialization.DeserializeSource(m.BreedingSourceJson) : null))
+            .Select(m => new
+            {
+                Listing = new ListingDto(
+                    m.Id, m.PriceSoft, m.SellerId, m.SellerName,
+                    m.CreatureId, m.SpeciesId, m.Seed.ToString(),
+                    m.TraitConfigVersion, m.RarityScore, m.ParentAId.HasValue,
+                    m.ParentASeed?.ToString(), m.ParentBSeed?.ToString(),
+                    m.ParentAGrandparentASeed?.ToString(), m.ParentAGrandparentBSeed?.ToString(),
+                    m.ParentBGrandparentASeed?.ToString(), m.ParentBGrandparentBSeed?.ToString(),
+                    m.TraitsJson is not null ? TraitsSerialization.DeserializeTraits(m.TraitsJson) : null,
+                    m.BreedingSourceJson is not null ? TraitsSerialization.DeserializeSource(m.BreedingSourceJson) : null),
+                m.CreatedAt,
+                Traits = m.TraitsJson is not null ? TraitsSerialization.DeserializeTraits(m.TraitsJson) : null,
+            })
             .ToList();
+
+        bool PassesFilters(ListingDto l, CreatureTraits? traits) =>
+            (string.IsNullOrEmpty(band) || band == "all" || BandNameOf(l.RarityScore) == band)
+            && (traits is null || (
+                MatchesPart(traits, "tail", tailColor, tailPattern)
+                && MatchesPart(traits, "dorsal", dorsalColor, dorsalPattern)
+                && MatchesPart(traits, "pectoral", pectoralColor, pectoralPattern)));
+
+        var filtered = all.Where(m => PassesFilters(m.Listing, m.Traits)).ToList();
+
+        // Painel "meus anúncios": todos os que passam nos MESMOS filtros, sem paginação — o
+        // dono precisa ver o conjunto inteiro pra ter controle real, não uma fatia.
+        var mine = filtered.Where(m => m.Listing.SellerId == userId)
+            .OrderByDescending(m => m.CreatedAt)
+            .Select(m => m.Listing)
+            .ToList();
+
+        var restQuery = filtered.Where(m => m.Listing.SellerId != userId).AsEnumerable();
+        restQuery = sort switch
+        {
+            "price-asc" => restQuery.OrderBy(m => m.Listing.PriceSoft),
+            "price-desc" => restQuery.OrderByDescending(m => m.Listing.PriceSoft),
+            "rarity-desc" => restQuery.OrderByDescending(m => m.Listing.RarityScore),
+            "rarity-asc" => restQuery.OrderBy(m => m.Listing.RarityScore),
+            "oldest" => restQuery.OrderBy(m => m.CreatedAt),
+            _ => restQuery.OrderByDescending(m => m.CreatedAt), // "newest" (default)
+        };
+        var rest = restQuery.ToList();
+        var page = rest.Skip(skip).Take(take).Select(m => m.Listing).ToList();
+
+        // Contador do limite reflete o total REAL (sem filtro de aparência/banda) — um filtro
+        // escondendo anúncios não pode fazer o "X/Y" mentir sobre quanto do teto já foi usado.
+        int myActiveTotal = await db.MarketListings.CountAsync(m => m.SellerId == userId && m.Status == ListingStatus.Active);
+
+        return new MarketListingsResponse(page, rest.Count, mine, myActiveTotal, MarketDefaults.MaxActiveListingsPerSeller);
     }
 
     public async Task<ServiceResult> CreateListingAsync(long userId, CreateListingRequest req)
@@ -71,6 +134,10 @@ public class MarketService(VivariumDbContext db, GameService game)
             s.Status == BreedingStatus.InProgress && (s.ParentAId == creature.Id || s.ParentBId == creature.Id));
         if (breeding)
             return ServiceResult.Bad("Criatura está em gestação — não pode ser vendida agora");
+
+        int activeListings = await db.MarketListings.CountAsync(m => m.SellerId == userId && m.Status == ListingStatus.Active);
+        if (activeListings >= MarketDefaults.MaxActiveListingsPerSeller)
+            return ServiceResult.Bad($"Limite de {MarketDefaults.MaxActiveListingsPerSeller} anúncios ativos atingido — cancele algum antes de listar outro.");
 
         creature.HabitatId = null; // sai do tanque enquanto listada
         var listing = new MarketListing

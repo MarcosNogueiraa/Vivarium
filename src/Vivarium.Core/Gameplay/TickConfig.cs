@@ -250,3 +250,14 @@ public static class HabitatDefaults
     public const decimal OfflineGenerationRate = 0.45m;
     public const decimal MaintenanceLevel = 100m;
 }
+
+/// <summary>Regras do Mercado interno entre jogadores.</summary>
+public static class MarketDefaults
+{
+    /// <summary>
+    /// Teto de anúncios ativos simultâneos por jogador — dá previsibilidade ao mercado e evita
+    /// que 1 jogador domine a listagem. TEMPORÁRIO (fase de teste): 50, bem acima do alvo real
+    /// (10) pra não travar quem já está testando o fluxo. Reverter pra 10 antes do lançamento.
+    /// </summary>
+    public const int MaxActiveListingsPerSeller = 50;
+}

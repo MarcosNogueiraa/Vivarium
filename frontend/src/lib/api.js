@@ -46,7 +46,15 @@ export const api = {
   collect: (queueItemId) => request("POST", `/api/game/collect/${queueItemId}`),
   rushQueueItem: (queueItemId) => request("POST", `/api/game/queue/${queueItemId}/rush`),
   rushBreeding: () => request("POST", "/api/breeding/rush"),
-  listings: () => request("GET", "/api/market/listings"),
+  listings: (params = {}) => {
+    const qs = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value === undefined || value === null || value === "" || value === "all") continue;
+      qs.set(key, value);
+    }
+    const query = qs.toString();
+    return request("GET", `/api/market/listings${query ? `?${query}` : ""}`);
+  },
   createListing: (creatureInstanceId, priceSoft) =>
     request("POST", "/api/market/listings", { creatureInstanceId, priceSoft }),
   cancelListing: (id) => request("POST", `/api/market/listings/${id}/cancel`),

@@ -210,9 +210,12 @@ export function BackpackView({ refreshTank, notify }) {
               Só filhotes 🐣
             </label>
             <span className="spacer" />
-            <button className={`select-mode-btn${selectMode ? " active" : ""}`} onClick={toggleSelectMode}
+            <button className="select-toggle" onClick={toggleSelectMode} aria-pressed={selectMode}
               title={selectMode ? "Sair da seleção" : "Selecionar vários peixes (ex: vender ao NPC de uma vez)"}>
-              {selectMode ? "✕ Cancelar seleção" : "☑️ Selecionar"}
+              Selecionar peixes
+              <span className={`switch-track${selectMode ? " on" : ""}`}>
+                <span className="switch-thumb" />
+              </span>
             </button>
           </div>
           <CollapsibleSection

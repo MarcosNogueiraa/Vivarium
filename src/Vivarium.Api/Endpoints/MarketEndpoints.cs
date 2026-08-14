@@ -11,8 +11,14 @@ public static class MarketEndpoints
     {
         var group = app.MapGroup("/api/market").RequireAuthorization();
 
-        group.MapGet("/listings", async (MarketService market, int skip = 0, int take = 50) =>
-            Results.Ok(await market.ListingsAsync(skip, take)));
+        group.MapGet("/listings", async (
+            ClaimsPrincipal principal, MarketService market,
+            int skip = 0, int take = 24, string sort = "newest", string? band = null,
+            string? tailColor = null, string? tailPattern = null,
+            string? dorsalColor = null, string? dorsalPattern = null,
+            string? pectoralColor = null, string? pectoralPattern = null) =>
+            Results.Ok(await market.ListingsAsync(TokenService.GetUserId(principal), skip, take, sort,
+                band, tailColor, tailPattern, dorsalColor, dorsalPattern, pectoralColor, pectoralPattern)));
 
         group.MapPost("/listings", async (CreateListingRequest req, ClaimsPrincipal principal, MarketService market) =>
             (await market.CreateListingAsync(TokenService.GetUserId(principal), req)).ToHttp());

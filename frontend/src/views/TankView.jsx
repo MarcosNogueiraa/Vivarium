@@ -11,6 +11,7 @@ import { CollectCelebration } from "../components/CollectCelebration.jsx";
 import { vendorPriceOf } from "../lib/generator.js";
 import { FishDetail } from "./FishDetail.jsx";
 import { RarityGuide } from "./RarityGuide.jsx";
+import { useAutoToggles } from "../hooks/useAutoToggles.js";
 
 export function TankView({ tank, refresh, notify, cinemaEnabled = true, toggleCinema }) {
   const dim = cinemaEnabled ? " cinema-dim" : "";
@@ -53,6 +54,7 @@ export function TankView({ tank, refresh, notify, cinemaEnabled = true, toggleCi
   const waterLossPerHour = Math.max(0, potential - current);
   const nextFish = nextFishEta(tank);
   const listFish = tankFishSorted(tank.creatures);
+  const autoToggles = useAutoToggles(tank, notify, refresh);
 
   async function collect(itemId) {
     try {
@@ -178,6 +180,26 @@ export function TankView({ tank, refresh, notify, cinemaEnabled = true, toggleCi
                 ? `Limpeza Automática (VIP): compra Filtro sozinho quando a água chega a ${Number(tank.autoCleanTriggerPercent).toFixed(0)}%.`
                 : "Limpeza Automática (VIP): compra Filtro sozinho quando a água zera. Compre o Sensor de Qualidade da Água na Loja pra escolher esse valor."}>
                 🤖 {tank.hasWaterSensor ? `${Number(tank.autoCleanTriggerPercent).toFixed(0)}%` : "0%"}
+              </span>
+            )}
+            {tank.isVip && (
+              <span className="auto-toggles">
+                <button
+                  className={`tool-btn${(tank.autoCollectEnabled ?? true) ? " active" : ""}`}
+                  disabled={autoToggles.busy} onClick={autoToggles.toggleCollect}
+                  title={(tank.autoCollectEnabled ?? true)
+                    ? "Coleta automática: ativada (clique pra desativar)"
+                    : "Coleta automática: desativada (clique pra ativar)"}>
+                  🎣
+                </button>
+                <button
+                  className={`tool-btn${(tank.autoCleanEnabled ?? true) ? " active" : ""}`}
+                  disabled={autoToggles.busy} onClick={autoToggles.toggleClean}
+                  title={(tank.autoCleanEnabled ?? true)
+                    ? "Limpeza automática: ativada (clique pra desativar)"
+                    : "Limpeza automática: desativada (clique pra ativar)"}>
+                  🧽
+                </button>
               </span>
             )}
             <button onClick={buyFilter} title="Restaura a qualidade da água pra 100">Filtro · 20</button>

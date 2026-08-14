@@ -380,18 +380,34 @@ input:focus {
 .appearance-filter-part { display: flex; flex-direction: column; gap: 6px; }
 .appearance-filter-part strong { font-size: 0.82rem; color: var(--muted); }
 
+.pagination { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 16px; }
+.pagination span { color: var(--muted); font-size: 0.85rem; }
+
 /* Seleção em massa na Mochila (08/08/2026) — vender vários peixes ao NPC de
    uma vez, sem precisar confirmar um por um. Mesmo padrão visual do picker
    de cruzamento do Ninho (borda/sombra na cor do tier quando selecionado). */
-.select-mode-btn {
-  padding: 8px 14px; border-radius: 999px; font-size: 0.85rem;
-  background: rgba(255, 255, 255, 0.04); color: var(--muted);
+/* Toggle switch de verdade (13/08/2026) — antes o texto do botão trocava inteiro
+   ("☑️ Selecionar" ↔ "✕ Cancelar seleção"), mudando de largura e misturando emoji com
+   símbolo (feedback do usuário: "está feio"). Rótulo agora é fixo; só a chavinha muda. */
+.select-toggle {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 7px 14px; border-radius: 999px; font-size: 0.85rem; color: var(--muted);
+  background: rgba(255, 255, 255, 0.04);
 }
-.select-mode-btn.active {
-  color: var(--glow); font-weight: 700;
-  box-shadow: inset 0 0 0 1px var(--glow);
-  background: rgba(84, 230, 209, 0.14);
+.select-toggle[aria-pressed="true"] { color: var(--ink); font-weight: 600; }
+.switch-track {
+  position: relative; width: 34px; height: 18px; border-radius: 999px; flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.12); box-shadow: inset 0 0 0 1px var(--line);
+  transition: background 0.18s ease, box-shadow 0.18s ease;
 }
+.switch-track.on {
+  background: var(--glow); box-shadow: 0 0 10px rgba(84, 230, 209, 0.6);
+}
+.switch-thumb {
+  position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; transition: transform 0.18s ease;
+}
+.switch-track.on .switch-thumb { transform: translateX(16px); }
 .select-toolbar {
   display: flex; align-items: center; gap: 12px; margin-bottom: 14px; font-size: 0.85rem;
 }
@@ -596,6 +612,12 @@ input:focus {
 }
 .tool-btn.active { border-color: var(--glow); color: var(--glow); box-shadow: 0 0 0 1px var(--glow) inset, var(--shadow-sm); }
 
+/* Toggles rápidos de coleta/limpeza automática no HUD do tanque (13/08/2026) — mesmos
+   `.tool-btn`/`.active` dos ícones flutuantes, só que sempre visíveis (sem o fade por hover
+   de `.tank-tools`), ao lado do chip de status 🤖 que já vive na mesma linha. */
+.auto-toggles { display: inline-flex; gap: 6px; }
+.auto-toggles .tool-btn { width: 30px; height: 30px; font-size: 0.85rem; }
+
 .tank-stage.aquarium-mode { background: #04181f; }
 .tank-stage.aquarium-mode .aquarium-wrap { display: flex; }
 
@@ -663,6 +685,12 @@ input:focus {
 
 /* ---------- Cards (mercado / loja) ---------- */
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 18px; }
+
+/* Painel fixo "Meus anúncios ativos" (Mercado, 13/08/2026) — sempre visível, separado da
+   grade paginada/filtrável do resto do mercado (mesmo espírito da linha destacada do próprio
+   jogador no Ranking, só que como seção própria em vez de 1 linha). */
+.market-mine { border-bottom: 1px solid var(--line); padding-bottom: 18px; margin-bottom: 18px; }
+.market-mine-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
 
 .empty-state {
   display: flex; flex-direction: column; align-items: center; text-align: center;

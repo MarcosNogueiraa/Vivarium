@@ -72,8 +72,8 @@ public class MarketTests : IClassFixture<VivariumApiFactory>
         long listingId = await Listar(seller, creatureId, 40m);
 
         // Listagem visível no mercado
-        var listings = await buyer.GetFromJsonAsync<List<ListingDto>>("/api/market/listings");
-        Assert.Contains(listings!, l => l.Id == listingId && l.PriceSoft == 40m && l.SellerName == "vendedor1");
+        var listings = await buyer.GetFromJsonAsync<MarketListingsResponseDto>("/api/market/listings");
+        Assert.Contains(listings!.Listings, l => l.Id == listingId && l.PriceSoft == 40m && l.SellerName == "vendedor1");
 
         var buyResponse = await buyer.PostAsync($"/api/market/listings/{listingId}/buy", null);
         buyResponse.EnsureSuccessStatusCode();
@@ -120,8 +120,10 @@ public class MarketTests : IClassFixture<VivariumApiFactory>
 
         long listingId = await Listar(seller, creatureId, 15m);
 
-        var listings = await seller.GetFromJsonAsync<List<ListingDto>>("/api/market/listings");
-        Assert.Contains(listings!, l => l.Id == listingId && l.CreatureId == creatureId);
+        var listings = await seller.GetFromJsonAsync<MarketListingsResponseDto>("/api/market/listings");
+        // Anúncio do próprio requisitante: não aparece na grade paginada (Listings), só no
+        // painel fixo (MyListings) — ver ListaDeOutros_NaoInclueMinhaListagem/PainelMine_*.
+        Assert.Contains(listings!.MyListings, l => l.Id == listingId && l.CreatureId == creatureId);
     }
 
     [Fact]
@@ -150,8 +152,8 @@ public class MarketTests : IClassFixture<VivariumApiFactory>
         Assert.Contains(tank!.Creatures, c => c.Id == creatureId);
 
         // Não aparece mais no mercado
-        var listings = await seller.GetFromJsonAsync<List<ListingDto>>("/api/market/listings");
-        Assert.DoesNotContain(listings!, l => l.Id == listingId);
+        var listings = await seller.GetFromJsonAsync<MarketListingsResponseDto>("/api/market/listings");
+        Assert.DoesNotContain(listings!.MyListings, l => l.Id == listingId);
     }
 
     [Fact]
@@ -191,8 +193,128 @@ public class MarketTests : IClassFixture<VivariumApiFactory>
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    [Fact]
+    public async Task Listar_AlemDoLimite_Retorna400()
+    {
+        var (seller, sellerId) = await _factory.RegisterAsync("vendedor-limite");
+        for (int i = 0; i < Vivarium.Core.Gameplay.MarketDefaults.MaxActiveListingsPerSeller; i++)
+        {
+            long id = await CriarCriaturaNoTanque(sellerId);
+            await Listar(seller, id, 5m);
+        }
+
+        long extraId = await CriarCriaturaNoTanque(sellerId);
+        var response = await seller.PostAsJsonAsync("/api/market/listings", new { creatureInstanceId = extraId, priceSoft = 5m });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Paginacao_SkipTake_RetornaFatiaCertaETotalCount()
+    {
+        var (seller, sellerId) = await _factory.RegisterAsync("vendedor-pag");
+        var (viewer, _) = await _factory.RegisterAsync("visitante-pag");
+        for (int i = 0; i < 5; i++)
+        {
+            long id = await CriarCriaturaNoTanque(sellerId);
+            await Listar(seller, id, 10m + i);
+        }
+
+        var page1 = await viewer.GetFromJsonAsync<MarketListingsResponseDto>("/api/market/listings?skip=0&take=2");
+        var page2 = await viewer.GetFromJsonAsync<MarketListingsResponseDto>("/api/market/listings?skip=2&take=2");
+
+        Assert.Equal(2, page1!.Listings.Count);
+        Assert.Equal(2, page2!.Listings.Count);
+        Assert.True(page1.TotalCount >= 5);
+        Assert.DoesNotContain(page1.Listings, l1 => page2.Listings.Any(l2 => l2.Id == l1.Id));
+    }
+
+    [Fact]
+    public async Task MeusAnuncios_AparecemNoPainelFixoEContinuamCompraveisPorOutros()
+    {
+        var (seller, sellerId) = await _factory.RegisterAsync("vendedor-mine");
+        var (buyer, _) = await _factory.RegisterAsync("comprador-mine");
+        long creatureId = await CriarCriaturaNoTanque(sellerId);
+        long listingId = await Listar(seller, creatureId, 30m);
+
+        var sellerView = await seller.GetFromJsonAsync<MarketListingsResponseDto>("/api/market/listings");
+        Assert.Contains(sellerView!.MyListings, l => l.Id == listingId);
+        Assert.DoesNotContain(sellerView.Listings, l => l.Id == listingId); // não duplica na grade geral pro dono
+        Assert.True(sellerView.MyActiveListingsCount >= 1);
+        Assert.Equal(Vivarium.Core.Gameplay.MarketDefaults.MaxActiveListingsPerSeller, sellerView.MaxActiveListings);
+
+        var buyerView = await buyer.GetFromJsonAsync<MarketListingsResponseDto>("/api/market/listings");
+        Assert.Contains(buyerView!.Listings, l => l.Id == listingId); // outro jogador continua vendo/comprando normalmente
+        Assert.DoesNotContain(buyerView.MyListings, l => l.Id == listingId);
+    }
+
+    [Fact]
+    public async Task OrdenarPorPreco_AscEDesc()
+    {
+        var (seller, sellerId) = await _factory.RegisterAsync("vendedor-preco");
+        var (viewer, _) = await _factory.RegisterAsync("visitante-preco");
+        // Preços extremos e improváveis de colidir com outros testes da mesma fixture
+        // compartilhada (ex: o teste de limite lista 50 vezes a 5m) — sem isso, empates de
+        // preço com outras listagens já criadas deixam a ordem indeterminada.
+        long cheapId = await CriarCriaturaNoTanque(sellerId);
+        long expensiveId = await CriarCriaturaNoTanque(sellerId);
+        await Listar(seller, cheapId, 0.01m);
+        await Listar(seller, expensiveId, 123456m);
+
+        var asc = await viewer.GetFromJsonAsync<MarketListingsResponseDto>("/api/market/listings?sort=price-asc&take=2");
+        var desc = await viewer.GetFromJsonAsync<MarketListingsResponseDto>("/api/market/listings?sort=price-desc&take=2");
+
+        Assert.Equal(cheapId, asc!.Listings[0].CreatureId);
+        Assert.Equal(expensiveId, desc!.Listings[0].CreatureId);
+    }
+
+    [Fact]
+    public async Task FiltroPorParte_CorEPadraoCombinam()
+    {
+        var (seller, sellerId) = await _factory.RegisterAsync("vendedor-filtro");
+        var (viewer, _) = await _factory.RegisterAsync("visitante-filtro");
+
+        // Traits construídos manualmente (não via seed aleatório) pra garantir cores
+        // divergentes de propósito, sem depender do que um seed específico sorteia.
+        PartTraits Part(PartColor color) => new(color, PatternType.None, null, null, null);
+        var bluePart = Part(PartColor.Blue);
+        var orangePart = Part(PartColor.Orange);
+        var blueTraits = new CreatureTraits(ShimmerTier.None, null, 0, bluePart, orangePart, orangePart, new MovementTraits(50, 0.4, 50, 0.3), 5.0);
+        var orangeTraits = new CreatureTraits(ShimmerTier.None, null, 0, orangePart, orangePart, orangePart, new MovementTraits(50, 0.4, 50, 0.3), 5.0);
+
+        long blueId = 0, orangeId = 0;
+        await _factory.WithDbAsync(async db =>
+        {
+            var habitat = await db.Habitats.FirstAsync(h => h.UserId == sellerId && h.HabitatType!.Code == "Aquarium");
+            var blue = new CreatureInstance
+            {
+                SpeciesId = 1, OwnerId = sellerId, HabitatId = habitat.Id, Seed = 111111,
+                TraitConfigVersion = 1, RarityScore = 5m, TraitsJson = TraitsSerialization.Serialize(blueTraits), CreatedAt = DateTime.UtcNow,
+            };
+            var orange = new CreatureInstance
+            {
+                SpeciesId = 1, OwnerId = sellerId, HabitatId = habitat.Id, Seed = 222222,
+                TraitConfigVersion = 1, RarityScore = 5m, TraitsJson = TraitsSerialization.Serialize(orangeTraits), CreatedAt = DateTime.UtcNow,
+            };
+            db.CreatureInstances.AddRange(blue, orange);
+            await db.SaveChangesAsync();
+            blueId = blue.Id; orangeId = orange.Id;
+        });
+
+        await Listar(seller, blueId, 10m);
+        await Listar(seller, orangeId, 10m);
+
+        var filtered = await viewer.GetFromJsonAsync<MarketListingsResponseDto>("/api/market/listings?tailColor=Blue");
+
+        Assert.Contains(filtered!.Listings, l => l.CreatureId == blueId);
+        Assert.DoesNotContain(filtered.Listings, l => l.CreatureId == orangeId);
+    }
+
     public record CreatedDto(long Id);
     public record ListingDto(
         long Id, decimal PriceSoft, long SellerId, string SellerName,
         long CreatureId, int SpeciesId, string Seed, int TraitConfigVersion, decimal RarityScore);
+    public record MarketListingsResponseDto(
+        IReadOnlyList<ListingDto> Listings, int TotalCount,
+        IReadOnlyList<ListingDto> MyListings, int MyActiveListingsCount, int MaxActiveListings);
 }

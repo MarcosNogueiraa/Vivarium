@@ -190,7 +190,7 @@ describe("Mochila", () => {
     login();
     cy.wait("@backpack");
 
-    cy.contains("button", "☑️ Selecionar").click();
+    cy.contains("button", "Selecionar peixes").click();
     cy.contains("button", "Selecionar todos").click();
     cy.contains("button", "Vender ao NPC").click();
     cy.contains("Essa ação não pode ser desfeita.");
