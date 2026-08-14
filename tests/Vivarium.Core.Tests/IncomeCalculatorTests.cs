@@ -7,14 +7,21 @@ public class IncomeCalculatorTests
 {
     private static readonly TickConfig Cfg = TickConfig.Default;
 
-    // cores distintas por padrão → sem sinergia; passe a mesma cor pra ativar sinergia
+    // Cores distintas nas 3 partes (deslocamentos diferentes por índice) → sem sinergia em
+    // nenhuma parte; SameColor só repete a CAUDA (dorsal/peitoral variam) pra isolar o efeito
+    // de UMA parte só nos testes que comparam com/sem sinergia (14/08/2026, sinergia por parte).
     private static FishIncome[] Distinct(params decimal[] scores)
     {
         var colors = Enum.GetValues<PartColor>();
-        return scores.Select((s, i) => new FishIncome(s, colors[i % colors.Length])).ToArray();
+        return scores.Select((s, i) => new FishIncome(
+            s, colors[i % colors.Length], colors[(i + 1) % colors.Length], colors[(i + 2) % colors.Length])).ToArray();
     }
     private static FishIncome[] SameColor(decimal score, int n)
-        => Enumerable.Repeat(new FishIncome(score, PartColor.Blue), n).ToArray();
+    {
+        var colors = Enum.GetValues<PartColor>();
+        return Enumerable.Range(0, n).Select(i => new FishIncome(
+            score, PartColor.Blue, colors[(i * 3 + 1) % colors.Length], colors[(i * 5 + 2) % colors.Length])).ToArray();
+    }
 
     [Fact]
     public void RendaCrescExponencialComRaridade()
@@ -86,18 +93,26 @@ public class IncomeCalculatorTests
         decimal distintas = IncomeCalculator.TankRatePerHour(Distinct(6m, 6m, 6m, 6m, 6m), 100m, Cfg);
         decimal mesmaCor = IncomeCalculator.TankRatePerHour(SameColor(6m, 5), 100m, Cfg);
 
-        // 5 peixes mesma cor: cada um ×(1 + 0.15×4) = ×1.6
+        // 5 peixes mesma CAUDA (dorsal/peitoral variam, sem sinergia própria): bonus(5) =
+        // min(0.15, 0.075+0.025×3) = 0.15 (teto já batido) → cada um ×1.15.
         Assert.True(mesmaCor > distintas);
-        Assert.Equal(1.6, (double)(mesmaCor / distintas), 2);
+        Assert.Equal(1.15, (double)(mesmaCor / distintas), 2);
     }
 
     [Fact]
     public void Sinergia_TemTeto()
     {
-        Assert.Equal(1.0, IncomeCalculator.SynergyMultiplier(1, Cfg), 3);
-        Assert.Equal(1.15, IncomeCalculator.SynergyMultiplier(2, Cfg), 3);
-        // muitos peixes: limitado a 1 + SynergyMaxBonus
-        Assert.Equal(1.0 + Cfg.SynergyMaxBonus, IncomeCalculator.SynergyMultiplier(100, Cfg), 3);
+        // Bônus de UMA parte isolada (mesma fórmula pra cauda/dorsal/peitoral, 14/08/2026).
+        Assert.Equal(0.0, IncomeCalculator.PartSynergyBonus(1, Cfg), 3);
+        Assert.Equal(0.075, IncomeCalculator.PartSynergyBonus(2, Cfg), 3);
+        Assert.Equal(0.10, IncomeCalculator.PartSynergyBonus(3, Cfg), 3);
+        // muitos peixes: limitado ao teto por parte
+        Assert.Equal(Cfg.SynergyMaxBonus, IncomeCalculator.PartSynergyBonus(100, Cfg), 3);
+
+        // Multiplicador total soma as 3 partes — pior caso: as 3 batendo o próprio teto ao
+        // mesmo tempo (+45%, metade do antigo +80% de uma parte só).
+        Assert.Equal(1.0, IncomeCalculator.SynergyMultiplier(1, 1, 1, Cfg), 3);
+        Assert.Equal(1.0 + 3 * Cfg.SynergyMaxBonus, IncomeCalculator.SynergyMultiplier(100, 100, 100, Cfg), 3);
     }
 
     [Fact]

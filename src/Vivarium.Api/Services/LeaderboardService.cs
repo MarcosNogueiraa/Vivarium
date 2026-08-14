@@ -47,7 +47,11 @@ public class LeaderboardService(VivariumDbContext db)
         {
             var fish = byHabitat.TryGetValue(h.HabitatId, out var list) ? list : [];
             decimal rarityTotal = fish.Sum(f => f.RarityScore);
-            var incomeFish = fish.Select(f => new FishIncome(f.RarityScore, TailColorResolver.Of(f))).ToList();
+            var incomeFish = fish.Select(f =>
+            {
+                var (tail, dorsal, pectoral) = PartColorsResolver.Of(f);
+                return new FishIncome(f.RarityScore, tail, dorsal, pectoral);
+            }).ToList();
             decimal coinsPerHour = IncomeCalculator.TankRatePerHour(incomeFish, h.MaintenanceLevel, TickConfig.Default);
             result.Add((h.UserId, h.Username, rarityTotal, coinsPerHour));
         }
@@ -97,7 +101,11 @@ public class LeaderboardService(VivariumDbContext db)
             .ToListAsync();
 
         decimal rarityTotal = creatures.Sum(c => c.RarityScore);
-        var incomeFish = creatures.Select(c => new FishIncome(c.RarityScore, TailColorResolver.Of(c))).ToList();
+        var incomeFish = creatures.Select(c =>
+        {
+            var (tail, dorsal, pectoral) = PartColorsResolver.Of(c);
+            return new FishIncome(c.RarityScore, tail, dorsal, pectoral);
+        }).ToList();
         decimal coinsPerHour = IncomeCalculator.TankRatePerHour(incomeFish, habitat.MaintenanceLevel, TickConfig.Default);
 
         var breeding = await SpectatorBreedingAsync(habitat.UserId);

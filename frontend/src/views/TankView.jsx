@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.js";
 import { bandOf, BANDS, decorTierOf, PART_HEX, PT } from "../lib/fishRenderer.js";
+import { PART_PT } from "../lib/format.js";
 import { FILTER_WARN_THRESHOLD, nextFishEta, tankFishSorted, tankPotential, tankSynergy } from "../lib/tankMath.js";
 import { AquariumCanvas, PIP_SUPPORTED } from "../components/AquariumCanvas.jsx";
 import { FishCanvas } from "../components/FishCanvas.jsx";
@@ -255,8 +256,8 @@ export function TankView({ tank, refresh, notify, cinemaEnabled = true, toggleCi
         <div className={`synergy-bar glass${dim}`}>
           <span className="eyebrow">Sinergia de cor</span>
           {synergy.map((g) => (
-            <span key={g.color} className="synergy-chip" style={{ "--tier": PART_HEX[g.color] }}>
-              <span className="dot-color" /> {PT.color[g.color]} ×{g.n} <em>+{(g.bonus * 100).toFixed(0)}%</em>
+            <span key={`${g.part}-${g.color}`} className="synergy-chip" style={{ "--tier": PART_HEX[g.color] }}>
+              <span className="dot-color" /> {PART_PT[g.part]}: {PT.color[g.color]} ×{g.n} <em>+{(g.bonus * 100).toFixed(0)}%</em>
             </span>
           ))}
         </div>

@@ -7,18 +7,21 @@ function fish(id, seed, rarityScore) {
 }
 
 describe("tankSynergy", () => {
-  it("agrupa peixes com o mesmo seed (logo, mesma cor de cauda) e ignora grupos de 1", () => {
+  // 14/08/2026: sinergia por parte — cauda/dorsal/peitoral contam separado, cada grupo carrega
+  // `part` pra distinguir (a mesma cor pode formar grupo em mais de uma parte ao mesmo tempo).
+  it("agrupa peixes com o mesmo seed (traits idênticos nas 3 partes) e ignora grupos de 1", () => {
     const a = fish(1, 111, 5);
-    const b = fish(2, 111, 5); // seed idêntico → traits idênticos → mesma cor de cauda
-    const c = fish(3, 222, 5); // provavelmente cor diferente, sozinho no grupo dele
-    const col = traitsOf(a).tail.color;
+    const b = fish(2, 111, 5); // seed idêntico → traits idênticos → mesma cor nas 3 partes
+    const c = fish(3, 222, 5); // provavelmente cor diferente, sozinho em cada parte
+    const traitsA = traitsOf(a);
 
     const synergy = tankSynergy([a, b, c]);
-    const group = synergy.find((g) => g.color === col);
-
-    expect(group).toBeDefined();
-    expect(group.n).toBeGreaterThanOrEqual(2);
-    expect(group.bonus).toBeGreaterThan(0);
+    for (const part of ["tail", "dorsal", "pectoral"]) {
+      const group = synergy.find((g) => g.part === part && g.color === traitsA[part].color);
+      expect(group).toBeDefined();
+      expect(group.n).toBeGreaterThanOrEqual(2);
+      expect(group.bonus).toBeGreaterThan(0);
+    }
     for (const g of synergy) expect(g.n).toBeGreaterThanOrEqual(2); // grupos de 1 não aparecem
   });
 

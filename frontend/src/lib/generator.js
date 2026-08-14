@@ -123,7 +123,9 @@ export const CONFIG = {
   // taperScore/taperGrowth (12/08/2026): acima do piso Lendário, crescimento reduzido e
   // contínuo — espelha TickConfig.IncomeLegendaryTaperScore/Growth (manter em sincronia)
   income: { base: 1.5, growth: 0.42, ref: 4.0, taperScore: 16.60, taperGrowth: 0.10 },
-  synergy: { perMatch: 0.15, maxBonus: 0.80 },
+  // 14/08/2026: sinergia por PARTE (cauda/dorsal/peitoral contam separado, bônus somam) —
+  // espelha TickConfig.SynergyBaseBonus/PerExtraMatch/MaxBonus (manter em sincronia).
+  synergy: { base: 0.075, perExtra: 0.025, maxBonus: 0.15 },
   // Venda ao NPC (vendor, §8.12) — espelha VendorCalculator/TickConfig (manter em sincronia)
   vendor: { hoursEquivalent: 2.0, minPrice: 1 },
   // Degradação da água (§8.2/8.6) — espelha TickConfig (DegradationPerMinute, DegradationPerFishFactor, manter em sincronia)
@@ -458,10 +460,16 @@ export function coinsPerHourOf(rarityScore, synergyMult = 1) {
   return floorAtTaper * Math.exp(i.taperGrowth * (rarityScore - i.taperScore)) * synergyMult;
 }
 
-/** Multiplicador de sinergia pra N peixes da mesma cor de cauda (espelha o servidor). */
-export function synergyMultiplier(sameColorCount) {
+/** Bônus (fração, não multiplicador) de UMA parte com N peixes da mesma cor (espelha o servidor). */
+export function partSynergyBonus(sameColorCount) {
+  if (sameColorCount < 2) return 0;
   const s = CONFIG.synergy;
-  return 1 + Math.min(s.maxBonus, s.perMatch * Math.max(0, sameColorCount - 1));
+  return Math.min(s.maxBonus, s.base + s.perExtra * (sameColorCount - 2));
+}
+
+/** Multiplicador total: 1 + soma dos bônus de cauda/dorsal/peitoral (cada parte independente). */
+export function synergyMultiplier(tailCount, dorsalCount, pectoralCount) {
+  return 1 + partSynergyBonus(tailCount) + partSynergyBonus(dorsalCount) + partSynergyBonus(pectoralCount);
 }
 
 /** Preço de venda ao NPC — deliberadamente baixo, espelha VendorCalculator (só display). */

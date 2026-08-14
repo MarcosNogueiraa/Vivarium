@@ -26,7 +26,10 @@ function openProfile() {
   cy.contains("button", "✏️ Editar perfil").click();
 }
 
-describe("Editar perfil", () => {
+// .skip (14/08/2026): "Editar perfil" temporariamente desativado em AccountMenu.jsx — a
+// feature ainda não foi implantada no backend (Oracle VM). Reativar (e tirar o .skip) junto
+// com o deploy do backend (AccountEndpoints.cs + migration AddPasswordResetToken).
+describe.skip("Editar perfil", () => {
   it("abre com o email atual pré-preenchido", () => {
     login();
     openProfile();

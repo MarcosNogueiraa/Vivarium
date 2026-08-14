@@ -224,7 +224,7 @@ public class GameService(VivariumDbContext db)
         return max;
     }
 
-    /// <summary>Peixes ativos do tanque como entrada de renda (raridade + cor de cauda pra sinergia).</summary>
+    /// <summary>Peixes ativos do tanque como entrada de renda (raridade + cor das 3 partes pra sinergia).</summary>
     private async Task<List<FishIncome>> TankFishAsync(Habitat habitat)
     {
         var rows = await db.CreatureInstances
@@ -237,7 +237,10 @@ public class GameService(VivariumDbContext db)
             .ToListAsync();
         var list = new List<FishIncome>(rows.Count);
         foreach (var r in rows)
-            list.Add(new FishIncome(r.RarityScore, TailColorResolver.Of(r)));
+        {
+            var (tail, dorsal, pectoral) = PartColorsResolver.Of(r);
+            list.Add(new FishIncome(r.RarityScore, tail, dorsal, pectoral));
+        }
         return list;
     }
 

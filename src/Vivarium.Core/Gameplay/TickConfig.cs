@@ -101,10 +101,18 @@ public sealed record TickConfig
     /// <summary>Teto de minutos offline que rendem (8h) — evita acúmulo infinito.</summary>
     public decimal IncomeOfflineCapMinutes { get; init; } = 480m;
 
-    // --- Sinergia por cor de cauda (forte): N peixes de mesma cor → cada um
-    // multiplica a renda por 1 + SynergyPerMatch·(N-1), com teto SynergyMaxBonus.
-    public double SynergyPerMatch { get; init; } = 0.15;
-    public double SynergyMaxBonus { get; init; } = 0.80;
+    // --- Sinergia de cor (14/08/2026, v2): calculada por PARTE (cauda, dorsal, peitoral)
+    // separadamente — cauda combina só com cauda, dorsal só com dorsal, peitoral só com
+    // peitoral — e os 3 bônus somam no peixe (não precisa as 3 partes baterem no mesmo grupo).
+    // Por parte: N peixes com a mesma cor → bonus(N) = N<2 ? 0 :
+    // min(SynergyMaxBonus, SynergyBaseBonus + SynergyPerExtraMatch·(N-2)). Antes (v1) era só
+    // cauda, uniforme 15%/peixe sem teto prático até 80% — achado real do usuário: montar um
+    // tanque temático só de cauda já dava um bônus alto demais. Pior caso agora (3 partes
+    // batendo o próprio teto ao mesmo tempo) cai de +80% pra +45%, e fica bem mais difícil de
+    // alcançar (precisa de 5+ peixes combinando em CADA uma das 3 partes independentemente).
+    public double SynergyBaseBonus { get; init; } = 0.075;
+    public double SynergyPerExtraMatch { get; init; } = 0.025;
+    public double SynergyMaxBonus { get; init; } = 0.15;
 
     // --- Venda ao NPC (vendor, §8.12): preço deliberadamente baixo — poucas horas do
     // que o peixe já renderia sozinho — pra dar vazão a duplicatas/comuns acumulados
