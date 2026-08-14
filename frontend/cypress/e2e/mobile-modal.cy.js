@@ -56,6 +56,7 @@ describe("Modal em mobile", () => {
 
   it("o × continua visível e clicável depois de rolar o conteúdo até o fim", () => {
     login();
+    cy.contains("button.detail-section-head", "Peixes no tanque").click();
     cy.get(".fish-row").first().click();
     cy.get(".modal").should("be.visible");
     cy.contains("Por que é raro").should("exist"); // existe no DOM, mesmo fora da vista ainda
@@ -77,6 +78,7 @@ describe("Modal em mobile", () => {
 
   it("o × fecha o modal mesmo sem rolar (caso feliz, sem regressão)", () => {
     login();
+    cy.contains("button.detail-section-head", "Peixes no tanque").click();
     cy.get(".fish-row").first().click();
     cy.get(".modal-close").should("be.visible").click();
     cy.get(".modal").should("not.exist");
@@ -130,7 +132,8 @@ describe("Modal de detalhe do peixe fica centralizado (12/08/2026)", () => {
     it(`modal fica centralizado horizontalmente em ${w}x${h}`, () => {
       cy.viewport(w, h);
       login();
-      cy.get(".fish-row").first().click();
+      cy.contains("button.detail-section-head", "Peixes no tanque").click();
+    cy.get(".fish-row").first().click();
       cy.get(".modal").should("be.visible").should(($modal) => {
         const rect = $modal[0].getBoundingClientRect();
         const expectedLeft = (w - rect.width) / 2;

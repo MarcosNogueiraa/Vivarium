@@ -12,6 +12,8 @@ import { vendorPriceOf } from "../lib/generator.js";
 import { FishDetail } from "./FishDetail.jsx";
 import { RarityGuide } from "./RarityGuide.jsx";
 import { useAutoToggles } from "../hooks/useAutoToggles.js";
+import { IconButton } from "../components/IconButton.jsx";
+import { CollapsibleSection } from "../components/CollapsibleSection.jsx";
 
 export function TankView({ tank, refresh, notify, cinemaEnabled = true, toggleCinema }) {
   const dim = cinemaEnabled ? " cinema-dim" : "";
@@ -21,8 +23,6 @@ export function TankView({ tank, refresh, notify, cinemaEnabled = true, toggleCi
   const [celebrate, setCelebrate] = useState(null); // criatura raro+ recém-coletada
   const [onboardDone, setOnboardDone] = useState(() => localStorage.getItem("onboardDone") === "true");
   const dismissOnboard = () => { localStorage.setItem("onboardDone", "true"); setOnboardDone(true); };
-  const [listOpen, setListOpen] = useState(() => localStorage.getItem("tankListOpen") !== "false");
-  const toggleList = () => setListOpen((v) => { localStorage.setItem("tankListOpen", String(!v)); return !v; });
   const selected = tank.creatures.find((c) => c.id === selectedId) ?? null;
   const lowWater = Number(tank.maintenanceLevel) < 40;
   const decorTier = decorTierOf(tank.capacityBandName);
@@ -138,74 +138,74 @@ export function TankView({ tank, refresh, notify, cinemaEnabled = true, toggleCi
           <button className="btn-primary" onClick={dismissOnboard}>Entendi</button>
         </div>
       )}
+      {!aquariumMode && (
+        <div className="tank-hud-bar">
+          <span className={`status-pill ${tank.online ? "on" : "off"}`}>
+            <span className="led" />{tank.online ? "Online" : "Offline"}
+          </span>
+          <span className="capacity-chip"
+            style={{ "--band-accent": ["inherit", "var(--r-raro)", "var(--r-lendario)"][decorTier] }}
+            title={`Peixes ativos no tanque / capacidade — faixa: ${tank.capacityBandName || "Aquário"}`}>
+            🐟 {tank.creatures.length}/{tank.capacity} <small>{tank.capacityBandName}</small>
+          </span>
+          <button className="guide-btn" onClick={() => setShowGuide(true)} title="Como funciona a raridade">?</button>
+          <span className="spacer" style={{ flex: 1 }} />
+          <span className="income-chip" title={
+            potential > current + 0.05
+              ? `Produção real agora: ${current.toFixed(1)}/h (já descontando a água suja). Com a água a 100% seria ${potential.toFixed(1)}/h — a diferença (${waterLossPerHour.toFixed(1)}/h) é o quanto a água suja está custando.`
+              : "Moedas por hora que seu tanque farma"
+          }>
+            <Coin />+{current.toFixed(1)}<small>/h</small>
+            {potential > current + 0.05 && <em className="of-potential"> de {potential.toFixed(0)}</em>}
+          </span>
+          <span className="water-gauge">
+            <span className="label">Água</span>
+            <span className="water-track">
+              <span className={`water-fill${lowWater ? " low" : ""}`} style={{ width: `${tank.maintenanceLevel}%` }} />
+            </span>
+            <span className="val">{Number(tank.maintenanceLevel).toFixed(0)}</span>
+          </span>
+          {waterLossPerHour > 0.05 && (
+            <span
+              className="water-loss"
+              title={`Você produz ${current.toFixed(1)}/h agora, mas produziria ${potential.toFixed(1)}/h com a água a 100% — essa diferença (não um valor "extra" cobrado) é o quanto a água suja está te custando por hora. Compare com o custo do filtro pra saber se compensa limpar.`}
+            >
+              −{waterLossPerHour.toFixed(1)}<small>/h</small>
+            </span>
+          )}
+          {tank.isVip && (
+            <span className="capacity-chip" title={tank.hasWaterSensor
+              ? `Limpeza Automática (VIP): compra Filtro sozinho quando a água chega a ${Number(tank.autoCleanTriggerPercent).toFixed(0)}%.`
+              : "Limpeza Automática (VIP): compra Filtro sozinho quando a água zera. Compre o Sensor de Qualidade da Água na Loja pra escolher esse valor."}>
+              🤖 {tank.hasWaterSensor ? `${Number(tank.autoCleanTriggerPercent).toFixed(0)}%` : "0%"}
+            </span>
+          )}
+          {tank.isVip && (
+            <span className="auto-toggles">
+              <IconButton
+                className={`tool-btn${(tank.autoCollectEnabled ?? true) ? " active" : ""}`}
+                disabled={autoToggles.busy} onClick={autoToggles.toggleCollect}
+                label={(tank.autoCollectEnabled ?? true)
+                  ? "Coleta automática: ativada (clique pra desativar)"
+                  : "Coleta automática: desativada (clique pra ativar)"}>
+                🎣
+              </IconButton>
+              <IconButton
+                className={`tool-btn${(tank.autoCleanEnabled ?? true) ? " active" : ""}`}
+                disabled={autoToggles.busy} onClick={autoToggles.toggleClean}
+                label={(tank.autoCleanEnabled ?? true)
+                  ? "Limpeza automática: ativada (clique pra desativar)"
+                  : "Limpeza automática: desativada (clique pra ativar)"}>
+                🧽
+              </IconButton>
+            </span>
+          )}
+          <button onClick={buyFilter} title="Restaura a qualidade da água pra 100">Filtro · 20</button>
+        </div>
+      )}
+
       <div className={`tank-spotlight${tierClass}`}>
       <div className={`tank-stage${tierClass}${isFullscreen ? " is-fullscreen" : ""}${aquariumMode ? " aquarium-mode" : ""}`} ref={stageRef}>
-        {!aquariumMode && (
-          <div className="tank-hud">
-            <span className={`status-pill ${tank.online ? "on" : "off"}`}>
-              <span className="led" />{tank.online ? "Online" : "Offline"}
-            </span>
-            <span className="capacity-chip"
-              style={{ "--band-accent": ["inherit", "var(--r-raro)", "var(--r-lendario)"][decorTier] }}
-              title={`Peixes ativos no tanque / capacidade — faixa: ${tank.capacityBandName || "Aquário"}`}>
-              🐟 {tank.creatures.length}/{tank.capacity} <small>{tank.capacityBandName}</small>
-            </span>
-            <button className="guide-btn" onClick={() => setShowGuide(true)} title="Como funciona a raridade">?</button>
-            <span className="spacer" style={{ flex: 1 }} />
-            <span className="income-chip" title={
-              potential > current + 0.05
-                ? `Produção real agora: ${current.toFixed(1)}/h (já descontando a água suja). Com a água a 100% seria ${potential.toFixed(1)}/h — a diferença (${waterLossPerHour.toFixed(1)}/h) é o quanto a água suja está custando.`
-                : "Moedas por hora que seu tanque farma"
-            }>
-              <Coin />+{current.toFixed(1)}<small>/h</small>
-              {potential > current + 0.05 && <em className="of-potential"> de {potential.toFixed(0)}</em>}
-            </span>
-            <span className="water-gauge">
-              <span className="label">Água</span>
-              <span className="water-track">
-                <span className={`water-fill${lowWater ? " low" : ""}`} style={{ width: `${tank.maintenanceLevel}%` }} />
-              </span>
-              <span className="val">{Number(tank.maintenanceLevel).toFixed(0)}</span>
-            </span>
-            {waterLossPerHour > 0.05 && (
-              <span
-                className="water-loss"
-                title={`Você produz ${current.toFixed(1)}/h agora, mas produziria ${potential.toFixed(1)}/h com a água a 100% — essa diferença (não um valor "extra" cobrado) é o quanto a água suja está te custando por hora. Compare com o custo do filtro pra saber se compensa limpar.`}
-              >
-                −{waterLossPerHour.toFixed(1)}<small>/h</small>
-              </span>
-            )}
-            {tank.isVip && (
-              <span className="capacity-chip" title={tank.hasWaterSensor
-                ? `Limpeza Automática (VIP): compra Filtro sozinho quando a água chega a ${Number(tank.autoCleanTriggerPercent).toFixed(0)}%.`
-                : "Limpeza Automática (VIP): compra Filtro sozinho quando a água zera. Compre o Sensor de Qualidade da Água na Loja pra escolher esse valor."}>
-                🤖 {tank.hasWaterSensor ? `${Number(tank.autoCleanTriggerPercent).toFixed(0)}%` : "0%"}
-              </span>
-            )}
-            {tank.isVip && (
-              <span className="auto-toggles">
-                <button
-                  className={`tool-btn${(tank.autoCollectEnabled ?? true) ? " active" : ""}`}
-                  disabled={autoToggles.busy} onClick={autoToggles.toggleCollect}
-                  title={(tank.autoCollectEnabled ?? true)
-                    ? "Coleta automática: ativada (clique pra desativar)"
-                    : "Coleta automática: desativada (clique pra ativar)"}>
-                  🎣
-                </button>
-                <button
-                  className={`tool-btn${(tank.autoCleanEnabled ?? true) ? " active" : ""}`}
-                  disabled={autoToggles.busy} onClick={autoToggles.toggleClean}
-                  title={(tank.autoCleanEnabled ?? true)
-                    ? "Limpeza automática: ativada (clique pra desativar)"
-                    : "Limpeza automática: desativada (clique pra ativar)"}>
-                  🧽
-                </button>
-              </span>
-            )}
-            <button onClick={buyFilter} title="Restaura a qualidade da água pra 100">Filtro · 20</button>
-          </div>
-        )}
-
         <AquariumCanvas
           ref={aquariumRef}
           creatures={tank.creatures} selectedId={selectedId}
@@ -215,29 +215,29 @@ export function TankView({ tank, refresh, notify, cinemaEnabled = true, toggleCi
         />
 
         <div className="tank-tools">
-          <button className={`tool-btn${clickEnabled ? " active" : ""}`} onClick={toggleClicks}
-            title={clickEnabled ? "Cliques no peixe: ativados (clique pra desativar)" : "Cliques no peixe: desativados (clique pra ativar)"}>
+          <IconButton className={`tool-btn${clickEnabled ? " active" : ""}`} onClick={toggleClicks}
+            label={clickEnabled ? "Cliques no peixe: ativados (clique pra desativar)" : "Cliques no peixe: desativados (clique pra ativar)"}>
             {clickEnabled ? "🖱️" : "🚫"}
-          </button>
-          <button className={`tool-btn${aquariumMode ? " active" : ""}`} onClick={() => setAquariumMode((v) => !v)}
-            title={aquariumMode ? "Sair do modo aquário" : "Modo aquário — só o tanque, decorativo"}>
+          </IconButton>
+          <IconButton className={`tool-btn${aquariumMode ? " active" : ""}`} onClick={() => setAquariumMode((v) => !v)}
+            label={aquariumMode ? "Sair do modo aquário" : "Modo aquário — só o tanque, decorativo"}>
             🐠
-          </button>
-          <button className={`tool-btn${isFullscreen ? " active" : ""}`} onClick={toggleFullscreen}
-            title={isFullscreen ? "Sair da tela cheia" : "Tela cheia"}>
+          </IconButton>
+          <IconButton className={`tool-btn${isFullscreen ? " active" : ""}`} onClick={toggleFullscreen}
+            label={isFullscreen ? "Sair da tela cheia" : "Tela cheia"}>
             {isFullscreen ? "⤢" : "⛶"}
-          </button>
+          </IconButton>
           {PIP_SUPPORTED && (
-            <button className={`tool-btn${pipActive ? " active" : ""}`} onClick={() => aquariumRef.current?.togglePip()}
-              title={pipActive ? "Fechar pop-up flutuante" : "Abrir aquário em pop-up flutuante"}>
+            <IconButton className={`tool-btn${pipActive ? " active" : ""}`} onClick={() => aquariumRef.current?.togglePip()}
+              label={pipActive ? "Fechar pop-up flutuante" : "Abrir aquário em pop-up flutuante"}>
               📺
-            </button>
+            </IconButton>
           )}
           {toggleCinema && (
-            <button className={`tool-btn${cinemaEnabled ? " active" : ""}`} onClick={toggleCinema}
-              title={cinemaEnabled ? "Desligar o efeito cinema (deixa o resto da tela mais claro)" : "Ligar o efeito cinema"}>
+            <IconButton className={`tool-btn${cinemaEnabled ? " active" : ""}`} onClick={toggleCinema}
+              label={cinemaEnabled ? "Desligar o efeito cinema (deixa o resto da tela mais claro)" : "Ligar o efeito cinema"}>
               {cinemaEnabled ? "🎬" : "💡"}
-            </button>
+            </IconButton>
           )}
         </div>
 
@@ -307,42 +307,36 @@ export function TankView({ tank, refresh, notify, cinemaEnabled = true, toggleCi
 
       {!aquariumMode && tank.creatures.length > 0 && (
         <section className={`${dim.trim()}`}>
-          <div className="section-head">
-            <button className="collapse-btn" onClick={toggleList} aria-expanded={listOpen}
-              title={listOpen ? "Recolher lista" : "Expandir lista"}>
-              <span className={`chevron${listOpen ? " open" : ""}`}>▾</span>
-            </button>
-            <span className="eyebrow">Peixes no tanque</span>
-            <span className="count">{tank.creatures.length}/{tank.capacity}</span>
-            <span className="spacer" />
-            {listOpen && <span className="faint" style={{ fontSize: "0.82rem" }}>clique para detalhes</span>}
-          </div>
-          {listOpen && (
-          <div className="fish-list">
-            {listFish.map(({ c, traits, col, colorLabel, prod }) => {
-              const band = bandOf(Number(c.rarityScore));
-              return (
-                <button key={c.id} className="fish-row" onClick={() => setSelectedId(c.id)} style={{ "--tier": band.color }}>
-                  <span className="fr-thumb">
-                    <FishCanvas creature={c} width={72} />
-                  </span>
-                  <span className="fr-body">
-                    <span className="fr-line1">
-                      <span className="badge" style={{ "--tier": band.color }}><span className="gem" /> {band.name}</span>
-                      <span className="fr-score mono">{Number(c.rarityScore).toFixed(1)}</span>
+          <CollapsibleSection
+            variant="prominent"
+            hint="Toque pra ver a lista completa e abrir os detalhes de cada peixe."
+            title={<>Peixes no tanque <span className="count">{tank.creatures.length}/{tank.capacity}</span></>}
+          >
+            <div className="fish-list">
+              {listFish.map(({ c, traits, col, colorLabel, prod }) => {
+                const band = bandOf(Number(c.rarityScore));
+                return (
+                  <button key={c.id} className="fish-row" onClick={() => setSelectedId(c.id)} style={{ "--tier": band.color }}>
+                    <span className="fr-thumb">
+                      <FishCanvas creature={c} width={72} />
                     </span>
-                    <span className="fr-line2">
-                      <span className="fr-color"><span className="dot-color" style={{ background: PART_HEX[col] }} /> {colorLabel}</span>
-                      {traits.shimmerTier !== "None" && <span className="shimmer-label">✦ {PT.shimmer[traits.shimmerColor]}</span>}
-                      {c.isBred && <span className="bred-tag">🐣 Filhote</span>}
+                    <span className="fr-body">
+                      <span className="fr-line1">
+                        <span className="badge" style={{ "--tier": band.color }}><span className="gem" /> {band.name}</span>
+                        <span className="fr-score mono">{Number(c.rarityScore).toFixed(1)}</span>
+                      </span>
+                      <span className="fr-line2">
+                        <span className="fr-color"><span className="dot-color" style={{ background: PART_HEX[col] }} /> {colorLabel}</span>
+                        {traits.shimmerTier !== "None" && <span className="shimmer-label">✦ {PT.shimmer[traits.shimmerColor]}</span>}
+                        {c.isBred && <span className="bred-tag">🐣 Filhote</span>}
+                      </span>
                     </span>
-                  </span>
-                  <span className="fr-prod mono"><Coin /> ~{prod.toFixed(1)}<small>/h</small></span>
-                </button>
-              );
-            })}
-          </div>
-          )}
+                    <span className="fr-prod mono"><Coin /> ~{prod.toFixed(1)}<small>/h</small></span>
+                  </button>
+                );
+              })}
+            </div>
+          </CollapsibleSection>
         </section>
       )}
 

@@ -50,6 +50,7 @@ describe("Toast", () => {
     cy.clock();
     login();
 
+    cy.contains("button.detail-section-head", "Peixes no tanque").click();
     cy.get(".fish-row").first().click();
     cy.contains("button", "Vender ao NPC · 7").scrollIntoView().should("be.visible").click();
     cy.intercept("POST", "/api/game/creatures/201/sell-vendor", { statusCode: 200, body: { price: 7 } });
@@ -65,6 +66,7 @@ describe("Toast", () => {
     cy.clock();
     login();
 
+    cy.contains("button.detail-section-head", "Peixes no tanque").click();
     cy.get(".fish-row").first().click();
     cy.contains("button", "Vender ao NPC · 7").scrollIntoView().should("be.visible").click();
     cy.intercept("POST", "/api/game/creatures/201/sell-vendor", { statusCode: 200, body: { price: 7 } });

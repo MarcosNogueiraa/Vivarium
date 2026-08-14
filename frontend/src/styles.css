@@ -519,12 +519,15 @@ input:focus {
 .aquarium { display: block; width: 100%; height: auto; cursor: pointer; }
 .aquarium.ambient { cursor: default; }
 
-.tank-hud {
-  position: absolute; top: 14px; left: 14px; right: 14px; z-index: 3;
-  display: flex; align-items: center; gap: 12px;
-  pointer-events: none;
+/* Barra de status/produção do tanque (13/08/2026) — era `.tank-hud`, `position:absolute`
+   flutuando POR CIMA do aquário; no mobile empilhava em várias linhas e cobria boa parte da
+   água visível (feedback do usuário, print real de celular). Virou uma barra normal ACIMA do
+   `.tank-stage`, em fluxo — mesmo espírito de `.synergy-bar` logo abaixo, que já vive fora do
+   canvas. `.tank-tools` (controles de visualização do stage) continua como overlay — precisa
+   ficar acessível em tela cheia. */
+.tank-hud-bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px;
 }
-.tank-hud > * { pointer-events: auto; }
 
 .status-pill {
   display: inline-flex; align-items: center; gap: 8px;
@@ -611,6 +614,18 @@ input:focus {
   box-shadow: var(--shadow-sm);
 }
 .tool-btn.active { border-color: var(--glow); color: var(--glow); box-shadow: 0 0 0 1px var(--glow) inset, var(--shadow-sm); }
+
+/* Bolha de legenda por long-press (IconButton.jsx, 13/08/2026) — só aparece em botões
+   embrulhados nesse componente, quando o usuário segura o dedo (touch, sem hover). */
+.icon-btn-wrap { position: relative; display: inline-flex; }
+.icon-btn-tip {
+  position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+  padding: 6px 10px; border-radius: 8px; white-space: nowrap; font-size: 0.78rem;
+  background: rgba(6, 26, 34, 0.95); border: 1px solid var(--line); color: var(--ink);
+  box-shadow: var(--shadow-sm); pointer-events: none; z-index: 10;
+  animation: icon-tip-in 0.15s ease;
+}
+@keyframes icon-tip-in { from { opacity: 0; transform: translateX(-50%) translateY(4px); } }
 
 /* Toggles rápidos de coleta/limpeza automática no HUD do tanque (13/08/2026) — mesmos
    `.tool-btn`/`.active` dos ícones flutuantes, só que sempre visíveis (sem o fade por hover
@@ -1351,8 +1366,15 @@ input:focus {
 @media (max-width: 640px) {
   .content { padding: 16px; }
   .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
-  .tank-hud { flex-wrap: wrap; gap: 8px; top: 10px; left: 10px; right: 10px; }
-  .tank-hud .spacer { display: none; }
+  /* Tira de rolagem horizontal em vez de empilhar em N linhas — mesmo padrão já usado em
+     `.topbar-tabs .nav-pills` (ver acima). */
+  .tank-hud-bar {
+    flex-wrap: nowrap; gap: 8px; overflow-x: auto; scrollbar-width: none;
+    -webkit-overflow-scrolling: touch; margin-bottom: 12px;
+  }
+  .tank-hud-bar::-webkit-scrollbar { display: none; }
+  .tank-hud-bar > * { flex: 0 0 auto; }
+  .tank-hud-bar .spacer { display: none; }
   .fish-list { grid-template-columns: 1fr; }
   .modal-body { padding: 16px; }
   .detail-head { flex-direction: column; text-align: center; }

@@ -45,6 +45,7 @@ describe("Venda ao NPC", () => {
     cy.wait("@login");
     cy.wait("@tank");
 
+    cy.contains("button.detail-section-head", "Peixes no tanque").click();
     cy.get(".fish-row").first().click();
     cy.contains("button", "Vender ao NPC · 7").scrollIntoView().should("be.visible").click();
     cy.contains("Venda instantânea por 7 moedas soft").should("be.visible");
