@@ -100,12 +100,32 @@ public class LeaderboardService(VivariumDbContext db)
         var incomeFish = creatures.Select(c => new FishIncome(c.RarityScore, TailColorResolver.Of(c))).ToList();
         decimal coinsPerHour = IncomeCalculator.TankRatePerHour(incomeFish, habitat.MaintenanceLevel, TickConfig.Default);
 
+        var breeding = await SpectatorBreedingAsync(habitat.UserId);
+
         return ServiceResult.Success(new SpectatorTankResponse(
             habitat.User!.Username,
             habitat.MaintenanceLevel,
             CapacityBands.BandFor(habitat.Capacity).Name,
             rarityTotal,
             coinsPerHour,
-            creatures.Select(CreatureDto.From).ToList()));
+            creatures.Select(CreatureDto.From).ToList(),
+            breeding));
+    }
+
+    /// <summary>
+    /// Gestação em andamento do jogador visitado (Ninho), sem tick nem SaveChanges — mesma
+    /// filosofia read-only do resto da visita (8.16). Sem gestação ativa, devolve Active=false.
+    /// </summary>
+    private async Task<SpectatorBreedingDto> SpectatorBreedingAsync(long userId)
+    {
+        var slot = await db.BreedingSlots
+            .Include(s => s.ParentA)
+            .Include(s => s.ParentB)
+            .FirstOrDefaultAsync(s => s.UserId == userId && s.Status == BreedingStatus.InProgress);
+        if (slot is null)
+            return new SpectatorBreedingDto(false, null, null, null, false);
+
+        bool ready = slot.ReadyAt <= DateTime.UtcNow;
+        return new SpectatorBreedingDto(true, CreatureDto.From(slot.ParentA!), CreatureDto.From(slot.ParentB!), slot.ReadyAt, ready);
     }
 }

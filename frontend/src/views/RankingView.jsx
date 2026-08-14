@@ -5,7 +5,17 @@ import { tankFishSorted, tankPotential } from "../lib/tankMath.js";
 import { AquariumCanvas } from "../components/AquariumCanvas.jsx";
 import { Coin } from "../components/Coin.jsx";
 import { FishCanvas } from "../components/FishCanvas.jsx";
+import { RarityBadge } from "../components/RarityBadge.jsx";
 import { FishDetail } from "./FishDetail.jsx";
+
+function breedingTimeLeft(readyAt) {
+  const ms = new Date(readyAt).getTime() - Date.now();
+  if (ms <= 0) return "pronto!";
+  const totalMin = Math.ceil(ms / 60_000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h > 0 ? `${h}h ${m}min` : `${m}min`;
+}
 
 const METRICS = [
   // toFixed(3), não (1): score guarda 4 casas decimais no banco (HasPrecision(10,4)) — com 1
@@ -133,6 +143,29 @@ export function RankingView({ notify, exitSpectatorSignal }) {
             )}
           </section>
         )}
+        <section className="cinema-dim">
+          <div className="section-head">
+            <span className="eyebrow">🐣 Ninho</span>
+            {spectator.breeding.active && (
+              <span className="count">{spectator.breeding.isReady ? "pronto!" : breedingTimeLeft(spectator.breeding.readyAt)}</span>
+            )}
+          </div>
+          {spectator.breeding.active ? (
+            <>
+              <AquariumCanvas
+                creatures={[spectator.breeding.parentA, spectator.breeding.parentB]}
+                selectedId={null} onSelect={() => {}} interactive={false} ambient theme="breeding"
+              />
+              <div className="card-row" style={{ justifyContent: "center", gap: 16, marginTop: 12 }}>
+                <RarityBadge score={Number(spectator.breeding.parentA.rarityScore)} />
+                <span>+</span>
+                <RarityBadge score={Number(spectator.breeding.parentB.rarityScore)} />
+              </div>
+            </>
+          ) : (
+            <p className="hint">Ninho vazio no momento.</p>
+          )}
+        </section>
         {selected && <FishDetail creature={selected} onClose={() => setSelectedId(null)} />}
       </div>
     );

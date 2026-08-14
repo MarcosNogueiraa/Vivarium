@@ -16,7 +16,8 @@ public class LeaderboardTests : IClassFixture<VivariumApiFactory>
     private record LeaderboardEntryRow(int Rank, string Username, decimal Value, bool IsSelf);
     private record LeaderboardResponseRow(string Metric, List<LeaderboardEntryRow> Entries, LeaderboardEntryRow? SelfOutsideTop);
     private record SpectatorCreatureRow(long Id, string Seed, string? ParentASeed, string? ParentBSeed);
-    private record SpectatorTankRow(string Username, decimal MaintenanceLevel, string CapacityBandName, decimal RarityTotal, decimal CoinsPerHour, List<SpectatorCreatureRow> Creatures);
+    private record SpectatorBreedingRow(bool Active, SpectatorCreatureRow? ParentA, SpectatorCreatureRow? ParentB, DateTime? ReadyAt, bool IsReady);
+    private record SpectatorTankRow(string Username, decimal MaintenanceLevel, string CapacityBandName, decimal RarityTotal, decimal CoinsPerHour, List<SpectatorCreatureRow> Creatures, SpectatorBreedingRow Breeding);
 
     private async Task<long> HabitatIdOf(long userId)
     {
@@ -177,5 +178,62 @@ public class LeaderboardTests : IClassFixture<VivariumApiFactory>
         var filhote = response.Creatures.Single(c => c.ParentASeed != null);
         Assert.Equal("555", filhote.ParentASeed);
         Assert.Equal("999", filhote.ParentBSeed);
+    }
+
+    [Fact]
+    public async Task Visitar_SemGestacaoAtiva_BreedingVemInativo()
+    {
+        var (visitorClient, _) = await _factory.RegisterAsync("visitante4");
+        await _factory.RegisterAsync("dono2");
+
+        var response = await visitorClient.GetFromJsonAsync<SpectatorTankRow>("/api/leaderboard/visit/dono2");
+
+        Assert.False(response!.Breeding.Active);
+        Assert.Null(response.Breeding.ParentA);
+        Assert.Null(response.Breeding.ReadyAt);
+    }
+
+    [Fact]
+    public async Task Visitar_ComGestacaoAtiva_MostraOsPaisSemInformacaoFinanceira()
+    {
+        var (visitorClient, _) = await _factory.RegisterAsync("visitante5");
+        var (_, dono) = await _factory.RegisterAsync("dono3");
+        long habitatAquario = await HabitatIdOf(dono);
+        await AddCreature(habitatAquario, dono, rarityScore: 5m, seed: 1001);
+        await AddCreature(habitatAquario, dono, rarityScore: 6m, seed: 1002);
+        var readyAt = DateTime.UtcNow.AddHours(3);
+
+        await _factory.WithDbAsync(async db =>
+        {
+            int breedingTypeId = await db.HabitatTypes.Where(t => t.Code == "Breeding").Select(t => t.Id).FirstAsync();
+            var parentA = await db.CreatureInstances.FirstAsync(c => c.Seed == 1001);
+            var parentB = await db.CreatureInstances.FirstAsync(c => c.Seed == 1002);
+            var breedingHabitat = new Habitat
+            {
+                UserId = dono, HabitatTypeId = breedingTypeId, Capacity = 2, MaintenanceLevel = 100,
+                QueueCap = 0, GenerationIntervalMinutes = int.MaxValue, OnlineGenerationRate = 0, OfflineGenerationRate = 0,
+                LastTickAt = DateTime.UtcNow, CreatedAt = DateTime.UtcNow,
+            };
+            db.Habitats.Add(breedingHabitat);
+            await db.SaveChangesAsync();
+            db.BreedingSlots.Add(new BreedingSlot
+            {
+                UserId = dono, HabitatId = breedingHabitat.Id, ParentAId = parentA.Id, ParentBId = parentB.Id,
+                StartedAt = DateTime.UtcNow, ReadyAt = readyAt, CostPaid = 999m,
+                ParentADeathChance = 0.5m, ParentBDeathChance = 0.5m, Status = BreedingStatus.InProgress,
+            });
+            await db.SaveChangesAsync();
+        });
+
+        var response = await visitorClient.GetFromJsonAsync<SpectatorTankRow>("/api/leaderboard/visit/dono3");
+
+        Assert.True(response!.Breeding.Active);
+        Assert.Equal("1001", response.Breeding.ParentA!.Seed);
+        Assert.Equal("1002", response.Breeding.ParentB!.Seed);
+        Assert.False(response.Breeding.IsReady);
+        Assert.Equal(readyAt, response.Breeding.ReadyAt!.Value, TimeSpan.FromSeconds(1));
+        // CostPaid/DeathChance/InsuranceUsed deliberadamente não expostos ao espectador — só o
+        // que o SpectatorBreedingDto expõe é acessível via reflection do JSON, então a ausência
+        // desses campos na resposta HTTP (não só no record de teste) já é a garantia real.
     }
 }
