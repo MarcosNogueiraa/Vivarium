@@ -199,4 +199,20 @@ describe("Mercado", () => {
     cy.contains("button", "↺ Redefinir filtros").should("not.exist");
     cy.contains(".filter-chips", "Todos").contains("button.active", "Todos");
   });
+
+  it("mobile: cabeçalho de 'Meus anúncios ativos' tem alvo de toque grande e visual de cartão", () => {
+    const l = listing(704, 2, "vendedor", 1111, 5.0, 10);
+    cy.viewport(375, 800);
+    cy.intercept("GET", "/api/market/listings*", { body: envelope({ listings: [l] }) }).as("listings");
+    login();
+    cy.wait("@listings");
+
+    cy.contains("button.detail-section-head--prominent", "Meus anúncios ativos").then(($btn) => {
+      expect($btn[0].getBoundingClientRect().height).to.be.at.least(48);
+    });
+    cy.contains("button.detail-section-head--prominent", "Meus anúncios ativos")
+      .closest(".detail-section--prominent")
+      .should("have.css", "background-color")
+      .and("not.equal", "rgba(0, 0, 0, 0)");
+  });
 });

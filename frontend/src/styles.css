@@ -1078,7 +1078,9 @@ input:focus {
 .detail-section-head--prominent .eyebrow { font-weight: 700; }
 .detail-section-head--prominent .detail-section-icon { font-size: 1rem; filter: drop-shadow(0 0 8px rgba(84, 230, 209, 0.35)); }
 .detail-section-hint { padding: 0 14px 12px; margin: -4px 0 0; color: var(--faint); font-size: 0.8rem; line-height: 1.4; }
-.detail-section--prominent > .appearance-filter-group { padding: 0 14px 14px; }
+.detail-section--prominent > .appearance-filter-group,
+.detail-section--prominent > .market-mine-grid,
+.detail-section--prominent > p.hint { padding: 0 14px 14px; }
 
 /* Badge de contagem no título quando há filtro(s) ativo(s) — mais destaque que o "(N)" em
    texto simples que já existia, reforça "tem filtro ativo aqui" de relance. */
@@ -1414,6 +1416,26 @@ input:focus {
      suficiente e mais denso visualmente. */
   .modal-close, .account-btn, .tool-btn, .guide-btn { min-width: 40px; min-height: 40px; }
   .collapse-btn { min-width: 38px; min-height: 38px; }
+
+  /* Cabeçalho de CollapsibleSection "prominent" (ex: "Meus anúncios ativos", "Filtros
+     avançados" — 13/08/2026, pedido do usuário): no desktop o padding de 12px/ícone de
+     1rem já rendem uma área de toque razoável com mouse, mas no dedo ficava pequeno
+     demais e a "caixa" toda passava despercebida entre o resto da tela. Aumenta o alvo
+     de toque, o destaque visual (borda mais forte, ícone maior) e o respiro ao redor —
+     só no mobile, o desktop continua como estava. */
+  .detail-section-head--prominent {
+    min-height: 52px; padding: 16px; gap: 10px;
+  }
+  .detail-section-head--prominent .detail-section-icon { font-size: 1.3rem; }
+  .detail-section-head--prominent .eyebrow { font-size: 1rem; }
+  .detail-section-head--prominent .chevron { font-size: 1rem; }
+  .detail-section--prominent {
+    margin-top: 22px; margin-bottom: 4px;
+    box-shadow: inset 0 0 0 1.5px var(--line);
+  }
+  .detail-section--prominent:has(.detail-section-head--prominent[aria-expanded="true"]) {
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--glow) 55%, var(--line));
+  }
 }
 
 /* Em telas sem hover (toque) os botões-ferramenta do tanque (tela cheia,
