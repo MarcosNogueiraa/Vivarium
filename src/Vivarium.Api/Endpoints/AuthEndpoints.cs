@@ -117,5 +117,17 @@ public static class AuthEndpoints
             var user = await db.Users.FirstAsync(u => u.Id == userId);
             return Results.Ok(new MeResponse(user.Id, user.Username, user.Email));
         }).RequireAuthorization();
+
+        // Sempre responde igual, exista ou não o email — evita enumeração de contas.
+        // Rate limit "auth" (já aplicado ao grupo inteiro) protege contra spam de pedidos.
+        group.MapPost("/forgot-password", async (ForgotPasswordRequest req, PasswordResetService resets) =>
+        {
+            if (AccountValidation.Email(req.Email) is null)
+                await resets.RequestAsync(req.Email, DateTime.UtcNow);
+            return Results.Ok(new { message = "Se esse email tiver uma conta, um link de redefinição foi enviado." });
+        });
+
+        group.MapPost("/reset-password", async (ResetPasswordRequest req, PasswordResetService resets) =>
+            (await resets.ResetAsync(req.Token, req.NewPassword, DateTime.UtcNow)).ToHttp());
     }
 }

@@ -630,6 +630,18 @@ InboxEntry  -- 1 linha por (destinatário, evento) — é isso que a tela "Caixa
 **Backlog relacionado (registrado, não implementado, sem desenho ainda):**
 - **Comentários no aquário que o jogador visita** (Ranking → "Visitar", §8.16) — deixar um comentário/recado no aquário de outro jogador. Precisa de moderação básica (nem que seja só "reportar"/apagar o próprio) antes de ir pra produção — não desenhado ainda, só anotado como próximo passo depois da Caixa de Entrada.
 
+### 8.24 Perfil do jogador + "esqueci minha senha" (14/08/2026) — IMPLEMENTADO
+
+Editar email/senha a partir do ícone de conta (👤) + fluxo completo de redefinição de senha por email. Primeiro recurso do jogo que precisa mandar email de verdade — não existia nenhuma infra de envio até aqui.
+
+- **Provedor escolhido: Resend** (API HTTP, não SMTP) — decisão deliberada porque a VM Oracle só libera saída em 22/80/443 hoje (`deploy/README.md`); uma chamada HTTPS não esbarra em bloqueio de porta SMTP (Oracle Free Tier historicamente restringe saída 25/587/465). `IEmailSender` (`src/Vivarium.Api/Services/IEmailSender.cs`) é genérico (não sabe nada de "reset de senha"), pra qualquer feature futura reusar. `ResendEmailSender` só é registrado se `Resend:ApiKey` estiver configurada (Program.cs); sem a chave, `NullEmailSender` entra no lugar e só loga o conteúdo — o app nunca quebra por falta de email configurado, mesmo espírito do gap já documentado pro processador de pagamento (§8.11).
+- **⚠️ Gap real, não escondido — sandbox do Resend sem domínio verificado:** sem um domínio próprio verificado na conta Resend, o remetente de teste (`onboarding@resend.dev`) só entrega email pro endereço da PRÓPRIA conta Resend, não pra qualquer jogador. Ou seja: a mecânica está 100% funcional e testada (157 testes de API cobrem o fluxo inteiro com um `FakeEmailSender`), mas em produção **só o dono da conta Resend recebe o email de verdade** até alguém verificar um domínio (registros TXT/CNAME de SPF/DKIM). DuckDNS (domínio atual do backend, §10) tipicamente não expõe gerenciamento de DNS arbitrário — precisa de um domínio próprio de verdade (já um gap conhecido, §11 "domínio próprio (opcional)"), que resolveria os dois pendências de uma vez. Configurável via `Resend:FromAddress` assim que houver domínio verificado — zero mudança de código.
+- **Token de reset** (`PasswordResetToken`, migration `AddPasswordResetToken`): 32 bytes aleatórios (`RandomNumberGenerator`), só o hash SHA256 (não PBKDF2 — já é alta entropia, não senha escolhida por humano, hash lento seria desperdício e atrapalharia o lookup O(1)) fica no banco. Expira em 1h; pedir de novo invalida qualquer link anterior ainda válido (só 1 ativo por vez). `PasswordResetService.RequestAsync` nunca revela se o email existe (sempre mesma resposta) — anti-enumeração de contas, mesmo princípio já usado noutros lugares do jogo pra não vazar informação de quem tem conta.
+- **Endpoints:** `POST /api/auth/forgot-password` (público, rate-limited pelo grupo "auth" já existente), `POST /api/auth/reset-password` (público, token na URL do email nunca precisa de login), `PUT /api/account/email` e `PUT /api/account/password` (autenticados, `AccountEndpoints.cs`/`AccountService.cs` — sempre exigem a senha atual, mesmo padrão de qualquer ação sensível já usado no jogo).
+- **Frontend sem router:** o link do email (`?resetToken=...`) é checado direto em `App.jsx` via `URLSearchParams` antes de decidir entre `AuthView`/`GameView` — funciona mesmo se o usuário já estiver logado noutra aba/sessão. `ResetPasswordView.jsx` (nova senha + confirmação) e o link "Esqueceu sua senha?" dentro de `AuthView.jsx` (modo `"forgot"`, mesma tela, sem navegação). `ProfileModal.jsx` (aberto via "✏️ Editar perfil" no dropdown de `AccountMenu.jsx`) tem as duas seções (trocar email / trocar senha) no mesmo modal.
+- **Segredo tratado como tal:** a API key do Resend nunca foi escrita em código — só via `dotnet user-secrets` localmente (`Resend:ApiKey`) e, quando for pro ar, env var `Resend__ApiKey` na VM (mesmo padrão de `Jwt__Key`/`ConnectionStrings__Vivarium`, `deploy/.env`).
+- **Testes:** `AccountTests.cs` (8 casos — trocar email/senha, senha atual errada, email duplicado, formato inválido, sem token) + `PasswordResetTests.cs` (7 casos — pedido com/sem conta existente, reset válido, token usado 2x, token inválido, token expirado, pedido novo invalida o anterior) + `frontend/cypress/e2e/profile.cy.js` (5 e2e) + `frontend/cypress/e2e/forgot-password.cy.js` (6 e2e). `VivariumApiFactory` ganhou `FakeEmailSender` (captura em memória, substitui `IEmailSender` só nos testes) — os testes extraem o token bruto de dentro do HTML capturado via regex, já que o token nunca é gravado em claro no banco.
+
 ---
 
 ## 9. Schema de dados completo (MVP, desacoplado para escalar)
@@ -663,6 +675,14 @@ VipSubscription
 - Status (Active | Expired | Cancelled)
 -- Separado do User (não um bool "IsVip") para permitir histórico e, 
 -- no futuro, diferentes tiers de assinatura sem alterar User.
+
+PasswordResetToken -- "esqueci minha senha" (8.24)
+- Id (PK)
+- UserId (FK -> User)
+- TokenHash (string, único) -- SHA256 do token bruto; o valor bruto nunca é persistido
+- ExpiresAt
+- UsedAt (datetime, nullable) -- null = ainda não usado
+- CreatedAt
 
 CurrencyType
 - Id (PK)
@@ -876,6 +896,10 @@ Falta pra ir ao ar de verdade (depende de contas/decisões do usuário):
 | GET | `/api/creatures/preview/{seed}` | — | traits de qualquer seed (sem banco) |
 | POST | `/api/auth/register` | — | cria user + carteiras + tanque; retorna token |
 | POST | `/api/auth/login` | — | username ou email + senha; retorna token |
+| POST | `/api/auth/forgot-password` | — | sempre responde igual, exista ou não a conta (anti-enumeração); manda email via Resend (8.24) |
+| POST | `/api/auth/reset-password` | — | token do email (1h de validade, uso único) + nova senha |
+| PUT | `/api/account/email` | ✓ | troca o email; exige a senha atual (8.24) |
+| PUT | `/api/account/password` | ✓ | troca a senha; exige a senha atual (8.24) |
 | POST | `/api/game/heartbeat` | ✓ | marca online (janela de 3 min); roda tick |
 | GET | `/api/game/tank` | ✓ | estado completo: fila, criaturas, carteira; roda tick |
 | POST | `/api/game/collect/{queueItemId}` | ✓ | coleta manual (valida pronto/capacidade) |

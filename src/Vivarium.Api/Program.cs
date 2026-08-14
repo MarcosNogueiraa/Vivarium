@@ -47,6 +47,15 @@ builder.Services.AddScoped<BreedingService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<LeaderboardService>();
 builder.Services.AddScoped<VipService>();
+builder.Services.AddScoped<AccountService>();
+builder.Services.AddScoped<PasswordResetService>();
+
+// Sem Resend:ApiKey configurada, NullEmailSender só loga (app continua funcionando sem
+// email — mesmo espírito do gap documentado pro processador de pagamento, CLAUDE.md §8.11).
+if (!string.IsNullOrEmpty(builder.Configuration["Resend:ApiKey"]))
+    builder.Services.AddHttpClient<IEmailSender, ResendEmailSender>();
+else
+    builder.Services.AddSingleton<IEmailSender, NullEmailSender>();
 
 // Front roda em outro domínio (Cloudflare Pages) — origens via config
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
@@ -106,6 +115,7 @@ app.MapGet("/api/creatures/preview/{seed:long}", (long seed) =>
     Results.Ok(TraitGenerator.Generate(seed)));
 
 app.MapAuthEndpoints();
+app.MapAccountEndpoints();
 app.MapGameEndpoints();
 app.MapMarketEndpoints();
 app.MapItemEndpoints();

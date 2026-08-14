@@ -128,7 +128,7 @@ export function GameView({ onLogout }) {
             </button>
           )}
         </div>
-        <AccountMenu onLogout={() => { clearToken(); onLogout(); }} />
+        <AccountMenu notify={notify} onLogout={() => { clearToken(); onLogout(); }} />
       </header>
 
       {syncError && (
