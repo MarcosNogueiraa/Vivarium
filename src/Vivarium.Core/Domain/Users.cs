@@ -13,6 +13,23 @@ public class User
     public bool IsAdmin { get; set; }
 }
 
+/// <summary>
+/// Token de "esqueci minha senha" (14/08/2026) — o token bruto só existe no link do email
+/// (nunca gravado); só o hash (SHA256, não PBKDF2 — já é alta entropia, não senha escolhida
+/// por humano, então não precisa de hash lento) fica no banco, pra permitir lookup O(1) sem
+/// expor o valor em caso de vazamento do banco. Usado uma vez (UsedAt) e expira sozinho.
+/// </summary>
+public class PasswordResetToken
+{
+    public long Id { get; set; }
+    public long UserId { get; set; }
+    public User? User { get; set; }
+    public required string TokenHash { get; set; }
+    public DateTime ExpiresAt { get; set; }
+    public DateTime? UsedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
 // Separado do User (não um bool IsVip) para permitir histórico e, no futuro,
 // diferentes tiers de assinatura sem alterar User.
 public class VipSubscription

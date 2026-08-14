@@ -20,6 +20,7 @@ public class VivariumDbContext(DbContextOptions<VivariumDbContext> options) : Db
     public DbSet<MarketListing> MarketListings => Set<MarketListing>();
     public DbSet<TransactionLog> TransactionLogs => Set<TransactionLog>();
     public DbSet<BreedingSlot> BreedingSlots => Set<BreedingSlot>();
+    public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -45,6 +46,14 @@ public class VivariumDbContext(DbContextOptions<VivariumDbContext> options) : Db
             e.Property(u => u.Email).HasMaxLength(256);
             e.HasIndex(u => u.Username).IsUnique();
             e.HasIndex(u => u.Email).IsUnique();
+        });
+
+        modelBuilder.Entity<PasswordResetToken>(e =>
+        {
+            e.Property(t => t.TokenHash).HasMaxLength(64); // hex de SHA256 = 64 chars
+            e.HasIndex(t => t.TokenHash).IsUnique();
+            e.HasIndex(t => t.UserId);
+            e.HasOne(t => t.User).WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<VipSubscription>(e =>

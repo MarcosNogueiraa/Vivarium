@@ -41,6 +41,10 @@ export const api = {
   login: (usernameOrEmail, password) =>
     request("POST", "/api/auth/login", { usernameOrEmail, password }),
   me: () => request("GET", "/api/auth/me"),
+  forgotPassword: (email) => request("POST", "/api/auth/forgot-password", { email }),
+  resetPassword: (token, newPassword) => request("POST", "/api/auth/reset-password", { token, newPassword }),
+  updateEmail: (newEmail, currentPassword) => request("PUT", "/api/account/email", { newEmail, currentPassword }),
+  updatePassword: (currentPassword, newPassword) => request("PUT", "/api/account/password", { currentPassword, newPassword }),
   tank: () => request("GET", "/api/game/tank"),
   heartbeat: () => request("POST", "/api/game/heartbeat"),
   collect: (queueItemId) => request("POST", `/api/game/collect/${queueItemId}`),

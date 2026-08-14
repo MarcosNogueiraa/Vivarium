@@ -6,6 +6,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Vivarium.Api.Data;
+using Vivarium.Api.Services;
 
 namespace Vivarium.Api.Tests;
 
@@ -38,11 +39,20 @@ public class VivariumApiFactory : WebApplicationFactory<Program>
             _connection.Open();
             services.AddDbContext<VivariumDbContext>(o => o.UseSqlite(_connection));
 
+            // Sem Resend:ApiKey nos testes, Program.cs registraria NullEmailSender (só loga) —
+            // troca por um fake que CAPTURA os emails, pra os testes de reset de senha
+            // conseguirem extrair o token bruto do link (só existe no corpo do email).
+            var emailDescriptor = services.SingleOrDefault(d => d.ServiceType == typeof(IEmailSender));
+            if (emailDescriptor is not null) services.Remove(emailDescriptor);
+            services.AddSingleton<IEmailSender, FakeEmailSender>();
+
             using var provider = services.BuildServiceProvider();
             using var scope = provider.CreateScope();
             scope.ServiceProvider.GetRequiredService<VivariumDbContext>().Database.EnsureCreated();
         });
     }
+
+    public FakeEmailSender Emails => (FakeEmailSender)Services.GetRequiredService<IEmailSender>();
 
     protected override void Dispose(bool disposing)
     {
