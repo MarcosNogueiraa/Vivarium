@@ -37,19 +37,21 @@ public class IncomeCalculatorTests
         double meio = IncomeCalculator.CoinsPerHour(taperScore + 2.25m, Cfg);
         double topoObservado = IncomeCalculator.CoinsPerHour(taperScore + 6.25m, Cfg); // ~máx observado (100k/1M seeds)
 
-        // Piso do taper subiu de ~100/h pra ~137/h (13/08/2026) — consequência esperada de
-        // empurrar IncomeLegendaryTaperScore de 14.0 pra 14.75 (mesma curva exponencial
-        // normal, só compõe por mais distância antes do taper entrar): não é regressão, é o
-        // Lendário renovado ficar mais raro (0.15% vs 0.2%) render um pouco mais no piso também.
-        Assert.InRange(piso, 130, 145);
+        // Piso do taper subiu de ~137/h pra ~298/h (14/08/2026) — consequência esperada de
+        // empurrar IncomeLegendaryTaperScore de 14.75 pra 16.60 (pirâmide "Íngreme",
+        // ShimmerTiers.Legendary 0,2%→0,02%): mesma curva exponencial normal, só compõe por
+        // mais distância antes do taper entrar. Não é regressão.
+        Assert.InRange(piso, 285, 310);
         Assert.True(meio > piso && topoObservado > meio); // ainda crescente, não achata de vez
-        Assert.True(topoObservado < 300);          // teto comprimido (era ~1958/h sem taper)
+        Assert.True(topoObservado < 600);          // teto comprimido (era ~1958/h sem taper)
         Assert.True(topoObservado / piso < 2.5);    // variação interna do Lendário: era 19.6x, agora <2.5x
 
-        // Contínuo no ponto de corte: sem salto ao cruzar o piso do taper.
+        // Contínuo no ponto de corte: sem salto ao cruzar o piso do taper. Tolerância relativa
+        // ao piso (não absoluta) — o piso subiu bastante (14/08/2026) e a inclinação local da
+        // exponencial escala com o valor da função, não é sinal de descontinuidade real.
         double logoAbaixo = IncomeCalculator.CoinsPerHour(taperScore - 0.001m, Cfg);
         double logoAcima = IncomeCalculator.CoinsPerHour(taperScore + 0.001m, Cfg);
-        Assert.True(Math.Abs(logoAcima - logoAbaixo) < 0.1);
+        Assert.True(Math.Abs(logoAcima - logoAbaixo) < piso * 0.005);
 
         // Abaixo do piso, comportamento idêntico ao de antes (não mexe em Épico pra baixo).
         double epico = IncomeCalculator.CoinsPerHour(11m, Cfg);

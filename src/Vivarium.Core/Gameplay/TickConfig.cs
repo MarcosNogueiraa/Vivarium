@@ -68,8 +68,13 @@ public sealed record TickConfig
     /// 13/08/2026: 14.0 → 14.75, acompanhando a recalibração de BANDS (fishRenderer.js)
     /// depois da cor do brilho passar a somar pontos — precisa mudar JUNTO, senão o taper
     /// de renda desalinha de onde o Lendário realmente começa na UI.
+    /// 14/08/2026: 14.75 → 16.60, pirâmide "Íngreme" (Lendário 1/5.000, ShimmerTiers.Legendary
+    /// 0,2%→0,02%) — o corte de score subiu bastante (calibrado via Vivarium.Simulation, 5M
+    /// seeds), então o piso do taper precisa acompanhar. Piso da renda no novo corte sobe pra
+    /// ~298/h (era ~137/h) — consequência esperada de exigir um score bem mais alto pra chegar
+    /// no topo; revalidar com `Vivarium.Simulation economy`/`simulate`.
     /// </summary>
-    public double IncomeLegendaryTaperScore { get; init; } = 14.75;
+    public double IncomeLegendaryTaperScore { get; init; } = 16.60;
     /// <summary>
     /// 0.10 (12/08/2026, conservador — usuário pediu a opção que evita disparos de farm de
     /// soft): com growth normal (0.42) sem teto, o próprio Lendário tinha 19.6x de variação

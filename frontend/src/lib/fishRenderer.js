@@ -19,6 +19,25 @@ const SHIMMER_HEX = {
   Copper: "#c17a45", Bronze: "#8c6239", Turquoise: "#2dd4bf", Amber: "#e8a33d",
   Crimson: "#dc2626", SteelBlue: "#4a76a8",
 };
+// 14/08/2026: SteelBlue era a cor mais rara do tier Raro (peso 10, mais raro que Crimson 18)
+// mas com tratamento "sólido" simples parecia banal demais pra essa raridade (feedback do
+// usuário: "não parece ser tão raro... ele é simples"). Em vez de renumerar os pesos (a
+// raridade em si estava correta, só o visual não fazia jus), ganhou o mesmo tratamento
+// metálico de Gold/Silver/Pearl — thematicamente óbvio ("aço" = metal) e resolve o
+// descompasso sem mexer na tabela de pesos.
+// 14/08/2026: Cobre e Bronze eram as 2 cores mais raras do tier Sutil depois de Pearl (10%/15%,
+// vs Gold 25%/Silver 22% mais comuns) mas ficavam com preenchimento sólido — mesmo descompasso
+// do SteelBlue, e ambas já são nomes de metal (fazia pouco sentido só 3 dos 5 "materiais" do
+// tier terem brilho metálico). Bluish continua sólida — é a única cor do tier que não é nome
+// de material, faz sentido ficar de fora.
+const METALLIC_SHIMMER = {
+  Gold: { base: "#f7c948", bright: "#fff2c2" },
+  Silver: { base: "#dde3e8", bright: "#ffffff" },
+  Pearl: { base: "#f0e6d2", bright: "#ffffff" },
+  SteelBlue: { base: "#4a76a8", bright: "#cfe8ff" },
+  Copper: { base: "#c17a45", bright: "#ffd9a8" },
+  Bronze: { base: "#8c6239", bright: "#e0b876" },
+};
 
 export const PT = {
   tier: { None: "Sem brilho", Subtle: "Brilho sutil", Vibrant: "Brilho vibrante", Rare: "Brilho raro", Legendary: "Brilho lendário" },
@@ -42,11 +61,19 @@ export const PT = {
 // passar a somar pontos de raridade — pirâmide 50/30/15/4.0/0.15 (topo mais raro que os
 // 4.8/0.2 clássicos, a pedido do usuário; as 3 faixas de baixo continuam na mesma
 // proporção). Faixas baixas também alargaram organicamente (mais variância no score).
+//
+// 14/08/2026 (v3, pirâmide "Íngreme" — CLAUDE.md 5): Lendário caiu pra 1 em 5.000 (0,02%,
+// era 0,15%) — TraitConfigV1.ShimmerTiers.Legendary reduzido de 0,2%→0,02% (chance REAL de
+// sortear o brilho, não só o rótulo — mover só o corte de score sem tocar no peso não
+// desaceleraria nada de verdade). Raro 1,00%/Épico 0,10% também. Comum ficou em 50% (mesmo
+// tamanho de antes — testado em simulação: deixar Comum crescer pra 61,8% quase dobrava a
+// taxa de peixe "Comum" carregando algum atributo isolado raríssimo, 9,43% vs 4,99%);
+// Incomum absorve o resto do espaço liberado. Calibrado via `Vivarium.Simulation` (5M seeds).
 export const BANDS = [
   { max: 5.45, name: "Comum", color: "#93a7b0" },
-  { max: 7.75, name: "Incomum", color: "#57b876" },
-  { max: 10.18, name: "Raro", color: "#4d8fe0" },
-  { max: 14.75, name: "Épico", color: "#a86ce4" },
+  { max: 12.24, name: "Incomum", color: "#57b876" },
+  { max: 14.85, name: "Raro", color: "#4d8fe0" },
+  { max: 16.60, name: "Épico", color: "#a86ce4" },
   { max: Infinity, name: "Lendário", color: "#f0b93b" },
 ];
 export const bandOf = (score) => BANDS.find((b) => score < b.max);
@@ -428,19 +455,22 @@ function drawShimmer(ctx, traits, time) {
       grad.addColorStop(i / 4, `hsl(${(hue + i * 45) % 360} 90% 65%)`);
     ctx.fillStyle = grad;
   } else if (traits.shimmerColor === "Aurora") {
-    // Irmão do Iridescent (13/08/2026) — também anima o matiz no tempo, mas numa faixa
-    // estreita verde→azul→roxo (140-280°) em vez do espectro completo, pra ficar
-    // visualmente distinguível do lendário "principal".
-    const hue = 140 + ((time / 40) % 140);
-    const grad = ctx.createLinearGradient(bx, 0, bx + bw, 0);
-    for (let i = 0; i <= 4; i++)
-      grad.addColorStop(i / 4, `hsl(${hue + i * 20} 85% 62%)`);
+    // "Aurora boreal" (13/08/2026, revisado — a v1 usava módulo, que reiniciava com um
+    // salto brusco de matiz toda vez que o ciclo virava, e o espalhamento do gradiente
+    // (i*20 em cima de uma faixa de 140°) acabava cobrindo quase o espectro inteiro,
+    // ficando parecido demais com o Iridescent). Agora: seno (nunca "pula", só oscila
+    // suave pra frente e pra trás) restrito a verde/ciano — nunca sai dessa família de
+    // cor — e gradiente VERTICAL (Iridescent é horizontal), mais uma diferença visual.
+    const hue = 165 + 20 * Math.sin(time / 2200);
+    const grad = ctx.createLinearGradient(bx, BODY_BBOX[1], bx, BODY_BBOX[1] + BODY_BBOX[3]);
+    grad.addColorStop(0, `hsl(${hue - 12} 78% 52%)`);
+    grad.addColorStop(0.5, `hsl(${hue + 8} 85% 62%)`);
+    grad.addColorStop(1, `hsl(${hue - 12} 78% 52%)`);
     ctx.fillStyle = grad;
-  } else if (traits.shimmerColor === "Gold" || traits.shimmerColor === "Silver" || traits.shimmerColor === "Pearl") {
+  } else if (METALLIC_SHIMMER[traits.shimmerColor]) {
     // Metálico: realça pra não confundir com o cinza do peixe comum
     ctx.globalAlpha = Math.min(1, (traits.shimmerOpacity / 100) * 2.2);
-    const base = traits.shimmerColor === "Pearl" ? "#f0e6d2" : SHIMMER_HEX[traits.shimmerColor];
-    const bright = traits.shimmerColor === "Gold" ? "#fff2c2" : "#ffffff";
+    const { base, bright } = METALLIC_SHIMMER[traits.shimmerColor];
     const grad = ctx.createLinearGradient(bx, BODY_BBOX[1], bx + bw, BODY_BBOX[1] + BODY_BBOX[3]);
     grad.addColorStop(0, base);
     grad.addColorStop(0.5, bright);

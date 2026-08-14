@@ -102,6 +102,25 @@ for (int i = 0; i < n; i++)
 Console.WriteLine("SHIMMER DO CORPO           esperado    real");
 Print(all, t => t.ShimmerTier, TraitConfigV1.ShimmerTiers);
 
+// --- Cor do brilho POR TIER (14/08/2026: gap real — só validávamos o tier, nunca a cor dentro
+// dele; "% da população"/"1 em cada X" é a frequência ABSOLUTA (peso do tier × peso da cor no
+// tier), pedido explícito pra julgar se cada cor "parece" rara o bastante em termos absolutos,
+// não só condicional ao tier — ex: Preto Absoluto, Iridescente).
+Console.WriteLine("\nCOR DO BRILHO POR TIER   peso-no-tier   real-no-tier   % população   1 em cada X");
+foreach (var (tier, colors) in TraitConfigV1.ShimmerColorsByTier)
+{
+    var inTier = all.Where(t => t.ShimmerTier == tier).ToList();
+    if (inTier.Count == 0) continue;
+    Console.WriteLine($"  {tier}:");
+    foreach (var entry in colors)
+    {
+        double realInTier = inTier.Count(t => t.ShimmerColor == entry.Value) / (double)inTier.Count * 100;
+        double popPct = all.Count(t => t.ShimmerTier == tier && t.ShimmerColor == entry.Value) / (double)all.Count * 100;
+        string oneInX = popPct > 0 ? (100.0 / popPct).ToString("N0", CultureInfo.InvariantCulture) : "-";
+        Console.WriteLine($"    {entry.Value,-15} {entry.Weight,8:0.0}%      {realInTier,8:0.00}%     {popPct,10:0.0000}%   1 em {oneInX}");
+    }
+}
+
 // --- Cor das partes (sem correlação seria a tabela base; correlação distorce de leve) ---
 Console.WriteLine("\nCOR DAS PARTES (3 por criatura)  base    real");
 var partColors = all.SelectMany(t => new[] { t.Tail, t.Dorsal, t.Pectoral }).ToList();
@@ -158,6 +177,62 @@ Console.WriteLine($"  Incomum  < {Percentile(scores, 80):0.00}");
 Console.WriteLine($"  Raro     < {Percentile(scores, 95):0.00}");
 Console.WriteLine($"  Épico    < {Percentile(scores, 99.85):0.00}");
 Console.WriteLine($"  Lendário ≥ {Percentile(scores, 99.85):0.00}");
+
+// 14/08/2026: pirâmide "Íngreme" (Lendário 1/5.000). Comum fica em 50% (igual à pirâmide
+// anterior — testado e reduz a "aberração" de atributo raríssimo isolado em peixe Comum pela
+// metade em relação a deixar Comum crescer pra 61,80%, ver ABERRAÇÃO EM PEIXE COMUM abaixo);
+// Incomum absorve o resto do espaço liberado por Raro/Épico/Lendário encolherem. Cortes SEMPRE
+// batem exatamente com o % alvo por construção (percentil); o que precisa de calibração de
+// verdade é ShimmerTiers (acima), não este corte em si.
+double pLendario = 99.98, pEpico = 99.88, pRaro = 98.88, pIncomum = 50.00;
+Console.WriteLine("\nCORTES ÍNGREME (pirâmide 50.00/48.88/1.00/0.10/0.02):");
+Console.WriteLine($"  Comum    < {Percentile(scores, pIncomum):0.00}");
+Console.WriteLine($"  Incomum  < {Percentile(scores, pRaro):0.00}");
+Console.WriteLine($"  Raro     < {Percentile(scores, pEpico):0.00}");
+Console.WriteLine($"  Épico    < {Percentile(scores, pLendario):0.00}");
+Console.WriteLine($"  Lendário ≥ {Percentile(scores, pLendario):0.00}");
+
+// Coerência do rótulo: o corte acima SEMPRE produz exatamente 0,02% de peixes "Lendário" (é
+// definição de percentil) — o que precisa ser verificado é se esses 0,02% são DE VERDADE peixes
+// com brilho Legendary (não uma combinação de sorte de tiers menores), e se a maioria dos peixes
+// com brilho Legendary de fato caem nessa faixa. Sem isso, o rótulo "Lendário" perderia sentido
+// (ou o brilho Legendary apareceria rotulado como "Épico").
+double legendaryCut = Percentile(scores, pLendario);
+var trueLegendary = all.Where(t => t.ShimmerTier == ShimmerTier.Legendary).ToList();
+var labelLegendary = all.Where(t => t.RarityScore >= legendaryCut).ToList();
+double pctTrueLegendaryInBand = trueLegendary.Count == 0 ? 0
+    : trueLegendary.Count(t => t.RarityScore >= legendaryCut) / (double)trueLegendary.Count * 100;
+double pctBandIsTrueLegendary = labelLegendary.Count == 0 ? 0
+    : labelLegendary.Count(t => t.ShimmerTier == ShimmerTier.Legendary) / (double)labelLegendary.Count * 100;
+Console.WriteLine($"\n  Coerência do rótulo Lendário (corte {legendaryCut:0.00}):");
+Console.WriteLine($"    % dos peixes com brilho Legendary que caem na faixa Lendário: {pctTrueLegendaryInBand:0.0}%");
+Console.WriteLine($"    % da faixa Lendário que É brilho Legendary de verdade:        {pctBandIsTrueLegendary:0.0}%");
+
+// 14/08/2026: pergunta do usuário — será que "Comum" acaba carregando atributo individualmente
+// raríssimo que só não pesou o bastante pra escapar da faixa? Checa a % de peixes Comum com
+// QUALQUER um: padrão raro (peso <=1%: Gradient/Mottled/Ocellus/Marble), cor PureWhite (1%) em
+// alguma parte, ou qualquer brilho (shimmer != None). Testado com Comum em 50/55/61,8% antes de
+// decidir — 61,8% quase dobrava a taxa (9,43% vs 4,99%), por isso Comum ficou em 50% (acima).
+static void ReportComumAberration(double[] scores, List<CreatureTraits> all, double cutoff, string label)
+{
+    var comuns = all.Where(t => t.RarityScore < cutoff).ToList();
+    bool HasRareTrait(CreatureTraits t)
+    {
+        if (t.ShimmerTier != ShimmerTier.None) return true;
+        foreach (var p in new[] { t.Tail, t.Dorsal, t.Pectoral })
+        {
+            if (p.Color == PartColor.PureWhite) return true;
+            if (p.Pattern is PatternType.Gradient or PatternType.Mottled or PatternType.Ocellus or PatternType.Marble) return true;
+        }
+        return false;
+    }
+    double pct = comuns.Count == 0 ? 0 : comuns.Count(HasRareTrait) / (double)comuns.Count * 100;
+    Console.WriteLine($"  {label} (corte <{cutoff:0.00}, {comuns.Count:N0} peixes): {pct:0.00}% têm algum atributo raríssimo isolado");
+}
+Console.WriteLine("\nABERRAÇÃO EM PEIXE COMUM (atributo raríssimo isolado, score não decolou):");
+ReportComumAberration(scores, all, Percentile(scores, 50), "Comum=50%   (escolhido)");
+ReportComumAberration(scores, all, Percentile(scores, 55), "Comum=55%   (referência)");
+ReportComumAberration(scores, all, Percentile(scores, 61.80), "Comum=61,8% (referência)");
 
 // Faixas originais do CLAUDE.md, pra comparação
 Console.WriteLine("\nFAIXAS ORIGINAIS DO CLAUDE.md (0-2 / 2-4 / 4-7 / 7-10 / 10+):");
@@ -316,8 +391,11 @@ static void EconomyReport()
     int interval = HabitatDefaults.GenerationIntervalMinutes;
 
     // Probabilidade de lendário (score >= 14.0, faixa v2) por peixe coletado
-    const double LegendaryCut = 14.75; // 13/08/2026: acompanha a recalibração de BANDS
-    int N = 200_000, leg = 0;
+    // 14/08/2026: 14.75 → 16.60, pirâmide "Íngreme" (Lendário 1/5.000) — amostra maior (1M, era
+    // 200k) porque o alvo agora é bem mais raro (0,02%), precisa de mais seeds pra uma
+    // estimativa de cadência estável.
+    const double LegendaryCut = 16.60;
+    int N = 1_000_000, leg = 0;
     var rng = new Random(7);
     for (int i = 0; i < N; i++)
         if ((double)TraitGenerator.Generate(rng.NextInt64()).RarityScore >= LegendaryCut) leg++;

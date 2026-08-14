@@ -146,17 +146,18 @@ describe("coinsPerHourOf", () => {
   });
 
   it("taper do Lendário comprime a variação acima do piso (12/08/2026)", () => {
-    // 13/08/2026: piso subiu de ~100/h pra ~137/h junto com o corte de Lendário
-    // (14.0 → 14.75, recalibração de BANDS) — mesma curva exponencial, só compõe por
-    // mais distância antes do taper entrar. Não é regressão.
+    // 14/08/2026: piso subiu de ~137/h pra ~298/h junto com o corte de Lendário (14.75 → 16.60,
+    // pirâmide "Íngreme", ShimmerTiers.Legendary 0,2%→0,02%) — mesma curva exponencial, só
+    // compõe por mais distância antes do taper entrar. Não é regressão.
     const taperScore = CONFIG.income.taperScore;
     const piso = coinsPerHourOf(taperScore);
     const topoObservado = coinsPerHourOf(taperScore + 6.25);
-    expect(piso).toBeGreaterThan(130);
-    expect(piso).toBeLessThan(145);
+    expect(piso).toBeGreaterThan(285);
+    expect(piso).toBeLessThan(310);
     expect(topoObservado / piso).toBeLessThan(2.5);
-    // contínuo no corte, sem salto
-    expect(Math.abs(coinsPerHourOf(taperScore + 0.001) - coinsPerHourOf(taperScore - 0.001))).toBeLessThan(0.1);
+    // contínuo no corte, sem salto — tolerância relativa ao piso (a inclinação local escala
+    // com o valor da função, não é sinal de descontinuidade real)
+    expect(Math.abs(coinsPerHourOf(taperScore + 0.001) - coinsPerHourOf(taperScore - 0.001))).toBeLessThan(piso * 0.005);
   });
 });
 

@@ -21,15 +21,28 @@ public static class TraitConfigV1
     // de verdade, congelado no nascimento). O que sincroniza criaturas antigas de verdade é
     // rodar `Vivarium.AdminReset -- backfill-traits` depois do deploy (idempotente, já é
     // parte do processo padrão).
-    public const int Version = 3;
+    // 3 -> 4 (14/08/2026): ShimmerTiers.Legendary reduzido 0,2%→0,02% (1 em 5.000, pirâmide
+    // "Íngreme") — muda o peso de um trait já existente. Mesma nota de 2->3 vale aqui: como os
+    // traits nascem congelados (TraitsJson), esse bump só importa pra auditoria/histórico —
+    // rodar `Vivarium.AdminReset -- backfill-traits` antes E depois do deploy backend (janela
+    // documentada em CLAUDE.md §8.22.1) e `audit-ancestry` depois.
+    public const int Version = 4;
 
+    // 14/08/2026: as faixas de EXIBIÇÃO (BANDS, score-based) já são recortadas por percentil —
+    // por construção, sempre produzem exatamente a % alvo da pirâmide (Comum/Incomum/Raro/Épico/
+    // Lendário), não importa o peso aqui. O que este peso controla é a chance REAL de sortear
+    // brilho Legendary do zero — decisão do usuário: manter o caminho de cruzamento (mesma cor/
+    // padrão nas 3 partes, já favorecido pelo viés de raridade da herança) como rota legítima e
+    // igualmente válida até o topo, então só o Legendary foi reduzido (0,2%→0,02%, mesma conta
+    // "1.000 jogadores × 1 peixe/h ÷ 5.000 ≈ 5 lendários/dia no servidor inteiro" usada pra
+    // decidir o alvo) — Subtle/Vibrant/Rare/None ficam como estavam, sem necessidade de mexer.
     public static readonly IReadOnlyList<WeightedValue<ShimmerTier>> ShimmerTiers =
     [
         new(ShimmerTier.None, 78.0),
         new(ShimmerTier.Subtle, 15.0),
         new(ShimmerTier.Vibrant, 5.5),
         new(ShimmerTier.Rare, 1.3),
-        new(ShimmerTier.Legendary, 0.2),
+        new(ShimmerTier.Legendary, 0.02),
     ];
 
     // 13/08/2026: mais cores por tier + peso desigual dentro do tier (antes era sorteio

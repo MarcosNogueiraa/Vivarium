@@ -3,8 +3,9 @@ import { PT } from "./fishRenderer.js";
 
 export const PART_PT = { tail: "Cauda", dorsal: "Dorsal", pectoral: "Peitoral" };
 
-// Recalibrado 13/08/2026 junto com BANDS (fishRenderer.js) — manter em sincronia.
-export const RARITY_RANGES = ["menos de 5.45", "5.45 – 7.75", "7.75 – 10.18", "10.18 – 14.75", "14.75 ou mais"];
+// Recalibrado 14/08/2026 junto com BANDS (fishRenderer.js) — pirâmide "Íngreme", manter em
+// sincronia.
+export const RARITY_RANGES = ["menos de 5.45", "5.45 – 12.24", "12.24 – 14.85", "14.85 – 16.60", "16.60 ou mais"];
 
 // Rótulo humano de um fator do breakdown de raridade (atributo primeiro, parte depois)
 export function factorLabel(f) {

@@ -79,8 +79,9 @@ export function roll01(seed, salt) {
 }
 
 export const CONFIG = {
+  // 14/08/2026: Legendary 0,2%→0,02% (1 em 5.000) — TraitConfigV1.ShimmerTiers em sincronia.
   shimmerTiers: [
-    ["None", 78.0], ["Subtle", 15.0], ["Vibrant", 5.5], ["Rare", 1.3], ["Legendary", 0.2],
+    ["None", 78.0], ["Subtle", 15.0], ["Vibrant", 5.5], ["Rare", 1.3], ["Legendary", 0.02],
   ],
   // 13/08/2026: mais cores por tier + peso desigual (antes uniforme, sem entrar no score) —
   // espelha TraitConfigV1.ShimmerColorsByTier (manter em sincronia).
@@ -121,7 +122,7 @@ export const CONFIG = {
   // Renda por peixe — espelha IncomeCalculator/TickConfig (manter em sincronia)
   // taperScore/taperGrowth (12/08/2026): acima do piso Lendário, crescimento reduzido e
   // contínuo — espelha TickConfig.IncomeLegendaryTaperScore/Growth (manter em sincronia)
-  income: { base: 1.5, growth: 0.42, ref: 4.0, taperScore: 14.75, taperGrowth: 0.10 },
+  income: { base: 1.5, growth: 0.42, ref: 4.0, taperScore: 16.60, taperGrowth: 0.10 },
   synergy: { perMatch: 0.15, maxBonus: 0.80 },
   // Venda ao NPC (vendor, §8.12) — espelha VendorCalculator/TickConfig (manter em sincronia)
   vendor: { hoursEquivalent: 2.0, minPrice: 1 },
@@ -229,11 +230,25 @@ export function probabilityOf(table, value) {
   return match / total;
 }
 
+// 14/08/2026: acima dessa discrepância (log10 da razão entre as 2 probabilidades), o viés
+// amortece linearmente até virar 0 em RARITY_BIAS_ZERO_LOG_RATIO — espelha
+// WeightedValue.cs/BiasedInheritProbability (ver lá a justificativa completa: encolher um peso
+// raro sem isso facilitava "lavar" esse valor cruzando com um parceiro comum).
+const RARITY_BIAS_FULL_LOG_RATIO = 2.6;
+const RARITY_BIAS_ZERO_LOG_RATIO = 4.5;
+
 /** bias=0 é 50/50 puro; bias=1 pesa pelo inverso exato da probabilidade. */
 export function biasedInheritProbability(probA, probB, bias) {
-  if (bias <= 0) return 0.5;
-  const wA = Math.pow(probA, -bias);
-  const wB = Math.pow(probB, -bias);
+  if (bias <= 0 || probA === probB) return 0.5;
+  const logRatio = Math.log10(Math.max(probA, probB) / Math.min(probA, probB));
+  let effectiveBias = bias;
+  if (logRatio > RARITY_BIAS_FULL_LOG_RATIO) {
+    const t = Math.min(1, (logRatio - RARITY_BIAS_FULL_LOG_RATIO) / (RARITY_BIAS_ZERO_LOG_RATIO - RARITY_BIAS_FULL_LOG_RATIO));
+    effectiveBias = bias * (1 - t);
+  }
+  if (effectiveBias <= 0) return 0.5;
+  const wA = Math.pow(probA, -effectiveBias);
+  const wB = Math.pow(probB, -effectiveBias);
   return wA / (wA + wB);
 }
 

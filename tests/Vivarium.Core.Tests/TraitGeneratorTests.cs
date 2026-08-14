@@ -88,7 +88,10 @@ public class TraitGeneratorTests
     [Fact]
     public void DistribuicaoDeShimmer_BateComOsPesos()
     {
-        const int n = 50_000;
+        // 14/08/2026: n subiu de 50k pra 300k — com Legendary em 0,02% (era 0,2%, pirâmide
+        // "Íngreme"), 50k só dava ~10 hits esperados, ruidoso demais pra validar ordem de
+        // grandeza. Com 300k, ~60 hits esperados.
+        const int n = 300_000;
         var counts = new Dictionary<ShimmerTier, int>();
         for (long seed = 1; seed <= n; seed++)
         {
@@ -101,7 +104,7 @@ public class TraitGeneratorTests
         Assert.InRange(counts[ShimmerTier.Subtle] / (double)n, 0.13, 0.17);
         Assert.InRange(counts[ShimmerTier.Vibrant] / (double)n, 0.045, 0.065);
         Assert.InRange(counts[ShimmerTier.Rare] / (double)n, 0.009, 0.017);
-        Assert.InRange(counts[ShimmerTier.Legendary] / (double)n, 0.001, 0.0035);
+        Assert.InRange(counts[ShimmerTier.Legendary] / (double)n, 0.00008, 0.0004);
     }
 
     [Fact]
