@@ -162,4 +162,38 @@ describe("Mercado", () => {
     cy.wait("@listings").its("request.url").should("include", "tailColor=Blue");
     cy.contains("button.detail-section-head", "Filtros avançados (1)");
   });
+
+  it("marcar duas cores na mesma parte manda os dois valores (OU) pra API", () => {
+    const l = listing(702, 2, "vendedor", 1111, 5.0, 10);
+    cy.intercept("GET", "/api/market/listings*", { body: envelope({ listings: [l] }) }).as("listings");
+    login();
+    cy.wait("@listings");
+
+    cy.contains("button.detail-section-head", "Filtros avançados").click();
+    cy.get(".appearance-filter-part").first().within(() => {
+      cy.get('.color-chip[title="Azul"]').click();
+    });
+    cy.wait("@listings");
+    cy.get(".appearance-filter-part").first().within(() => {
+      cy.get('.color-chip[title="Vermelho"]').click();
+    });
+    cy.wait("@listings").its("request.url").should("match", /tailColor=(Blue%2CRed|Red%2CBlue)/);
+    cy.contains("button.detail-section-head", "Filtros avançados (2)");
+  });
+
+  it("botão de redefinir filtros limpa banda e filtros de parte", () => {
+    const l = listing(703, 2, "vendedor", 1111, 5.0, 10);
+    cy.intercept("GET", "/api/market/listings*", { body: envelope({ listings: [l] }) }).as("listings");
+    login();
+    cy.wait("@listings");
+
+    cy.contains(".filter-chips", "Todos").contains("button", "Raro").click();
+    cy.wait("@listings");
+    cy.contains("button", "↺ Redefinir filtros").should("be.visible");
+
+    cy.contains("button", "↺ Redefinir filtros").click();
+    cy.wait("@listings").its("request.url").should("not.include", "band=");
+    cy.contains("button", "↺ Redefinir filtros").should("not.exist");
+    cy.contains(".filter-chips", "Todos").contains("button.active", "Todos");
+  });
 });

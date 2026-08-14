@@ -308,6 +308,11 @@ public class MarketTests : IClassFixture<VivariumApiFactory>
 
         Assert.Contains(filtered!.Listings, l => l.CreatureId == blueId);
         Assert.DoesNotContain(filtered.Listings, l => l.CreatureId == orangeId);
+
+        // Multi-seleção (13/08/2026): "Blue,Orange" na mesma parte é OU — os dois batem.
+        var either = await viewer.GetFromJsonAsync<MarketListingsResponseDto>("/api/market/listings?tailColor=Blue,Orange");
+        Assert.Contains(either!.Listings, l => l.CreatureId == blueId);
+        Assert.Contains(either.Listings, l => l.CreatureId == orangeId);
     }
 
     public record CreatedDto(long Id);

@@ -17,7 +17,12 @@ const PAGE_SIZE = 24;
 // ainda não justifica extrair hook compartilhado (mantém o escopo desta tarefa enxuto).
 const PARTS = ["tail", "dorsal", "pectoral"];
 const PATTERN_VALUES = CONFIG.patternTypes.map(([v]) => v);
-const emptyPartFilter = { color: "all", pattern: "all" };
+// Multi-seleção (13/08/2026, pedido do usuário): dentro do MESMO atributo/parte (ex: cor da
+// dorsal) os valores marcados são OU — "dorsal verde OU vermelha" — array vazio = sem filtro
+// nesse campo (mostra qualquer valor). Serializado pro backend como CSV (api.js já ignora
+// string vazia, então array vazio some da query sozinho).
+const emptyPartFilter = { colors: [], patterns: [] };
+const emptyPartFilters = { tail: { ...emptyPartFilter }, dorsal: { ...emptyPartFilter }, pectoral: { ...emptyPartFilter } };
 
 const SORTS = {
   "newest": { label: "Mais recentes primeiro" },
@@ -59,27 +64,43 @@ export function MarketView({ userId, refreshTank, notify }) {
   const [page, setPage] = useState(0);
   const [sortBy, setSortBy] = useState("newest");
   const [bandFilter, setBandFilter] = useState("all");
-  const [partFilters, setPartFilters] = useState({
-    tail: { ...emptyPartFilter }, dorsal: { ...emptyPartFilter }, pectoral: { ...emptyPartFilter },
-  });
+  const [partFilters, setPartFilters] = useState(emptyPartFilters);
 
   const activeAppearanceFilters = PARTS.reduce(
-    (n, part) => n + (partFilters[part].color !== "all" ? 1 : 0) + (partFilters[part].pattern !== "all" ? 1 : 0),
+    (n, part) => n + partFilters[part].colors.length + partFilters[part].patterns.length,
     0
   );
-  function setPartColor(part, color) {
-    setPartFilters((prev) => ({ ...prev, [part]: { ...prev[part], color } }));
+  function toggleColor(part, color) {
+    setPartFilters((prev) => {
+      const cur = prev[part].colors;
+      const colors = cur.includes(color) ? cur.filter((c) => c !== color) : [...cur, color];
+      return { ...prev, [part]: { ...prev[part], colors } };
+    });
   }
-  function setPartPattern(part, pattern) {
-    setPartFilters((prev) => ({ ...prev, [part]: { ...prev[part], pattern } }));
+  function togglePattern(part, pattern) {
+    setPartFilters((prev) => {
+      const cur = prev[part].patterns;
+      const patterns = cur.includes(pattern) ? cur.filter((p) => p !== pattern) : [...cur, pattern];
+      return { ...prev, [part]: { ...prev[part], patterns } };
+    });
+  }
+  function clearPartColors(part) {
+    setPartFilters((prev) => ({ ...prev, [part]: { ...prev[part], colors: [] } }));
+  }
+  function clearPartPatterns(part) {
+    setPartFilters((prev) => ({ ...prev, [part]: { ...prev[part], patterns: [] } }));
+  }
+  function resetFilters() {
+    setBandFilter("all");
+    setPartFilters(emptyPartFilters);
   }
 
   const refresh = useCallback(async () => {
     setData(await api.listings({
       skip: page * PAGE_SIZE, take: PAGE_SIZE, sort: sortBy, band: bandFilter,
-      tailColor: partFilters.tail.color, tailPattern: partFilters.tail.pattern,
-      dorsalColor: partFilters.dorsal.color, dorsalPattern: partFilters.dorsal.pattern,
-      pectoralColor: partFilters.pectoral.color, pectoralPattern: partFilters.pectoral.pattern,
+      tailColor: partFilters.tail.colors.join(","), tailPattern: partFilters.tail.patterns.join(","),
+      dorsalColor: partFilters.dorsal.colors.join(","), dorsalPattern: partFilters.dorsal.patterns.join(","),
+      pectoralColor: partFilters.pectoral.colors.join(","), pectoralPattern: partFilters.pectoral.patterns.join(","),
     }));
   }, [page, sortBy, bandFilter, partFilters]);
 
@@ -158,10 +179,16 @@ export function MarketView({ userId, refreshTank, notify }) {
                 </button>
               ))}
             </div>
+            <span className="spacer" />
+            {(activeAppearanceFilters > 0 || bandFilter !== "all") && (
+              <button type="button" className="filter-reset-btn" onClick={resetFilters}>
+                ↺ Redefinir filtros
+              </button>
+            )}
           </div>
           <CollapsibleSection
             variant="prominent"
-            hint="Filtre por cor e padrão de cada parte — cauda, dorsal e peitoral, de forma independente."
+            hint="Marque quantos valores quiser em cada atributo — dentro do mesmo atributo funciona como OU (ex: dorsal verde OU vermelha)."
             title={
               <>
                 Filtros avançados{" "}
@@ -175,18 +202,18 @@ export function MarketView({ userId, refreshTank, notify }) {
                   <strong>{PART_PT[part]}</strong>
                   <div className="filter-chips">
                     <button
-                      className={`filter-chip${partFilters[part].color === "all" ? " active" : ""}`}
-                      onClick={() => setPartColor(part, "all")}
+                      className={`filter-chip${partFilters[part].colors.length === 0 ? " active" : ""}`}
+                      onClick={() => clearPartColors(part)}
                     >
                       Toda cor
                     </button>
                     {Object.keys(PART_HEX).map((color) => (
                       <button
                         key={color}
-                        className={`filter-chip color-chip${partFilters[part].color === color ? " active" : ""}`}
+                        className={`filter-chip color-chip${partFilters[part].colors.includes(color) ? " active" : ""}`}
                         style={{ "--tier": PART_HEX[color] }}
                         title={PT.color[color]}
-                        onClick={() => setPartColor(part, color)}
+                        onClick={() => toggleColor(part, color)}
                       >
                         <span className="dot-color" style={{ background: PART_HEX[color] }} />
                       </button>
@@ -194,16 +221,16 @@ export function MarketView({ userId, refreshTank, notify }) {
                   </div>
                   <div className="filter-chips">
                     <button
-                      className={`filter-chip${partFilters[part].pattern === "all" ? " active" : ""}`}
-                      onClick={() => setPartPattern(part, "all")}
+                      className={`filter-chip${partFilters[part].patterns.length === 0 ? " active" : ""}`}
+                      onClick={() => clearPartPatterns(part)}
                     >
                       Todo padrão
                     </button>
                     {PATTERN_VALUES.map((pattern) => (
                       <button
                         key={pattern}
-                        className={`filter-chip${partFilters[part].pattern === pattern ? " active" : ""}`}
-                        onClick={() => setPartPattern(part, pattern)}
+                        className={`filter-chip${partFilters[part].patterns.includes(pattern) ? " active" : ""}`}
+                        onClick={() => togglePattern(part, pattern)}
                       >
                         {PT.pattern[pattern]}
                       </button>
