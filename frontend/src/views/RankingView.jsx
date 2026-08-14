@@ -152,10 +152,12 @@ export function RankingView({ notify, exitSpectatorSignal }) {
           </div>
           {spectator.breeding.active ? (
             <>
-              <AquariumCanvas
-                creatures={[spectator.breeding.parentA, spectator.breeding.parentB]}
-                selectedId={null} onSelect={() => {}} interactive={false} ambient theme="breeding"
-              />
+              <div className="tank-stage tier-breeding">
+                <AquariumCanvas
+                  creatures={[spectator.breeding.parentA, spectator.breeding.parentB]}
+                  selectedId={null} onSelect={() => {}} interactive={false} ambient theme="breeding" decorTier={1}
+                />
+              </div>
               <div className="card-row" style={{ justifyContent: "center", gap: 16, marginTop: 12 }}>
                 <RarityBadge score={Number(spectator.breeding.parentA.rarityScore)} />
                 <span>+</span>

@@ -44,22 +44,23 @@ function login() {
 }
 
 describe("Toggle do efeito cinema", () => {
-  it("vem ligado por padrão (app-shell com cinema-mode)", () => {
+  it("vem desligado por padrão (14/08/2026: usuário não gostava de a tela escurecer sozinha)", () => {
     login();
-    cy.get(".app-shell").should("have.class", "cinema-mode");
-    cy.get(".tank-layout").should("not.have.class", "cinema-off");
-  });
-
-  it("desligar tira o cinema-mode e a vinheta, e persiste depois de recarregar", () => {
-    login();
-    cy.get('.tool-btn[title*="Desligar o efeito cinema"]').click();
-
     cy.get(".app-shell").should("not.have.class", "cinema-mode");
     cy.get(".tank-layout").should("have.class", "cinema-off");
+    cy.get('.tool-btn[title*="Ligar o efeito cinema"]').should("be.visible");
+  });
+
+  it("ligar aplica o cinema-mode e a vinheta, e persiste depois de recarregar", () => {
+    login();
+    cy.get('.tool-btn[title*="Ligar o efeito cinema"]').click();
+
+    cy.get(".app-shell").should("have.class", "cinema-mode");
+    cy.get(".tank-layout").should("not.have.class", "cinema-off");
 
     cy.reload();
     cy.wait("@tank");
-    cy.get(".app-shell").should("not.have.class", "cinema-mode");
-    cy.get('.tool-btn[title*="Ligar o efeito cinema"]').should("be.visible");
+    cy.get(".app-shell").should("have.class", "cinema-mode");
+    cy.get('.tool-btn[title*="Desligar o efeito cinema"]').should("be.visible");
   });
 });

@@ -250,10 +250,12 @@ export function BreedingView({ tank, refreshTank, notify }) {
         <span className="spacer" />
         <button className="guide-btn" onClick={() => setShowHistory(true)} title="Registro de cruzamentos">📜</button>
       </div>
-      <AquariumCanvas
-        creatures={[status.slot.parentA, status.slot.parentB]}
-        selectedId={null} onSelect={() => {}} interactive={false} ambient theme="breeding"
-      />
+      <div className="tank-stage tier-breeding">
+        <AquariumCanvas
+          creatures={[status.slot.parentA, status.slot.parentB]}
+          selectedId={null} onSelect={() => {}} interactive={false} ambient theme="breeding" decorTier={1}
+        />
+      </div>
       <div className="card-row" style={{ justifyContent: "center", gap: 16, marginTop: 12 }}>
         <RarityBadge score={Number(status.slot.parentA.rarityScore)} />
         <span>+</span>
