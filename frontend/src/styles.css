@@ -518,6 +518,23 @@ input:focus {
     inset 0 0 0 1px rgba(255, 255, 255, 0.08),
     inset 0 0 30px rgba(240, 190, 90, 0.10);
 }
+/* Moldura do Ninho (14/08/2026) — mesma linguagem visual da moldura do Master
+   acima (bezel escuro + friso fino), só trocando o metal por rosa, pra combinar
+   com o tema "breeding" (tingimento romântico da água + corações, já existentes
+   em fishRenderer.js). Reaproveita o mesmo padrão de moldura em CSS puro — sem
+   sprite/decoração nova — pedido explícito do usuário pra não "inventar muito"
+   aqui, já que decoração nova de aquário é candidata a item de loja premium no
+   futuro. O aquário do Ninho também ganhou `decorTier={1}` (mais plantas/rochas
+   de fundo, já existentes no motor) em vez de qualquer asset novo. */
+.tank-stage.tier-breeding {
+  border-color: #3a1a26;
+  box-shadow:
+    0 0 0 3px #1c0d14,
+    0 0 0 4px rgba(255, 141, 179, 0.5),
+    0 32px 70px -34px rgba(0, 0, 0, 0.65),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    inset 0 0 30px rgba(255, 141, 179, 0.12);
+}
 .aquarium { display: block; width: 100%; height: auto; cursor: pointer; }
 .aquarium.ambient { cursor: default; }
 

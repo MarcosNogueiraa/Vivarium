@@ -25,9 +25,10 @@ export function GameView({ onLogout }) {
   const [rankingExitSignal, setRankingExitSignal] = useState(0);
   // Efeito "cinema" (escurece tudo fora do aquário, §CSS `.cinema-dim`/`.tank-layout::before`)
   // ficava sempre escuro no mobile — o :hover que clareia de volta no desktop não existe em
-  // telas de toque (pedido do usuário, 12/08/2026). Toggle persistido; ligado por padrão
-  // (preserva o comportamento de sempre pra quem não mexer).
-  const [cinemaEnabled, setCinemaEnabled] = useState(() => localStorage.getItem("cinemaEnabled") !== "false");
+  // telas de toque (pedido do usuário, 12/08/2026). Desligado por padrão (14/08/2026, pedido do
+  // usuário: não gostava de a tela escurecer e precisar passar o mouse em cima pra clarear de
+  // volta) — toggle continua disponível (🎬 no tank-tools) pra quem preferir o efeito.
+  const [cinemaEnabled, setCinemaEnabled] = useState(() => localStorage.getItem("cinemaEnabled") === "true");
   const toggleCinema = () => setCinemaEnabled((v) => { localStorage.setItem("cinemaEnabled", String(!v)); return !v; });
   const [claimingReward, setClaimingReward] = useState(false);
   const [showHowItWorks, setShowHowItWorks] = useState(false);

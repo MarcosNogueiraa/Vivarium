@@ -34,6 +34,8 @@ function spectatorCreature(id, seed, rarityScore) {
   };
 }
 
+const noBreeding = { active: false, parentA: null, parentB: null, readyAt: null, isReady: false };
+
 const incomeBoard = {
   entries: [
     { rank: 1, username: "top1", value: 340.1, isSelf: false },
@@ -94,7 +96,7 @@ describe("Ranking", () => {
     cy.intercept("GET", "/api/leaderboard/visit/top1", {
       body: {
         username: "top1", capacityBandName: "Aquário Grande", maintenanceLevel: 80,
-        rarityTotal: 120.5, coinsPerHour: 340.1, creatures: [],
+        rarityTotal: 120.5, coinsPerHour: 340.1, creatures: [], breeding: noBreeding,
       },
     }).as("visit");
 
@@ -116,7 +118,7 @@ describe("Ranking", () => {
     cy.intercept("GET", "/api/leaderboard/visit/top1", {
       body: {
         username: "top1", capacityBandName: "Aquário Grande", maintenanceLevel: 80,
-        rarityTotal: 120.5, coinsPerHour: 340.1, creatures: [],
+        rarityTotal: 120.5, coinsPerHour: 340.1, creatures: [], breeding: noBreeding,
       },
     }).as("visit");
 
@@ -139,6 +141,7 @@ describe("Ranking", () => {
         username: "top1", capacityBandName: "Aquário Grande", maintenanceLevel: 80,
         rarityTotal: 120.5, coinsPerHour: 340.1,
         creatures: [spectatorCreature(501, 4001, 6.06), spectatorCreature(502, 4002, 9.2)],
+        breeding: noBreeding,
       },
     }).as("visit");
 
@@ -162,6 +165,7 @@ describe("Ranking", () => {
         username: "top1", capacityBandName: "Aquário Grande", maintenanceLevel: 40,
         rarityTotal: 120.5, coinsPerHour: 8.2, // potencial (água cheia) do score 9.2 é ~13.3/h — 40% de água reduz bem abaixo disso
         creatures: [spectatorCreature(502, 4002, 9.2)],
+        breeding: noBreeding,
       },
     }).as("visitSujo");
 
@@ -181,6 +185,7 @@ describe("Ranking", () => {
         username: "top1", capacityBandName: "Aquário Grande", maintenanceLevel: 100,
         rarityTotal: 120.5, coinsPerHour: 13.33, // água cheia == potencial calculado client-side
         creatures: [spectatorCreature(502, 4002, 9.2)],
+        breeding: noBreeding,
       },
     }).as("visitLimpo");
 
@@ -188,5 +193,60 @@ describe("Ranking", () => {
     cy.wait("@visitLimpo");
 
     cy.get(".water-loss").should("not.exist");
+  });
+
+  it("visitar mostra 'Ninho vazio' quando o jogador não tem gestação em andamento", () => {
+    cy.intercept("GET", "/api/leaderboard/rarity", { body: rarityBoard }).as("rarity");
+    login();
+    cy.wait("@rarity");
+
+    cy.intercept("GET", "/api/leaderboard/visit/top1", {
+      body: {
+        username: "top1", capacityBandName: "Aquário Grande", maintenanceLevel: 80,
+        rarityTotal: 120.5, coinsPerHour: 340.1, creatures: [], breeding: noBreeding,
+      },
+    }).as("visit");
+
+    cy.contains(".leaderboard-row", "top1").contains("button", "Visitar").click();
+    cy.wait("@visit");
+
+    cy.contains(".eyebrow", "Ninho").should("be.visible");
+    cy.contains("Ninho vazio no momento.");
+  });
+
+  it("visitar mostra os pais em gestação no Ninho, sem informação financeira (14/08/2026)", () => {
+    cy.intercept("GET", "/api/leaderboard/rarity", { body: rarityBoard }).as("rarity");
+    login();
+    cy.wait("@rarity");
+
+    const readyAt = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString();
+    cy.intercept("GET", "/api/leaderboard/visit/top1", {
+      body: {
+        username: "top1", capacityBandName: "Aquário Grande", maintenanceLevel: 80,
+        rarityTotal: 120.5, coinsPerHour: 340.1, creatures: [],
+        breeding: {
+          active: true,
+          parentA: spectatorCreature(601, 5001, 7.1),
+          parentB: spectatorCreature(602, 5002, 8.4),
+          readyAt, isReady: false,
+        },
+      },
+    }).as("visitNinho");
+
+    cy.contains(".leaderboard-row", "top1").contains("button", "Visitar").click();
+    cy.wait("@visitNinho");
+
+    cy.contains(".eyebrow", "Ninho").should("be.visible");
+    cy.contains(".hint", "Ninho vazio no momento.").should("not.exist");
+    cy.contains("7.1");
+    cy.contains("8.4");
+    // Sem custo/risco/seguro expostos ao espectador — a seção do Ninho não menciona
+    // premium/soft nem "risco", diferente da tela do próprio dono (BreedingView).
+    // A chip 💎 do topbar (saldo do PRÓPRIO visitante) continua existindo à parte —
+    // por isso o escopo é só dentro da seção do Ninho, não a página inteira.
+    cy.contains(".eyebrow", "Ninho").parents("section.cinema-dim").within(() => {
+      cy.contains("💎").should("not.exist");
+      cy.contains("risco", { matchCase: false }).should("not.exist");
+    });
   });
 });

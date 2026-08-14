@@ -1143,17 +1143,20 @@ export function drawTankForeground(ctx, W, H, time, quality = 100, theme = "defa
   drawAirStoneBase(ctx, W, H);
   drawAirStoneBubbles(ctx, W, H, time, true);
 
-  // Corações subindo, bem sutis — só no tema "breeding" (ninho)
+  // Corações subindo — só no tema "breeding" (ninho). Contagem/opacidade um
+  // pouco maiores que a versão original (14/08/2026, pedido do usuário: o
+  // aquário do Ninho estava "muito simples") — ainda o mesmo elemento, só
+  // mais presente, sem introduzir nenhum asset novo.
   if (theme === "breeding") {
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 10; i++) {
       const col = hash01(i * 5.7 + 50) * W;
-      const speed = 18 + hash01(i * 3.1 + 50) * 16;
+      const speed = 16 + hash01(i * 3.1 + 50) * 16;
       const bx = col + Math.sin(time / 1400 + i * 2.1) * 14;
       const by = H - (((time / 1000) * speed + hash01(i * 2.9 + 50) * H) % (H + 40));
-      const size = 6 + hash01(i * 4.4 + 50) * 5;
-      drawHeart(ctx, bx, by, size, 0.14 + hash01(i * 1.3 + 50) * 0.1);
+      const size = 6 + hash01(i * 4.4 + 50) * 7;
+      drawHeart(ctx, bx, by, size, 0.18 + hash01(i * 1.3 + 50) * 0.14);
     }
     ctx.restore();
   }
