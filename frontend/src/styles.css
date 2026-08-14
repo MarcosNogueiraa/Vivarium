@@ -910,6 +910,16 @@ input:focus {
   border-radius: 50%; font-weight: 700; color: var(--muted);
   background: rgba(6, 26, 34, 0.78); border: 1px solid var(--line);
 }
+/* Caixa de entrada (14/08/2026): ícone solto, não mais aba — bolinha vermelha com número
+   branco, travada em "9+" a partir de 10 (GameView.jsx calcula o texto). */
+.inbox-btn { position: relative; }
+.inbox-badge {
+  position: absolute; top: -4px; right: -4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 999px; font-size: 0.66rem; font-weight: 800; line-height: 1;
+  background: #e53e3e; color: #fff; border: 1px solid rgba(6, 26, 34, 0.78);
+}
 .income-chip .of-potential { color: var(--muted); font-weight: 500; font-size: 0.74rem; }
 .stat-chip .of-potential { color: var(--muted); font-weight: 500; font-size: 0.74rem; }
 

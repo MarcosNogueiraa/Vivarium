@@ -18,12 +18,13 @@ import { RarityGuide } from "./RarityGuide.jsx";
 import { AdminPanel } from "../components/AdminPanel.jsx";
 import { AccountMenu } from "../components/AccountMenu.jsx";
 import { TankUpgradeCelebration } from "../components/TankUpgradeCelebration.jsx";
+import { Modal } from "../components/Modal.jsx";
 
 export function GameView({ onLogout }) {
   const { tank, userId, refreshTank, syncError, bandUpgrade, dismissBandUpgrade } = useGame();
   const { toast, notify, dismiss: dismissToast } = useToast();
   const { status: dailyReward, refresh: refreshDailyReward } = useDailyReward();
-  // Compartilhado entre o badge da aba e a InboxView (recebe entries/refresh via props, não
+  // Compartilhado entre o badge do ícone e a InboxView (recebe entries/refresh via props, não
   // chama useInbox() de novo) — evita duplicar o polling batendo no mesmo endpoint.
   const { entries: inboxEntries, unclaimedCount: inboxUnclaimedCount, refresh: refreshInbox } = useInbox();
   const [tab, setTab] = useState("tank");
@@ -39,6 +40,7 @@ export function GameView({ onLogout }) {
   const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [showRarityGuide, setShowRarityGuide] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showInbox, setShowInbox] = useState(false);
   const navRef = useRef(null);
 
   // Em telas estreitas o nav vira uma tira de rolagem horizontal (styles.css,
@@ -73,6 +75,9 @@ export function GameView({ onLogout }) {
 
   const soft = Number(tank.wallet?.SOFT ?? 0);
   const premium = Number(tank.wallet?.PREMIUM ?? 0);
+  // 14/08/2026, pedido do usuário: não é mais uma aba — só um ícone com uma bolinha
+  // vermelha (número branco), travada em "9+" a partir de 10 pra nunca estourar o layout.
+  const inboxBadgeText = inboxUnclaimedCount > 9 ? "9+" : String(inboxUnclaimedCount);
 
   return (
     <div className={`app-shell${tab === "tank" && cinemaEnabled ? " cinema-mode" : ""}`}>
@@ -87,9 +92,6 @@ export function GameView({ onLogout }) {
         <div className="topbar-tabs">
           <nav className="nav-pills" ref={navRef}>
             <button data-tab="tank" className={tab === "tank" ? "active" : ""} onClick={() => setTab("tank")}>Tanque</button>
-            <button data-tab="inbox" className={tab === "inbox" ? "active" : ""} onClick={() => setTab("inbox")}>
-              📬 Caixa{inboxUnclaimedCount > 0 && <span className="filter-count-badge">{inboxUnclaimedCount}</span>}
-            </button>
             <button data-tab="backpack" className={tab === "backpack" ? "active" : ""} onClick={() => setTab("backpack")}>Mochila</button>
             <button data-tab="market" className={tab === "market" ? "active" : ""} onClick={() => setTab("market")}>Mercado</button>
             <button data-tab="store" className={tab === "store" ? "active" : ""} onClick={() => setTab("store")}>Loja</button>
@@ -101,6 +103,10 @@ export function GameView({ onLogout }) {
               setTab("ranking");
             }}>🏆 Ranking</button>
           </nav>
+          <button className="guide-btn inbox-btn" onClick={() => setShowInbox(true)} title="Caixa de entrada">
+            📬
+            {inboxUnclaimedCount > 0 && <span className="inbox-badge">{inboxBadgeText}</span>}
+          </button>
           <button className="guide-btn" onClick={() => setShowHowItWorks(true)} title="Como o jogo funciona">?</button>
           {/* PWA "adicionar à tela de início" no iOS não tem puxar-pra-atualizar nem
               botão de reload do navegador — pedido do usuário (13/08/2026), jogando
@@ -154,9 +160,6 @@ export function GameView({ onLogout }) {
           <TankView tank={tank} refresh={refreshTank} notify={notify}
             cinemaEnabled={cinemaEnabled} toggleCinema={toggleCinema} />
         )}
-        {tab === "inbox" && (
-          <InboxView entries={inboxEntries} refresh={refreshInbox} refreshTank={refreshTank} notify={notify} />
-        )}
         {tab === "backpack" && <BackpackView refreshTank={refreshTank} notify={notify} />}
         {tab === "market" && <MarketView userId={userId} refreshTank={refreshTank} notify={notify} />}
         {tab === "store" && <StoreView tank={tank} refreshTank={refreshTank} notify={notify} />}
@@ -166,6 +169,11 @@ export function GameView({ onLogout }) {
 
       <Toast message={toast} onDismiss={dismissToast} />
 
+      {showInbox && (
+        <Modal onClose={() => setShowInbox(false)}>
+          <InboxView entries={inboxEntries} refresh={refreshInbox} refreshTank={refreshTank} notify={notify} />
+        </Modal>
+      )}
       {showHowItWorks && (
         <HowItWorksGuide
           onClose={() => setShowHowItWorks(false)}

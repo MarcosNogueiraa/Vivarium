@@ -44,9 +44,9 @@ function login({ isAdmin = false, inboxEntries = [] } = {}) {
 }
 
 describe("Caixa de Entrada", () => {
-  it("sem entradas pendentes, a aba não mostra badge", () => {
+  it("sem entradas pendentes, o ícone não mostra badge", () => {
     login({ inboxEntries: [] });
-    cy.contains("button", "📬 Caixa").find(".filter-count-badge").should("not.exist");
+    cy.get(".inbox-btn").find(".inbox-badge").should("not.exist");
   });
 
   it("com entradas pendentes, o badge mostra a contagem", () => {
@@ -56,17 +56,29 @@ describe("Caixa de Entrada", () => {
         { id: 2, kind: "MarketPurchase", title: null, body: null, senderUsername: "vendedor1", creature: inboxCreature(501, 4001, 6.06), rewardCurrencyCode: null, rewardCurrencyAmount: null, readAt: null, claimedAt: null, createdAt: "2026-01-01T00:00:00Z" },
       ],
     });
-    cy.contains("button", "📬 Caixa").find(".filter-count-badge").should("have.text", "2");
+    cy.get(".inbox-btn").find(".inbox-badge").should("have.text", "2");
   });
 
-  it("abrir a aba lista as entradas — mensagem e entrega de peixe", () => {
+  // 14/08/2026, pedido do usuário: badge trava em "9+" a partir de 10 pendentes, pra nunca
+  // estourar a bolinha.
+  it("com 10+ entradas pendentes, o badge mostra 9+", () => {
+    const entries = Array.from({ length: 12 }, (_, i) => ({
+      id: i + 1, kind: "AdminMessage", title: `Msg ${i + 1}`, body: "x", senderUsername: null,
+      creature: null, rewardCurrencyCode: null, rewardCurrencyAmount: null,
+      readAt: null, claimedAt: null, createdAt: "2026-01-01T00:00:00Z",
+    }));
+    login({ inboxEntries: entries });
+    cy.get(".inbox-btn").find(".inbox-badge").should("have.text", "9+");
+  });
+
+  it("abrir o ícone lista as entradas — mensagem e entrega de peixe", () => {
     login({
       inboxEntries: [
         { id: 1, kind: "AdminMessage", title: "Aviso importante", body: "Leia isso", senderUsername: null, creature: null, rewardCurrencyCode: null, rewardCurrencyAmount: null, readAt: null, claimedAt: null, createdAt: "2026-01-01T00:00:00Z" },
         { id: 2, kind: "DirectTransfer", title: null, body: null, senderUsername: "amigo1", creature: inboxCreature(502, 4002, 9.2), rewardCurrencyCode: null, rewardCurrencyAmount: null, readAt: null, claimedAt: null, createdAt: "2026-01-01T00:00:00Z" },
       ],
     });
-    cy.contains("button", "📬 Caixa").click();
+    cy.get(".inbox-btn").click();
 
     cy.contains("Aviso importante");
     cy.contains("Leia isso");
@@ -85,7 +97,7 @@ describe("Caixa de Entrada", () => {
       cy.intercept("GET", "/api/game/tank", { body: base }).as("tankAfter");
     });
 
-    cy.contains("button", "📬 Caixa").click();
+    cy.get(".inbox-btn").click();
     cy.contains("button", "Resgatar pro tanque/mochila").click();
 
     cy.wait("@claim");
@@ -100,7 +112,7 @@ describe("Caixa de Entrada", () => {
     });
     cy.intercept("POST", "/api/inbox/3/claim", { statusCode: 200, body: {} }).as("claim");
 
-    cy.contains("button", "📬 Caixa").click();
+    cy.get(".inbox-btn").click();
     cy.contains("50 SOFT");
     // Escopado no card — "Resgatar tudo" (barra de ações) também contém a substring "Resgatar".
     cy.get(".card").contains("button", "Resgatar").click();
@@ -119,7 +131,7 @@ describe("Caixa de Entrada", () => {
     cy.intercept("POST", "/api/inbox/mark-all-read", { statusCode: 200, body: {} }).as("markAllRead");
     cy.intercept("POST", "/api/inbox/clear-claimed", { statusCode: 200, body: {} }).as("clearClaimed");
 
-    cy.contains("button", "📬 Caixa").click();
+    cy.get(".inbox-btn").click();
 
     cy.contains("button", "Resgatar tudo").click();
     cy.wait("@claimAll");
@@ -128,9 +140,9 @@ describe("Caixa de Entrada", () => {
     cy.wait("@markAllRead");
 
     cy.contains("button", "Apagar mensagens lidas").click();
-    // Escopado no modal — o botão "Apagar mensagens lidas" da barra de ações continua no DOM
-    // (só coberto pelo backdrop), e também contém a substring "Apagar".
-    cy.get(".modal").contains("button", "Apagar").click();
+    // A Caixa de Entrada agora já é um modal (14/08/2026) — o ConfirmModal de confirmação abre
+    // ANINHADO nele (2 `.modal` no DOM); `.narrow` (só o ConfirmModal usa) desambigua.
+    cy.get(".modal.narrow").contains("button", "Apagar").click();
     cy.wait("@clearClaimed");
   });
 
