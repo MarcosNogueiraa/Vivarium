@@ -136,6 +136,12 @@ export function BackpackView({ refreshTank, notify }) {
   function setPartPattern(part, pattern) {
     setPartFilters((prev) => ({ ...prev, [part]: { ...prev[part], pattern } }));
   }
+  function resetFilters() {
+    setBandFilter("all");
+    setPartFilters({ tail: { ...emptyPartFilter }, dorsal: { ...emptyPartFilter }, pectoral: { ...emptyPartFilter } });
+    setOnlyBred(false);
+  }
+  const filtersActive = activeAppearanceFilters > 0 || bandFilter !== "all" || onlyBred;
 
   const selectedCreatures = visible.filter((c) => selected.has(c.id));
   const selectedTotal = selectedCreatures.reduce((sum, c) => sum + vendorPriceOf(Number(c.rarityScore)), 0);
@@ -209,6 +215,11 @@ export function BackpackView({ refreshTank, notify }) {
               <input type="checkbox" checked={onlyBred} onChange={(e) => setOnlyBred(e.target.checked)} />
               Só filhotes 🐣
             </label>
+            {filtersActive && (
+              <button type="button" className="filter-reset-btn" onClick={resetFilters}>
+                ↺ Redefinir filtros
+              </button>
+            )}
             <span className="spacer" />
             <button className="select-toggle" onClick={toggleSelectMode} aria-pressed={selectMode}
               title={selectMode ? "Sair da seleção" : "Selecionar vários peixes (ex: vender ao NPC de uma vez)"}>
