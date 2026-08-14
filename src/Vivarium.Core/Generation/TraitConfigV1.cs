@@ -13,7 +13,15 @@ public static class TraitConfigV1
     // deploy, rodar `Vivarium.AdminReset -- diff-scores` (auditoria) e `fix-scores`
     // (agora corrigido pra usar a versão atual do motor, não a gravada na linha —
     // ver AdminReset/Program.cs) em produção.
-    public const int Version = 2;
+    // 2 -> 3 (13/08/2026): cor do brilho deixou de ser uniforme/decorativa — ganhou pesos
+    // desiguais por tier e passou a contribuir pro RarityScore (ShimmerColorScoreWeight).
+    // NOTA IMPORTANTE (13/08/2026, traits congelados no nascimento — CLAUDE.md §8.19.2):
+    // esse bump de Version só importa pra auditoria/histórico — o motor NÃO recalcula
+    // traits de criaturas existentes a partir da Version gravada (TraitsJson já é a fonte
+    // de verdade, congelado no nascimento). O que sincroniza criaturas antigas de verdade é
+    // rodar `Vivarium.AdminReset -- backfill-traits` depois do deploy (idempotente, já é
+    // parte do processo padrão).
+    public const int Version = 3;
 
     public static readonly IReadOnlyList<WeightedValue<ShimmerTier>> ShimmerTiers =
     [
@@ -24,14 +32,41 @@ public static class TraitConfigV1
         new(ShimmerTier.Legendary, 0.2),
     ];
 
-    public static readonly IReadOnlyDictionary<ShimmerTier, ShimmerColor[]> ShimmerColorsByTier =
-        new Dictionary<ShimmerTier, ShimmerColor[]>
+    // 13/08/2026: mais cores por tier + peso desigual dentro do tier (antes era sorteio
+    // uniforme, nunca contribuía pro score) — ver ShimmerColorScoreWeight abaixo. Pesos
+    // front-loaded, mesma filosofia de PartColors (a cor mais comum do tier domina, as
+    // novas entram como opções mais raras).
+    public static readonly IReadOnlyDictionary<ShimmerTier, IReadOnlyList<WeightedValue<ShimmerColor>>> ShimmerColorsByTier =
+        new Dictionary<ShimmerTier, IReadOnlyList<WeightedValue<ShimmerColor>>>
         {
-            [ShimmerTier.Subtle] = [ShimmerColor.Gold, ShimmerColor.Silver, ShimmerColor.Bluish],
-            [ShimmerTier.Vibrant] = [ShimmerColor.Emerald, ShimmerColor.Purple, ShimmerColor.Pink],
-            [ShimmerTier.Rare] = [ShimmerColor.Rainbow, ShimmerColor.AbsoluteBlack],
-            [ShimmerTier.Legendary] = [ShimmerColor.Iridescent],
+            [ShimmerTier.Subtle] =
+            [
+                new(ShimmerColor.Gold, 25.0), new(ShimmerColor.Silver, 22.0), new(ShimmerColor.Bluish, 20.0),
+                new(ShimmerColor.Copper, 15.0), new(ShimmerColor.Bronze, 10.0), new(ShimmerColor.Pearl, 8.0),
+            ],
+            [ShimmerTier.Vibrant] =
+            [
+                new(ShimmerColor.Emerald, 30.0), new(ShimmerColor.Purple, 25.0), new(ShimmerColor.Pink, 20.0),
+                new(ShimmerColor.Turquoise, 15.0), new(ShimmerColor.Amber, 10.0),
+            ],
+            [ShimmerTier.Rare] =
+            [
+                new(ShimmerColor.Rainbow, 40.0), new(ShimmerColor.AbsoluteBlack, 32.0),
+                new(ShimmerColor.Crimson, 18.0), new(ShimmerColor.SteelBlue, 10.0),
+            ],
+            [ShimmerTier.Legendary] =
+            [
+                new(ShimmerColor.Iridescent, 65.0), new(ShimmerColor.Aurora, 35.0),
+            ],
         };
+
+    /// <summary>
+    /// Peso da contribuição da cor-dentro-do-tier pro RarityScore (13/08/2026) — antes a cor
+    /// era pura decoração; agora soma `ShimmerColorScoreWeight * -log10(P)`, mesma mecânica de
+    /// PartColor. Peso 1.0 (não amplificado como o tier, que já pesa 2.5×) — a cor é uma
+    /// nuance dentro de um tier já raro, não deveria dominar o score sozinha.
+    /// </summary>
+    public const double ShimmerColorScoreWeight = 1.0;
 
     public static readonly IReadOnlyDictionary<ShimmerTier, (double Min, double Max)> ShimmerOpacityByTier =
         new Dictionary<ShimmerTier, (double, double)>
@@ -156,6 +191,13 @@ public static class TraitConfigV1
         ShimmerColor.Rainbow => PartColor.PureWhite,
         ShimmerColor.AbsoluteBlack => PartColor.Black,
         ShimmerColor.Iridescent => PartColor.PureWhite,
+        // Cores novas de tier ≥ Vibrante (13/08/2026) — as 3 novas de Sutil (Copper/Bronze/
+        // Pearl) não precisam de entrada aqui, a correlação nunca olha esse tier.
+        ShimmerColor.Turquoise => PartColor.Blue,
+        ShimmerColor.Amber => PartColor.Orange,
+        ShimmerColor.Crimson => PartColor.Red,
+        ShimmerColor.SteelBlue => PartColor.Blue,
+        ShimmerColor.Aurora => PartColor.PureWhite,
         _ => throw new ArgumentOutOfRangeException(nameof(shimmer)),
     };
 }

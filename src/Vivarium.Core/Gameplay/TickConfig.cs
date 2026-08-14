@@ -63,10 +63,13 @@ public sealed record TickConfig
     /// Taper do Lendário (12/08/2026): acima desse score, a renda troca do crescimento
     /// exponencial normal (<see cref="IncomeGrowth"/>) pra um crescimento bem mais suave
     /// (<see cref="IncomeLegendaryTaperGrowth"/>), contínuo no ponto de corte (sem salto).
-    /// Igual ao piso do tier Lendário (14.0) — o piso (~100/h) fica intocado, só o topo
+    /// Igual ao piso do tier Lendário — o piso (~100/h) fica intocado, só o topo
     /// da cauda é comprimido. Ver CLAUDE.md 8.6.
+    /// 13/08/2026: 14.0 → 14.75, acompanhando a recalibração de BANDS (fishRenderer.js)
+    /// depois da cor do brilho passar a somar pontos — precisa mudar JUNTO, senão o taper
+    /// de renda desalinha de onde o Lendário realmente começa na UI.
     /// </summary>
-    public double IncomeLegendaryTaperScore { get; init; } = 14.0;
+    public double IncomeLegendaryTaperScore { get; init; } = 14.75;
     /// <summary>
     /// 0.10 (12/08/2026, conservador — usuário pediu a opção que evita disparos de farm de
     /// soft): com growth normal (0.42) sem teto, o próprio Lendário tinha 19.6x de variação

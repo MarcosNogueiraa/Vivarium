@@ -134,7 +134,7 @@ describe("coinsPerHourOf", () => {
   it("cresce com a raridade", () => {
     const comum = coinsPerHourOf(4);
     const raro = coinsPerHourOf(7.5);
-    const lendario = coinsPerHourOf(14);
+    const lendario = coinsPerHourOf(CONFIG.income.taperScore);
     expect(comum).toBeLessThan(raro);
     expect(raro).toBeLessThan(lendario);
   });
@@ -146,13 +146,17 @@ describe("coinsPerHourOf", () => {
   });
 
   it("taper do Lendário comprime a variação acima do piso (12/08/2026)", () => {
-    const piso = coinsPerHourOf(14);
-    const topoObservado = coinsPerHourOf(21);
-    expect(piso).toBeGreaterThan(95);
-    expect(piso).toBeLessThan(105);
+    // 13/08/2026: piso subiu de ~100/h pra ~137/h junto com o corte de Lendário
+    // (14.0 → 14.75, recalibração de BANDS) — mesma curva exponencial, só compõe por
+    // mais distância antes do taper entrar. Não é regressão.
+    const taperScore = CONFIG.income.taperScore;
+    const piso = coinsPerHourOf(taperScore);
+    const topoObservado = coinsPerHourOf(taperScore + 6.25);
+    expect(piso).toBeGreaterThan(130);
+    expect(piso).toBeLessThan(145);
     expect(topoObservado / piso).toBeLessThan(2.5);
     // contínuo no corte, sem salto
-    expect(Math.abs(coinsPerHourOf(14.001) - coinsPerHourOf(13.999))).toBeLessThan(0.1);
+    expect(Math.abs(coinsPerHourOf(taperScore + 0.001) - coinsPerHourOf(taperScore - 0.001))).toBeLessThan(0.1);
   });
 });
 

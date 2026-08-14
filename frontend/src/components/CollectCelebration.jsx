@@ -4,7 +4,7 @@ import { FishCanvas, REVEAL_STEP_COUNT } from "./FishCanvas.jsx";
 import { Coin } from "./Coin.jsx";
 import { PeekAnchor } from "./PeekPanel.jsx";
 import { coinsPerHourOf, rarityBreakdownOf, traitsOf } from "../lib/generator.js";
-import { bandOf, PT } from "../lib/fishRenderer.js";
+import { bandOf, BANDS, PT } from "../lib/fishRenderer.js";
 import { partSummary, PART_PT } from "../lib/format.js";
 
 // Revelação suspense (08/08/2026, pedido do usuário; estendida a Raro+ e ao
@@ -76,7 +76,7 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
   const score = Number(creature.rarityScore);
   const band = bandOf(score);
   const coins = coinsPerHourOf(score);
-  const legendary = score >= 14.0;
+  const legendary = score >= BANDS[3].max;
   const isBreeding = variant === "breeding";
   const hasLoss = deadParents.length > 0;
   const parents = [parentA, parentB].filter(Boolean);
@@ -84,8 +84,10 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
   const traits = traitsOf(creature);
 
   // Raro+ (BANDS/§5) — no Ninho o filhote também revela (pais/despedida
-  // continuam visíveis na hora, só o filhote em si é o "mistério").
-  const suspense = score >= 7.5;
+  // continuam visíveis na hora, só o filhote em si é o "mistério"). Deriva de BANDS
+  // (não um "7.5" solto) — 13/08/2026: corte de Raro recalibrado, esse limiar precisa
+  // acompanhar automaticamente pra não desalinhar de novo na próxima recalibração.
+  const suspense = score >= BANDS[1].max;
   const [step, setStep] = useState(0);
   const revealed = !suspense || step >= REVEAL_STEP_COUNT;
   function revealNext() { if (!revealed) setStep((s) => Math.min(s + 1, REVEAL_STEP_COUNT)); }
@@ -123,7 +125,9 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
     {
       key: "shimmer", label: "Corpo",
       value: traits.shimmerTier === "None" ? "Cinza, sem brilho" : `${PT.tier[traits.shimmerTier]} · ${PT.shimmer[traits.shimmerColor]}`,
-      points: pointsOf((f) => f.key === "shimmerTier"),
+      // Inclui a cor do brilho (13/08/2026: passou a somar pontos, antes era só decoração)
+      // junto do tier — os dois aparecem juntos no mesmo texto, os pontos precisam bater.
+      points: pointsOf((f) => f.key === "shimmerTier" || f.key === "shimmerColor"),
       source: sourceOf((f) => f.key === "shimmerTier"),
     },
     {

@@ -29,8 +29,9 @@ public static class TraitGenerator
         double shimmerOpacity = 0;
         if (tier != ShimmerTier.None)
         {
-            var palette = TraitConfigV1.ShimmerColorsByTier[tier];
-            shimmerColor = palette[(int)(DeterministicHash.Roll01(seed, "body_shimmer_color") * palette.Length)];
+            var (color, colorP) = WeightedTable.Pick(TraitConfigV1.ShimmerColorsByTier[tier], DeterministicHash.Roll01(seed, "body_shimmer_color"));
+            shimmerColor = color;
+            score += TraitConfigV1.ShimmerColorScoreWeight * SelfInformation(colorP);
 
             var (min, max) = TraitConfigV1.ShimmerOpacityByTier[tier];
             shimmerOpacity = min + DeterministicHash.Roll01(seed, "body_shimmer_opacity") * (max - min);
@@ -131,16 +132,42 @@ public static class TraitGenerator
         double shimmerOpacity = 0;
         if (tier != ShimmerTier.None)
         {
+            var colorTable = TraitConfigV1.ShimmerColorsByTier[tier];
             var tierSource = tierPick.FromA ? ownA : ownB;
-            if (!tierPick.Mutated && tierSource.ShimmerTier == tier)
+            var otherParent = tierPick.FromA ? ownB : ownA;
+            // Só considera "veio de verdade desse pai" se o TIER em si não mutou (mesma
+            // guarda de sempre) e o pai realmente tem esse tier com cor própria válida.
+            bool sourceMatches = !tierPick.Mutated && tierSource.ShimmerTier == tier && tierSource.ShimmerColor is not null;
+            bool otherMatches = !tierPick.Mutated && otherParent.ShimmerTier == tier && otherParent.ShimmerColor is not null;
+
+            // Cor do brilho ganhou peso desigual dentro do tier + contribui pro score
+            // (13/08/2026) — quando os DOIS pais têm o mesmo tier resolvido, a cor
+            // mais rara entre eles passa a ser favorecida (mesmo viés já usado no tier
+            // em si), em vez do "sorteio cego de qual pai venceu o tier" de antes.
+            if (sourceMatches && otherMatches)
             {
-                shimmerColor = tierSource.ShimmerColor;
-                shimmerOpacity = tierSource.ShimmerOpacity;
+                double probSource = WeightedTable.ProbabilityOf(colorTable, tierSource.ShimmerColor!.Value);
+                double probOther = WeightedTable.ProbabilityOf(colorTable, otherParent.ShimmerColor!.Value);
+                bool pickSource = DeterministicHash.Roll01(childSeed, "body_shimmer_color_inherit")
+                    < WeightedTable.BiasedInheritProbability(probSource, probOther, rarityBias);
+                var picked = pickSource ? tierSource : otherParent;
+                shimmerColor = picked.ShimmerColor;
+                shimmerOpacity = picked.ShimmerOpacity;
+                score += TraitConfigV1.ShimmerColorScoreWeight * SelfInformation(pickSource ? probSource : probOther);
+            }
+            else if (sourceMatches || otherMatches)
+            {
+                var picked = sourceMatches ? tierSource : otherParent;
+                shimmerColor = picked.ShimmerColor;
+                shimmerOpacity = picked.ShimmerOpacity;
+                score += TraitConfigV1.ShimmerColorScoreWeight * SelfInformation(WeightedTable.ProbabilityOf(colorTable, picked.ShimmerColor!.Value));
             }
             else
             {
-                var palette = TraitConfigV1.ShimmerColorsByTier[tier];
-                shimmerColor = palette[(int)(DeterministicHash.Roll01(childSeed, "body_shimmer_color") * palette.Length)];
+                var (color, colorP) = WeightedTable.PickBiasedTowardRare(colorTable,
+                    DeterministicHash.Roll01(childSeed, "body_shimmer_color"), mutationRarityBiasStrength);
+                shimmerColor = color;
+                score += TraitConfigV1.ShimmerColorScoreWeight * SelfInformation(colorP);
                 var (min, max) = TraitConfigV1.ShimmerOpacityByTier[tier];
                 shimmerOpacity = min + DeterministicHash.Roll01(childSeed, "body_shimmer_opacity") * (max - min);
             }

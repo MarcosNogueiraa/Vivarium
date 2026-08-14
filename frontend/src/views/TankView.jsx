@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.js";
-import { bandOf, decorTierOf, PART_HEX, PT } from "../lib/fishRenderer.js";
+import { bandOf, BANDS, decorTierOf, PART_HEX, PT } from "../lib/fishRenderer.js";
 import { FILTER_WARN_THRESHOLD, nextFishEta, tankFishSorted, tankPotential, tankSynergy } from "../lib/tankMath.js";
 import { AquariumCanvas, PIP_SUPPORTED } from "../components/AquariumCanvas.jsx";
 import { FishCanvas } from "../components/FishCanvas.jsx";
@@ -61,7 +61,8 @@ export function TankView({ tank, refresh, notify, cinemaEnabled = true, toggleCi
       const c = await api.collect(itemId);
       await refresh();
       // Raro+ ganha um momento de celebração; comum/incomum só um toast discreto.
-      if (c && Number(c.rarityScore) >= 7.5) setCelebrate(c);
+      // Deriva de BANDS (não um "7.5" solto) — acompanha a recalibração automaticamente.
+      if (c && Number(c.rarityScore) >= BANDS[1].max) setCelebrate(c);
       else if (c) notify(`Peixe coletado! ${bandOf(Number(c.rarityScore)).name}`);
     } catch (err) { notify(err.message); }
   }

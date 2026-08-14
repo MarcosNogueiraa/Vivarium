@@ -309,6 +309,31 @@ public class BreedTraitsTests
     }
 
     [Fact]
+    public void ViesDeRaridade_TambemFavoreceCorDoBrilhoMaisRaraDentroDoTier()
+    {
+        // 13/08/2026: cor do brilho ganhou peso desigual dentro do tier + passou a
+        // contribuir pro score — quando os dois pais têm o MESMO tier (condição pra
+        // esse viés entrar em jogo, ver TraitGenerator.BreedTraits), a cor mais rara
+        // entre eles deve ser favorecida, mesma fórmula fechada já usada pro tier em si.
+        // Pearl (8%, a mais rara do Sutil) vs Gold (25%, a mais comum).
+        long pearlParent = FindSeedWithShimmerColor(ShimmerColor.Pearl);
+        long goldParent = FindSeedWithShimmerColor(ShimmerColor.Gold, 500);
+        const double rarityBias = 0.6;
+        const int n = 30_000;
+
+        int pearlCount = 0;
+        for (long childSeed = 1; childSeed <= n; childSeed++)
+        {
+            var (traits, _) = TraitGenerator.BreedTraits(childSeed, pearlParent, goldParent, 0.0, rarityBias);
+            if (traits.ShimmerColor == ShimmerColor.Pearl) pearlCount++;
+        }
+
+        double expected = WeightedTable.BiasedInheritProbability(0.08, 0.25, rarityBias);
+        Assert.True(expected > 0.5, "sanity da fórmula: deveria favorecer a mais rara");
+        Assert.InRange(pearlCount / (double)n, expected - 0.03, expected + 0.03);
+    }
+
+    [Fact]
     public void RarityScore_NuncaFicaAbaixoDoPisoDaPopulacao()
     {
         // Gap de cobertura apontado numa investigação de bug (31/07/2026): não havia
@@ -536,6 +561,9 @@ public class BreedTraitsTests
 
     private static long FindSeedWithTier(ShimmerTier tier, int searchLimit = 50_000)
         => ManySeeds(searchLimit).First(s => TraitGenerator.Generate(s).ShimmerTier == tier);
+
+    private static long FindSeedWithShimmerColor(ShimmerColor color, int searchLimit = 50_000)
+        => ManySeeds(searchLimit).First(s => TraitGenerator.Generate(s).ShimmerColor == color);
 
     private static IEnumerable<long> ManySeeds(int count = 5_000)
         => Enumerable.Range(1, count).Select(i => (long)i * 7919);

@@ -13,11 +13,21 @@ export const PART_HEX = {
 const SHIMMER_HEX = {
   Gold: "#f7c948", Silver: "#dde3e8", Bluish: "#86bcdd", Emerald: "#34d399",
   Purple: "#a06ae0", Pink: "#f472b6", AbsoluteBlack: "#000000",
+  // 13/08/2026: mais opções de cor por tier — tratamento "sólido" simples, mesmo padrão
+  // das cores acima (Pearl usa o tratamento metálico de Gold/Silver; Aurora é animada,
+  // ver drawShimmer()).
+  Copper: "#c17a45", Bronze: "#8c6239", Turquoise: "#2dd4bf", Amber: "#e8a33d",
+  Crimson: "#dc2626", SteelBlue: "#4a76a8",
 };
 
 export const PT = {
   tier: { None: "Sem brilho", Subtle: "Brilho sutil", Vibrant: "Brilho vibrante", Rare: "Brilho raro", Legendary: "Brilho lendário" },
-  shimmer: { Gold: "Dourado", Silver: "Prateado", Bluish: "Azulado", Emerald: "Verde-esmeralda", Purple: "Roxo", Pink: "Rosa", Rainbow: "Arco-íris", AbsoluteBlack: "Preto absoluto", Iridescent: "Iridescente" },
+  shimmer: {
+    Gold: "Dourado", Silver: "Prateado", Bluish: "Azulado", Emerald: "Verde-esmeralda", Purple: "Roxo", Pink: "Rosa",
+    Rainbow: "Arco-íris", AbsoluteBlack: "Preto absoluto", Iridescent: "Iridescente",
+    Copper: "Cobre", Bronze: "Bronze", Pearl: "Pérola", Turquoise: "Turquesa", Amber: "Âmbar",
+    Crimson: "Carmesim", SteelBlue: "Azul-aço", Aurora: "Aurora",
+  },
   color: { Orange: "Laranja", Blue: "Azul", Red: "Vermelho", Yellow: "Amarelo", Green: "Verde", Purple: "Roxo", Black: "Preto", PureWhite: "Branco puro" },
   pattern: {
     None: "Sem padrão", Stripe: "Estria", Dot: "Bolinha", Gradient: "Degradê", Mottled: "Manchado",
@@ -28,11 +38,15 @@ export const PT = {
 // Faixas calibradas via simulação (CLAUDE.md seção 5). Cores claras/vibrantes,
 // tunadas pra ler bem no aquário escuro e nas superfícies escuras da UI
 // (espelham os --r-* do styles.css).
+// Recalibrado 13/08/2026 (`Vivarium.Simulation`, 500k seeds) depois da cor do brilho
+// passar a somar pontos de raridade — pirâmide 50/30/15/4.0/0.15 (topo mais raro que os
+// 4.8/0.2 clássicos, a pedido do usuário; as 3 faixas de baixo continuam na mesma
+// proporção). Faixas baixas também alargaram organicamente (mais variância no score).
 export const BANDS = [
-  { max: 5.4, name: "Comum", color: "#93a7b0" },
-  { max: 7.5, name: "Incomum", color: "#57b876" },
-  { max: 9.8, name: "Raro", color: "#4d8fe0" },
-  { max: 14.0, name: "Épico", color: "#a86ce4" },
+  { max: 5.45, name: "Comum", color: "#93a7b0" },
+  { max: 7.75, name: "Incomum", color: "#57b876" },
+  { max: 10.18, name: "Raro", color: "#4d8fe0" },
+  { max: 14.75, name: "Épico", color: "#a86ce4" },
   { max: Infinity, name: "Lendário", color: "#f0b93b" },
 ];
 export const bandOf = (score) => BANDS.find((b) => score < b.max);
@@ -413,10 +427,19 @@ function drawShimmer(ctx, traits, time) {
     for (let i = 0; i <= 4; i++)
       grad.addColorStop(i / 4, `hsl(${(hue + i * 45) % 360} 90% 65%)`);
     ctx.fillStyle = grad;
-  } else if (traits.shimmerColor === "Gold" || traits.shimmerColor === "Silver") {
+  } else if (traits.shimmerColor === "Aurora") {
+    // Irmão do Iridescent (13/08/2026) — também anima o matiz no tempo, mas numa faixa
+    // estreita verde→azul→roxo (140-280°) em vez do espectro completo, pra ficar
+    // visualmente distinguível do lendário "principal".
+    const hue = 140 + ((time / 40) % 140);
+    const grad = ctx.createLinearGradient(bx, 0, bx + bw, 0);
+    for (let i = 0; i <= 4; i++)
+      grad.addColorStop(i / 4, `hsl(${hue + i * 20} 85% 62%)`);
+    ctx.fillStyle = grad;
+  } else if (traits.shimmerColor === "Gold" || traits.shimmerColor === "Silver" || traits.shimmerColor === "Pearl") {
     // Metálico: realça pra não confundir com o cinza do peixe comum
     ctx.globalAlpha = Math.min(1, (traits.shimmerOpacity / 100) * 2.2);
-    const base = SHIMMER_HEX[traits.shimmerColor];
+    const base = traits.shimmerColor === "Pearl" ? "#f0e6d2" : SHIMMER_HEX[traits.shimmerColor];
     const bright = traits.shimmerColor === "Gold" ? "#fff2c2" : "#ffffff";
     const grad = ctx.createLinearGradient(bx, BODY_BBOX[1], bx + bw, BODY_BBOX[1] + BODY_BBOX[3]);
     grad.addColorStop(0, base);

@@ -82,11 +82,13 @@ export const CONFIG = {
   shimmerTiers: [
     ["None", 78.0], ["Subtle", 15.0], ["Vibrant", 5.5], ["Rare", 1.3], ["Legendary", 0.2],
   ],
+  // 13/08/2026: mais cores por tier + peso desigual (antes uniforme, sem entrar no score) —
+  // espelha TraitConfigV1.ShimmerColorsByTier (manter em sincronia).
   shimmerColorsByTier: {
-    Subtle: ["Gold", "Silver", "Bluish"],
-    Vibrant: ["Emerald", "Purple", "Pink"],
-    Rare: ["Rainbow", "AbsoluteBlack"],
-    Legendary: ["Iridescent"],
+    Subtle: [["Gold", 25.0], ["Silver", 22.0], ["Bluish", 20.0], ["Copper", 15.0], ["Bronze", 10.0], ["Pearl", 8.0]],
+    Vibrant: [["Emerald", 30.0], ["Purple", 25.0], ["Pink", 20.0], ["Turquoise", 15.0], ["Amber", 10.0]],
+    Rare: [["Rainbow", 40.0], ["AbsoluteBlack", 32.0], ["Crimson", 18.0], ["SteelBlue", 10.0]],
+    Legendary: [["Iridescent", 65.0], ["Aurora", 35.0]],
   },
   shimmerOpacityByTier: { Subtle: [10, 25], Vibrant: [30, 50], Rare: [55, 75], Legendary: [80, 100] },
   partColors: [
@@ -105,6 +107,7 @@ export const CONFIG = {
     ["BaseDominant", 45.0], ["Even", 10.0], ["PatternDominant", 45.0],
   ],
   shimmerScoreWeight: 2.5,
+  shimmerColorScoreWeight: 1.0,
   setBonus: { samePattern2: 1.0, samePattern3: 2.5, sameColor2: 0.8, sameColor3: 2.0 },
   correlationBoostPoints: 15.0,
   sizeMean: 50.0, sizeStdDev: 20.0, sizeExtremeLow: 10.0, sizeExtremeHigh: 90.0,
@@ -118,7 +121,7 @@ export const CONFIG = {
   // Renda por peixe — espelha IncomeCalculator/TickConfig (manter em sincronia)
   // taperScore/taperGrowth (12/08/2026): acima do piso Lendário, crescimento reduzido e
   // contínuo — espelha TickConfig.IncomeLegendaryTaperScore/Growth (manter em sincronia)
-  income: { base: 1.5, growth: 0.42, ref: 4.0, taperScore: 14.0, taperGrowth: 0.10 },
+  income: { base: 1.5, growth: 0.42, ref: 4.0, taperScore: 14.75, taperGrowth: 0.10 },
   synergy: { perMatch: 0.15, maxBonus: 0.80 },
   // Venda ao NPC (vendor, §8.12) — espelha VendorCalculator/TickConfig (manter em sincronia)
   vendor: { hoursEquivalent: 2.0, minPrice: 1 },
@@ -132,6 +135,9 @@ export const CONFIG = {
     Gold: "Yellow", Silver: "PureWhite", Bluish: "Blue", Emerald: "Green",
     Purple: "Purple", Pink: "Red", Rainbow: "PureWhite", AbsoluteBlack: "Black",
     Iridescent: "PureWhite",
+    // Cores novas de tier ≥ Vibrante (13/08/2026) — as 3 novas de Sutil não precisam de
+    // entrada aqui, a correlação nunca olha esse tier.
+    Turquoise: "Blue", Amber: "Orange", Crimson: "Red", SteelBlue: "Blue", Aurora: "PureWhite",
   },
 };
 
@@ -170,8 +176,7 @@ export function generateTraits(seed) {
   let shimmerColor = null;
   let shimmerOpacity = 0;
   if (tier !== "None") {
-    const palette = CONFIG.shimmerColorsByTier[tier];
-    shimmerColor = palette[Math.floor(roll01(seed, "body_shimmer_color") * palette.length)];
+    shimmerColor = weightedPick(CONFIG.shimmerColorsByTier[tier], roll01(seed, "body_shimmer_color"));
     const [min, max] = CONFIG.shimmerOpacityByTier[tier];
     shimmerOpacity = min + roll01(seed, "body_shimmer_opacity") * (max - min);
   }
@@ -325,6 +330,14 @@ export function rarityBreakdownOf(creature) {
     key: "shimmerTier", part: null, value: traits.shimmerTier, probPct: tierProb * 100,
     points: CONFIG.shimmerScoreWeight * selfInfo(tierProb), source: sourceFor("shimmerTier", null),
   });
+
+  if (traits.shimmerTier !== "None") {
+    const colorProb = probabilityOf(CONFIG.shimmerColorsByTier[traits.shimmerTier], traits.shimmerColor);
+    factors.push({
+      key: "shimmerColor", part: null, value: traits.shimmerColor, probPct: colorProb * 100,
+      points: CONFIG.shimmerColorScoreWeight * selfInfo(colorProb), source: sourceFor("shimmerColor", null),
+    });
+  }
 
   const boosted = (traits.shimmerTier === "Vibrant" || traits.shimmerTier === "Rare" || traits.shimmerTier === "Legendary")
     ? CONFIG.closestPartColor[traits.shimmerColor]

@@ -21,7 +21,7 @@ public class IncomeCalculatorTests
     {
         double comum = IncomeCalculator.CoinsPerHour(4m, Cfg);   // score ref
         double raro = IncomeCalculator.CoinsPerHour(7.5m, Cfg);  // início da faixa Raro (v2)
-        double lendario = IncomeCalculator.CoinsPerHour(14m, Cfg); // início do Lendário (v2)
+        double lendario = IncomeCalculator.CoinsPerHour((decimal)Cfg.IncomeLegendaryTaperScore, Cfg); // início do Lendário
 
         Assert.True(comum < raro && raro < lendario);
         Assert.InRange(comum, 1.4, 2.0);           // base 1.5/h
@@ -32,18 +32,23 @@ public class IncomeCalculatorTests
     [Fact]
     public void Renda_TaperDoLendario_ComprimeVariacaoAcimaDoPiso()
     {
-        double piso = IncomeCalculator.CoinsPerHour(14m, Cfg);       // início do Lendário
-        double meio = IncomeCalculator.CoinsPerHour(17m, Cfg);
-        double topoObservado = IncomeCalculator.CoinsPerHour(21m, Cfg); // ~máx observado (100k/1M seeds)
+        decimal taperScore = (decimal)Cfg.IncomeLegendaryTaperScore;
+        double piso = IncomeCalculator.CoinsPerHour(taperScore, Cfg);       // início do Lendário
+        double meio = IncomeCalculator.CoinsPerHour(taperScore + 2.25m, Cfg);
+        double topoObservado = IncomeCalculator.CoinsPerHour(taperScore + 6.25m, Cfg); // ~máx observado (100k/1M seeds)
 
-        Assert.InRange(piso, 95, 105);            // piso intocado, ~100/h
+        // Piso do taper subiu de ~100/h pra ~137/h (13/08/2026) — consequência esperada de
+        // empurrar IncomeLegendaryTaperScore de 14.0 pra 14.75 (mesma curva exponencial
+        // normal, só compõe por mais distância antes do taper entrar): não é regressão, é o
+        // Lendário renovado ficar mais raro (0.15% vs 0.2%) render um pouco mais no piso também.
+        Assert.InRange(piso, 130, 145);
         Assert.True(meio > piso && topoObservado > meio); // ainda crescente, não achata de vez
-        Assert.True(topoObservado < 250);          // teto comprimido (era ~1958/h sem taper)
+        Assert.True(topoObservado < 300);          // teto comprimido (era ~1958/h sem taper)
         Assert.True(topoObservado / piso < 2.5);    // variação interna do Lendário: era 19.6x, agora <2.5x
 
         // Contínuo no ponto de corte: sem salto ao cruzar o piso do taper.
-        double logoAbaixo = IncomeCalculator.CoinsPerHour(13.999m, Cfg);
-        double logoAcima = IncomeCalculator.CoinsPerHour(14.001m, Cfg);
+        double logoAbaixo = IncomeCalculator.CoinsPerHour(taperScore - 0.001m, Cfg);
+        double logoAcima = IncomeCalculator.CoinsPerHour(taperScore + 0.001m, Cfg);
         Assert.True(Math.Abs(logoAcima - logoAbaixo) < 0.1);
 
         // Abaixo do piso, comportamento idêntico ao de antes (não mexe em Épico pra baixo).

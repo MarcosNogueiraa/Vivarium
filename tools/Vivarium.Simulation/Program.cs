@@ -149,6 +149,16 @@ Console.WriteLine($"  Raro     < {Percentile(scores, 95):0.00}");
 Console.WriteLine($"  Épico    < {Percentile(scores, 99.8):0.00}");
 Console.WriteLine($"  Lendário ≥ {Percentile(scores, 99.8):0.00}");
 
+// 13/08/2026: topo mais raro (usuário pediu diminuir Épico/Lendário em relação aos
+// 4.8%/0.2% clássicos, mantendo 50/30/15 nas 3 faixas de baixo) — pirâmide proposta
+// 50/30/15/4.0/0.15.
+Console.WriteLine("\nCORTES COM TOPO MENOR (pirâmide 50/30/15/4.0/0.15):");
+Console.WriteLine($"  Comum    < {Percentile(scores, 50):0.00}");
+Console.WriteLine($"  Incomum  < {Percentile(scores, 80):0.00}");
+Console.WriteLine($"  Raro     < {Percentile(scores, 95):0.00}");
+Console.WriteLine($"  Épico    < {Percentile(scores, 99.85):0.00}");
+Console.WriteLine($"  Lendário ≥ {Percentile(scores, 99.85):0.00}");
+
 // Faixas originais do CLAUDE.md, pra comparação
 Console.WriteLine("\nFAIXAS ORIGINAIS DO CLAUDE.md (0-2 / 2-4 / 4-7 / 7-10 / 10+):");
 double[] cuts = [2, 4, 7, 10];
@@ -306,7 +316,7 @@ static void EconomyReport()
     int interval = HabitatDefaults.GenerationIntervalMinutes;
 
     // Probabilidade de lendário (score >= 14.0, faixa v2) por peixe coletado
-    const double LegendaryCut = 14.0;
+    const double LegendaryCut = 14.75; // 13/08/2026: acompanha a recalibração de BANDS
     int N = 200_000, leg = 0;
     var rng = new Random(7);
     for (int i = 0; i < N; i++)

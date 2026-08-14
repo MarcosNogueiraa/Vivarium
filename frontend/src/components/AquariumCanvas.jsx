@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { roll01, traitsOf } from "../lib/generator.js";
 import {
-  bandOf, drawFish, drawFishShadow, drawTankBackground, drawTankForeground,
+  bandOf, BANDS, drawFish, drawFishShadow, drawTankBackground, drawTankForeground,
   SUBSTRATE_BAND_H, swimSpeedOf, VIEW_H, VIEW_W,
 } from "../lib/fishRenderer.js";
 import { reducedMotion } from "../lib/motion.js";
@@ -353,10 +353,10 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
         drawFishShadow(ctx, s.x, y, H - SUBSTRATE_BAND_H);
 
         // Aura no contorno pra peixes raros+ (lendário reluz de leve).
-        // Cortes seguem as faixas de raridade v2 (Raro ≥ 7.5, Lendário ≥ 14.0).
+        // Cortes seguem BANDS (não literais soltos) — acompanham a recalibração.
         const rscore = Number(c.rarityScore);
-        if (rscore >= 7.5) {
-          const legendary = rscore >= 14.0;
+        if (rscore >= BANDS[1].max) {
+          const legendary = rscore >= BANDS[3].max;
           const pulse = legendary ? 0.82 + 0.18 * Math.sin(time / 650 + s.phase) : 1;
           drawAura(ctx, getAuraSprite(c, bandOf(rscore).color), s.x, y, s.facing > 0, (legendary ? 0.55 : 0.36) * pulse);
         }

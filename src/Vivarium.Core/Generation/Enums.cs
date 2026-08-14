@@ -20,6 +20,16 @@ public enum ShimmerColor
     Rainbow,
     AbsoluteBlack,
     Iridescent,
+    // 13/08/2026: mais diversidade por tier + peso (antes era sorteio uniforme dentro do
+    // tier, sem contribuir pro RarityScore) — ver TraitConfigV1.ShimmerColorsByTier.
+    Copper,
+    Bronze,
+    Pearl,
+    Turquoise,
+    Amber,
+    Crimson,
+    SteelBlue,
+    Aurora,
 }
 
 public enum PartColor

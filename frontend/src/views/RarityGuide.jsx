@@ -43,6 +43,23 @@ export function RarityGuide({ onClose }) {
           </div>
         ))}
       </div>
+      <p className="muted guide-intro" style={{ marginTop: 14 }}>
+        Dentro de cada tier (Sutil ou acima), a cor do brilho também varia em raridade — não é
+        mais só decoração, uma cor rara dentro do tier soma pontos extra no score.
+      </p>
+      {Object.entries(CONFIG.shimmerColorsByTier).map(([tier, colors]) => (
+        <div key={tier} style={{ marginTop: 10 }}>
+          <span className="faint" style={{ fontSize: "0.8rem", fontWeight: 700 }}>{PT.tier[tier]}</span>
+          <div className="guide-bands">
+            {colors.map(([key, weight]) => (
+              <div className="guide-band" key={key}>
+                <span className="gb-name">{PT.shimmer[key]}</span>
+                <span className="gb-range mono">{fmtWeight(weight)}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
       <p className="faint guide-foot">
         Brilho vibrante, raro ou lendário puxa a cor mais parecida com o tom do brilho pra
         cima nas 3 partes (cauda/dorsal/peitoral) — mas isso torna essa cor específica

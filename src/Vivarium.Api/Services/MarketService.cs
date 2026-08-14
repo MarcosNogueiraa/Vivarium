@@ -20,10 +20,10 @@ public class MarketService(VivariumDbContext db, GameService game)
     // cortes mudarem lá (recalibração via Vivarium.Simulation), espelhar aqui também.
     private static string BandNameOf(decimal score) => score switch
     {
-        < 5.4m => "Comum",
-        < 7.5m => "Incomum",
-        < 9.8m => "Raro",
-        < 14.0m => "Épico",
+        < 5.45m => "Comum",
+        < 7.75m => "Incomum",
+        < 10.18m => "Raro",
+        < 14.75m => "Épico",
         _ => "Lendário",
     };
 

@@ -3,13 +3,16 @@ import { PT } from "./fishRenderer.js";
 
 export const PART_PT = { tail: "Cauda", dorsal: "Dorsal", pectoral: "Peitoral" };
 
-export const RARITY_RANGES = ["menos de 5.4", "5.4 – 7.5", "7.5 – 9.8", "9.8 – 14.0", "14.0 ou mais"];
+// Recalibrado 13/08/2026 junto com BANDS (fishRenderer.js) — manter em sincronia.
+export const RARITY_RANGES = ["menos de 5.45", "5.45 – 7.75", "7.75 – 10.18", "10.18 – 14.75", "14.75 ou mais"];
 
 // Rótulo humano de um fator do breakdown de raridade (atributo primeiro, parte depois)
 export function factorLabel(f) {
   switch (f.key) {
     case "shimmerTier":
       return f.value === "None" ? "Corpo sem brilho" : `Brilho ${PT.tier[f.value].toLowerCase()}`;
+    case "shimmerColor":
+      return `Cor do brilho: ${PT.shimmer[f.value]}`;
     case "partColor":
       return `Cor ${PART_PT[f.part]}: ${PT.color[f.value]}`;
     case "patternType":

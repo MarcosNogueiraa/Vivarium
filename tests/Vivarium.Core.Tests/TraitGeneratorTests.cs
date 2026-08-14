@@ -44,7 +44,7 @@ public class TraitGeneratorTests
         Assert.All(comBrilho, t =>
         {
             Assert.NotNull(t.ShimmerColor);
-            Assert.Contains(t.ShimmerColor!.Value, TraitConfigV1.ShimmerColorsByTier[t.ShimmerTier]);
+            Assert.Contains(TraitConfigV1.ShimmerColorsByTier[t.ShimmerTier], w => w.Value == t.ShimmerColor!.Value);
             var (min, max) = TraitConfigV1.ShimmerOpacityByTier[t.ShimmerTier];
             Assert.InRange(t.ShimmerOpacity, min, max);
         });
