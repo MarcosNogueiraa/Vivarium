@@ -8,13 +8,11 @@ function randomDemoSeed() {
 }
 
 export function AuthView({ onAuthed }) {
-  const [mode, setMode] = useState("login"); // "login" | "register" | "forgot"
+  const [mode, setMode] = useState("login"); // "login" | "register"
   const [form, setForm] = useState({ username: "", email: "", password: "" });
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [forgotEmail, setForgotEmail] = useState("");
-  const [forgotSent, setForgotSent] = useState(false);
 
   // Decorativo só (nenhum peixe real) — traits congelados no nascimento (13/08/2026) tiraram
   // o fallback de derivar do seed em traitsOf, então precisa vir pronto aqui, igual a API manda.
@@ -45,27 +43,6 @@ export function AuthView({ onAuthed }) {
 
   const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
 
-  async function submitForgot(e) {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      await api.forgotPassword(forgotEmail.trim());
-      setForgotSent(true);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function backToLogin() {
-    setMode("login");
-    setError(null);
-    setForgotSent(false);
-    setForgotEmail("");
-  }
-
   return (
     <div className="auth-hero">
       <AquariumCanvas creatures={demoFish} selectedId={null} onSelect={() => {}} interactive={false} ambient />
@@ -73,73 +50,38 @@ export function AuthView({ onAuthed }) {
         <div className="brand"><span className="dot" />Vivarium</div>
         <p className="tagline">Seu aquário vivo cultiva peixes raros — mesmo enquanto você trabalha.</p>
 
-        {mode === "forgot" ? (
-          <>
-            <p className="hint" style={{ padding: 0 }}>
-              Esqueceu sua senha? Digite seu email e mandamos um link pra redefinir.
-            </p>
-            {forgotSent ? (
-              <p className="hint" style={{ padding: 0 }}>
-                Se esse email tiver uma conta, você vai receber um link de redefinição em instantes.
-                Confira também a caixa de spam.
-              </p>
-            ) : (
-              <form onSubmit={submitForgot}>
-                <input
-                  type="email" placeholder="Seu email" value={forgotEmail}
-                  onChange={(e) => setForgotEmail(e.target.value)} required autoComplete="email" autoFocus
-                />
-                {error && <div className="error">{error}</div>}
-                <button type="submit" className="btn-primary" disabled={busy}>
-                  {busy ? "…" : "Mandar link de redefinição"}
-                </button>
-              </form>
-            )}
-            <button type="button" className="link-btn" onClick={backToLogin} style={{ marginTop: 12 }}>
-              ← Voltar pro login
+        <div className="segmented">
+          <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")} type="button">Entrar</button>
+          <button className={mode === "register" ? "active" : ""} onClick={() => setMode("register")} type="button">Criar conta</button>
+        </div>
+        <form onSubmit={submit}>
+          <input
+            placeholder={mode === "login" ? "Username ou email" : "Username"}
+            value={form.username} onChange={set("username")} required autoComplete="username"
+          />
+          {mode === "register" && (
+            <input type="email" placeholder="Email" value={form.email} onChange={set("email")} required autoComplete="email" />
+          )}
+          <div className="password-field">
+            <input
+              type={showPassword ? "text" : "password"} placeholder="Senha (mínimo 8 caracteres)"
+              value={form.password} onChange={set("password")} required minLength={8}
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
+            />
+            <button
+              type="button" className="password-toggle"
+              onClick={() => setShowPassword((s) => !s)}
+              title={showPassword ? "Ocultar senha" : "Mostrar senha"}
+              aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+            >
+              {showPassword ? "🙈" : "👁️"}
             </button>
-          </>
-        ) : (
-          <>
-            <div className="segmented">
-              <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")} type="button">Entrar</button>
-              <button className={mode === "register" ? "active" : ""} onClick={() => setMode("register")} type="button">Criar conta</button>
-            </div>
-            <form onSubmit={submit}>
-              <input
-                placeholder={mode === "login" ? "Username ou email" : "Username"}
-                value={form.username} onChange={set("username")} required autoComplete="username"
-              />
-              {mode === "register" && (
-                <input type="email" placeholder="Email" value={form.email} onChange={set("email")} required autoComplete="email" />
-              )}
-              <div className="password-field">
-                <input
-                  type={showPassword ? "text" : "password"} placeholder="Senha (mínimo 8 caracteres)"
-                  value={form.password} onChange={set("password")} required minLength={8}
-                  autoComplete={mode === "login" ? "current-password" : "new-password"}
-                />
-                <button
-                  type="button" className="password-toggle"
-                  onClick={() => setShowPassword((s) => !s)}
-                  title={showPassword ? "Ocultar senha" : "Mostrar senha"}
-                  aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
-                >
-                  {showPassword ? "🙈" : "👁️"}
-                </button>
-              </div>
-              {error && <div className="error">{error}</div>}
-              <button type="submit" className="btn-primary" disabled={busy}>
-                {busy ? "…" : mode === "login" ? "Mergulhar" : "Criar meu aquário"}
-              </button>
-            </form>
-            {mode === "login" && (
-              <button type="button" className="link-btn" onClick={() => { setMode("forgot"); setError(null); }} style={{ marginTop: 12 }}>
-                Esqueceu sua senha?
-              </button>
-            )}
-          </>
-        )}
+          </div>
+          {error && <div className="error">{error}</div>}
+          <button type="submit" className="btn-primary" disabled={busy}>
+            {busy ? "…" : mode === "login" ? "Mergulhar" : "Criar meu aquário"}
+          </button>
+        </form>
       </div>
     </div>
   );
