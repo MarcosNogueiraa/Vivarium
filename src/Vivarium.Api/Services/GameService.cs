@@ -232,7 +232,7 @@ public class GameService(VivariumDbContext db)
             .Select(c => new CreatureInstance
             {
                 Id = c.Id, Seed = c.Seed, RarityScore = c.RarityScore, TraitConfigVersion = c.TraitConfigVersion,
-                TraitsJson = c.TraitsJson,
+                TraitsJson = c.TraitsJson, OriginalOwnerId = c.OriginalOwnerId,
             })
             .ToListAsync();
         var list = new List<FishIncome>(rows.Count);
@@ -348,6 +348,7 @@ public class GameService(VivariumDbContext db)
         {
             SpeciesId = item.SpeciesId,
             OwnerId = habitat.UserId,
+            OriginalOwnerId = habitat.UserId,
             HabitatId = toTank ? habitat.Id : null, // mochila quando o tanque está cheio
             Seed = collected.Seed,
             TraitConfigVersion = collected.TraitConfigVersion,
@@ -372,6 +373,7 @@ public class GameService(VivariumDbContext db)
             && c.HabitatId == null
             && !c.IsDead
             && c.SoldAt == null
+            && !c.PendingInboxClaim
             && !db.MarketListings.Any(m => m.CreatureInstanceId == c.Id && m.Status == ListingStatus.Active));
 
     public Task<int> CountBackpackAsync(long userId) => BackpackQuery(userId).CountAsync();
@@ -649,7 +651,7 @@ public class GameService(VivariumDbContext db)
     public async Task<ServiceResult> TransferAsync(long userId, long creatureId, string toUsername)
     {
         var creature = await db.CreatureInstances
-            .FirstOrDefaultAsync(c => c.Id == creatureId && c.OwnerId == userId);
+            .FirstOrDefaultAsync(c => c.Id == creatureId && c.OwnerId == userId && !c.PendingInboxClaim);
         if (creature is null)
             return ServiceResult.NotFound("Criatura não encontrada");
         if (creature.IsDead)
@@ -666,13 +668,13 @@ public class GameService(VivariumDbContext db)
         if (target.Id == userId)
             return ServiceResult.Bad("Não dá pra transferir pra si mesmo");
 
-        var targetHabitat = await FindHabitatAsync(target.Id);
-        if (targetHabitat is null)
-            return ServiceResult.Bad("Destinatário não tem habitat");
-
+        var now = DateTime.UtcNow;
         creature.OwnerId = target.Id;
-        if (!await TryPlaceAsync(creature, targetHabitat))
-            return ServiceResult.Bad("O tanque e a mochila do destinatário estão cheios.");
+        // Deixa de cair direto no tanque/mochila do destinatário — vai pra Caixa de Entrada
+        // dele, resgatado explicitamente (CLAUDE.md §8.23/§8.24). Espaço deixa de ser checado
+        // aqui; falta de espaço agora é um erro no momento do resgate, não da transferência.
+        creature.HabitatId = null;
+        creature.PendingInboxClaim = true;
 
         db.TransactionLogs.Add(new TransactionLog
         {
@@ -680,7 +682,15 @@ public class GameService(VivariumDbContext db)
             FromUserId = userId,
             ToUserId = target.Id,
             CreatureInstanceId = creature.Id,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = now,
+        });
+        db.InboxEntries.Add(new InboxEntry
+        {
+            RecipientId = target.Id,
+            Kind = InboxEntryKind.DirectTransfer,
+            SenderUserId = userId,
+            CreatureInstanceId = creature.Id,
+            CreatedAt = now,
         });
         try
         {
@@ -765,6 +775,8 @@ public class GameService(VivariumDbContext db)
             return ServiceResult.Bad("Essa criatura não sobreviveu à gestação");
         if (creature.SoldAt is not null)
             return ServiceResult.Bad("Essa criatura já foi vendida");
+        if (creature.PendingInboxClaim)
+            return ServiceResult.Bad("Criatura pendente de resgate na Caixa de Entrada");
         bool listed = await db.MarketListings.AnyAsync(m =>
             m.CreatureInstanceId == creature.Id && m.Status == ListingStatus.Active);
         if (listed)

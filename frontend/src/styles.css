@@ -757,6 +757,10 @@ input:focus {
   border-color: color-mix(in srgb, var(--tier) 45%, var(--line));
   box-shadow: var(--shadow), 0 0 30px -12px var(--tier);
 }
+/* Caixa de Entrada (14/08/2026): item já resgatado fica visível (não some sozinho, pedido do
+   usuário) mas visualmente recuado — só "Apagar mensagens lidas" tira da lista de verdade. */
+.card.inbox-claimed { opacity: 0.55; }
+.card.inbox-claimed:hover { transform: none; }
 .card .fish-stage {
   position: relative;
   border-radius: 12px; overflow: hidden;

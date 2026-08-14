@@ -22,7 +22,7 @@ public class IncomeTests : IClassFixture<VivariumApiFactory>
             habitat.LastTickAt = DateTime.UtcNow - sinceLastTick;    // janela decorrida
             db.CreatureInstances.Add(new CreatureInstance
             {
-                SpeciesId = 1, OwnerId = userId, HabitatId = habitat.Id,
+                SpeciesId = 1, OwnerId = userId, OriginalOwnerId = userId, HabitatId = habitat.Id,
                 Seed = 12345, TraitConfigVersion = 1, RarityScore = rarity,
                 TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(12345)),
                 CreatedAt = DateTime.UtcNow,
@@ -68,7 +68,7 @@ public class IncomeTests : IClassFixture<VivariumApiFactory>
             habitat.LastHeartbeatAt = DateTime.UtcNow;
             db.CreatureInstances.Add(new CreatureInstance
             {
-                SpeciesId = 1, OwnerId = userId, HabitatId = habitat.Id,
+                SpeciesId = 1, OwnerId = userId, OriginalOwnerId = userId, HabitatId = habitat.Id,
                 Seed = 999, TraitConfigVersion = 1, RarityScore = 8m,
                 TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(999)),
                 CreatedAt = DateTime.UtcNow,

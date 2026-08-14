@@ -499,6 +499,7 @@ switch (args[0])
         {
             SpeciesId = aquariumSpeciesId,
             OwnerId = user.Id,
+            OriginalOwnerId = user.Id,
             HabitatId = null, // mochila — jogador decide se quer colocar no tanque
             Seed = seed,
             TraitConfigVersion = Vivarium.Core.Generation.TraitConfigV1.Version,

@@ -49,6 +49,7 @@ builder.Services.AddScoped<LeaderboardService>();
 builder.Services.AddScoped<VipService>();
 builder.Services.AddScoped<AccountService>();
 builder.Services.AddScoped<PasswordResetService>();
+builder.Services.AddScoped<InboxService>();
 
 // Sem Resend:ApiKey configurada, NullEmailSender só loga (app continua funcionando sem
 // email — mesmo espírito do gap documentado pro processador de pagamento, CLAUDE.md §8.11).
@@ -116,6 +117,7 @@ app.MapGet("/api/creatures/preview/{seed:long}", (long seed) =>
 
 app.MapAuthEndpoints();
 app.MapAccountEndpoints();
+app.MapInboxEndpoints();
 app.MapGameEndpoints();
 app.MapMarketEndpoints();
 app.MapItemEndpoints();

@@ -86,6 +86,26 @@ public class CreatureInstance
     /// próprio momento de revelação, não precisam disso.
     /// </summary>
     public bool IsNew { get; set; }
+    /// <summary>
+    /// "Primeiro dono" (14/08/2026) — setado uma única vez na criação (coleta da fila ou
+    /// nascimento via breeding) e NUNCA alterado depois, mesmo que o peixe troque de mãos via
+    /// mercado/transferência (isso é `OwnerId`, que muda). Guarda o Id, não o username — pensando
+    /// no suporte futuro a troca de nome de usuário: exibir o username exigiria resolver via join
+    /// no momento da leitura (mesmo padrão já usado em `MarketListing`/`SellerName`), nunca
+    /// denormalizar a string. `required`: força todo `new CreatureInstance` a setar o campo — sem
+    /// isso, um insert esquecido gravaria silenciosamente uma FK inválida (0).
+    /// </summary>
+    public required long OriginalOwnerId { get; set; }
+    public User? OriginalOwner { get; set; }
+    /// <summary>
+    /// Peixe comprado no mercado ou recebido por transferência direta, ainda não resgatado na
+    /// Caixa de Entrada (§8.23/8.24 do CLAUDE.md) — já pertence ao novo dono (`OwnerId` já
+    /// trocou), mas fica fora do tanque/mochila (sempre `HabitatId == null` enquanto pendente) até
+    /// o jogador confirmar o resgate, que então roda a mesma lógica de tanque-ou-mochila de
+    /// sempre (`GameService.TryPlaceAsync`). Default false — todo o resto da criação de peixe
+    /// (coleta da fila, breeding) não passa por aqui, nasce direto no tanque/mochila normal.
+    /// </summary>
+    public bool PendingInboxClaim { get; set; }
 }
 
 public class MarketListing

@@ -96,4 +96,11 @@ export const api = {
   setToggles: (autoCollectEnabled, autoCleanEnabled) =>
     request("POST", "/api/game/toggles", { autoCollectEnabled, autoCleanEnabled }),
   markSeen: (id) => request("POST", `/api/game/creatures/${id}/mark-seen`),
+  inboxList: () => request("GET", "/api/inbox/"),
+  claimInboxEntry: (id) => request("POST", `/api/inbox/${id}/claim`),
+  claimAllInboxEntries: () => request("POST", "/api/inbox/claim-all"),
+  markAllInboxRead: () => request("POST", "/api/inbox/mark-all-read"),
+  clearClaimedInboxEntries: () => request("POST", "/api/inbox/clear-claimed"),
+  adminSendInboxMessage: (title, body, audience, usernames, rewardCurrencyCode, rewardCurrencyAmount) =>
+    request("POST", "/api/admin/inbox/send", { title, body, audience, usernames, rewardCurrencyCode, rewardCurrencyAmount }),
 };

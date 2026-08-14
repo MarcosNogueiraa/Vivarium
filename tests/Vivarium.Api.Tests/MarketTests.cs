@@ -12,6 +12,10 @@ public class MarketTests : IClassFixture<VivariumApiFactory>
 
     public MarketTests(VivariumApiFactory factory) => _factory = factory;
 
+    private record InboxEntryRow(long Id, string Kind, InboxCreatureRow? Creature);
+    private record InboxCreatureRow(long Id);
+    private record InboxListRow(List<InboxEntryRow> Entries);
+
     private async Task<long> CriarCriaturaNoTanque(long userId)
     {
         long creatureId = 0;
@@ -20,7 +24,7 @@ public class MarketTests : IClassFixture<VivariumApiFactory>
             var habitat = await db.Habitats.FirstAsync(h => h.UserId == userId && h.HabitatType!.Code == "Aquarium");
             var creature = new CreatureInstance
             {
-                SpeciesId = 1, OwnerId = userId, HabitatId = habitat.Id,
+                SpeciesId = 1, OwnerId = userId, OriginalOwnerId = userId, HabitatId = habitat.Id,
                 Seed = 424242, TraitConfigVersion = 1, RarityScore = 5.5m,
                 TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(424242)),
                 CreatedAt = DateTime.UtcNow,
@@ -39,7 +43,7 @@ public class MarketTests : IClassFixture<VivariumApiFactory>
         {
             var creature = new CreatureInstance
             {
-                SpeciesId = 1, OwnerId = userId, HabitatId = null,
+                SpeciesId = 1, OwnerId = userId, OriginalOwnerId = userId, HabitatId = null,
                 Seed = 484848, TraitConfigVersion = 1, RarityScore = 4.4m,
                 TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(484848)),
                 CreatedAt = DateTime.UtcNow,
@@ -78,15 +82,25 @@ public class MarketTests : IClassFixture<VivariumApiFactory>
         var buyResponse = await buyer.PostAsync($"/api/market/listings/{listingId}/buy", null);
         buyResponse.EnsureSuccessStatusCode();
 
+        // Dinheiro/posse mudam de mãos na hora — só a entrega FÍSICA no tanque/mochila do
+        // comprador que espera o resgate na Caixa de Entrada (CLAUDE.md §8.23/§8.24).
         var buyerTank = await buyer.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
         Assert.Equal(60m, buyerTank!.Wallet["SOFT"]); // 100 - 40
-        Assert.Contains(buyerTank.Creatures, c => c.Id == creatureId);
+        Assert.DoesNotContain(buyerTank.Creatures, c => c.Id == creatureId);
 
         var sellerTank = await seller.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
         Assert.Equal(140m, sellerTank!.Wallet["SOFT"]); // 100 + 40
         Assert.DoesNotContain(sellerTank.Creatures, c => c.Id == creatureId);
 
-        // Auditoria: 1 registro MarketSale no TransactionLog
+        var inbox = await buyer.GetFromJsonAsync<InboxListRow>("/api/inbox/");
+        var entry = Assert.Single(inbox!.Entries, e => e.Creature?.Id == creatureId);
+        Assert.Equal("MarketPurchase", entry.Kind);
+
+        (await buyer.PostAsync($"/api/inbox/{entry.Id}/claim", null)).EnsureSuccessStatusCode();
+        buyerTank = await buyer.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
+        Assert.Contains(buyerTank!.Creatures, c => c.Id == creatureId);
+
+        // Auditoria: 1 registro MarketSale no TransactionLog, gravado na hora da compra (não do resgate)
         await _factory.WithDbAsync(async db =>
         {
             var log = await db.TransactionLogs.SingleAsync(t => t.CreatureInstanceId == creatureId);
@@ -288,12 +302,12 @@ public class MarketTests : IClassFixture<VivariumApiFactory>
             var habitat = await db.Habitats.FirstAsync(h => h.UserId == sellerId && h.HabitatType!.Code == "Aquarium");
             var blue = new CreatureInstance
             {
-                SpeciesId = 1, OwnerId = sellerId, HabitatId = habitat.Id, Seed = 111111,
+                SpeciesId = 1, OwnerId = sellerId, OriginalOwnerId = sellerId, HabitatId = habitat.Id, Seed = 111111,
                 TraitConfigVersion = 1, RarityScore = 5m, TraitsJson = TraitsSerialization.Serialize(blueTraits), CreatedAt = DateTime.UtcNow,
             };
             var orange = new CreatureInstance
             {
-                SpeciesId = 1, OwnerId = sellerId, HabitatId = habitat.Id, Seed = 222222,
+                SpeciesId = 1, OwnerId = sellerId, OriginalOwnerId = sellerId, HabitatId = habitat.Id, Seed = 222222,
                 TraitConfigVersion = 1, RarityScore = 5m, TraitsJson = TraitsSerialization.Serialize(orangeTraits), CreatedAt = DateTime.UtcNow,
             };
             db.CreatureInstances.AddRange(blue, orange);

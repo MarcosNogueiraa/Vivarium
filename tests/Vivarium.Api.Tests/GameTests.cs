@@ -88,7 +88,7 @@ public class GameTests : IClassFixture<VivariumApiFactory>
             {
                 db.CreatureInstances.Add(new CreatureInstance
                 {
-                    SpeciesId = 1, OwnerId = userId, HabitatId = habitatId,
+                    SpeciesId = 1, OwnerId = userId, OriginalOwnerId = userId, HabitatId = habitatId,
                     Seed = 1000 + i, TraitConfigVersion = 1, RarityScore = 3m,
                     TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(1000 + i)),
                     CreatedAt = DateTime.UtcNow,

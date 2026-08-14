@@ -50,10 +50,10 @@ describe("Cabeçalho mobile", () => {
     });
   });
 
-  it("as 6 abas ficam numa única linha rolável, não quebradas em duas", () => {
+  it("as 7 abas ficam numa única linha rolável, não quebradas em duas", () => {
     login();
     cy.get(".nav-pills button").then(($buttons) => {
-      expect($buttons.length).to.equal(6);
+      expect($buttons.length).to.equal(7); // Tanque/Caixa/Mochila/Mercado/Loja/Ninho/Ranking
       const tops = [...$buttons].map((b) => Math.round(b.getBoundingClientRect().top));
       // todas as abas no mesmo "y" — se tivesse quebrado em 2 linhas, haveria 2 valores de topo.
       const distinctTops = new Set(tops);

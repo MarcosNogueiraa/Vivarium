@@ -52,8 +52,8 @@ public class BreedingService(VivariumDbContext db, GameService game)
         if (parentAId == parentBId)
             return ServiceResult.Bad("Escolha dois peixes diferentes");
 
-        var parentA = await db.CreatureInstances.FirstOrDefaultAsync(c => c.Id == parentAId && c.OwnerId == userId && !c.IsDead);
-        var parentB = await db.CreatureInstances.FirstOrDefaultAsync(c => c.Id == parentBId && c.OwnerId == userId && !c.IsDead);
+        var parentA = await db.CreatureInstances.FirstOrDefaultAsync(c => c.Id == parentAId && c.OwnerId == userId && !c.IsDead && !c.PendingInboxClaim);
+        var parentB = await db.CreatureInstances.FirstOrDefaultAsync(c => c.Id == parentBId && c.OwnerId == userId && !c.IsDead && !c.PendingInboxClaim);
         if (parentA is null || parentB is null)
             return ServiceResult.NotFound("Peixe não encontrado");
 
@@ -83,8 +83,8 @@ public class BreedingService(VivariumDbContext db, GameService game)
         if (parentAId == parentBId)
             return ServiceResult.Bad("Escolha dois peixes diferentes");
 
-        var parentA = await db.CreatureInstances.FirstOrDefaultAsync(c => c.Id == parentAId && c.OwnerId == userId && !c.IsDead);
-        var parentB = await db.CreatureInstances.FirstOrDefaultAsync(c => c.Id == parentBId && c.OwnerId == userId && !c.IsDead);
+        var parentA = await db.CreatureInstances.FirstOrDefaultAsync(c => c.Id == parentAId && c.OwnerId == userId && !c.IsDead && !c.PendingInboxClaim);
+        var parentB = await db.CreatureInstances.FirstOrDefaultAsync(c => c.Id == parentBId && c.OwnerId == userId && !c.IsDead && !c.PendingInboxClaim);
         if (parentA is null || parentB is null)
             return ServiceResult.NotFound("Peixe não encontrado");
 
@@ -308,6 +308,7 @@ public class BreedingService(VivariumDbContext db, GameService game)
         {
             SpeciesId = parentA.SpeciesId,
             OwnerId = userId,
+            OriginalOwnerId = userId,
             HabitatId = childToTank ? mainHabitat.Id : null,
             Seed = childSeed,
             TraitConfigVersion = TraitConfigV1.Version,

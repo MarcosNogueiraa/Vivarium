@@ -34,7 +34,7 @@ public class VendorSaleTests : IClassFixture<VivariumApiFactory>
         {
             var c = new CreatureInstance
             {
-                SpeciesId = 1, OwnerId = userId, HabitatId = habitatId,
+                SpeciesId = 1, OwnerId = userId, OriginalOwnerId = userId, HabitatId = habitatId,
                 Seed = seed, TraitConfigVersion = 1, RarityScore = rarityScore,
                 TraitsJson = TraitsSerialization.Serialize(TraitGenerator.Generate(seed)),
                 CreatedAt = DateTime.UtcNow,
