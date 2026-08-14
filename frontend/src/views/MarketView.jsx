@@ -62,7 +62,9 @@ export function MarketView({ userId, refreshTank, notify }) {
   const [data, setData] = useState(null);
   const [detail, setDetail] = useState(null);
   const [page, setPage] = useState(0);
-  const [sortBy, setSortBy] = useState("newest");
+  // Padrão "raridade, maior primeiro" (14/08/2026, pedido do usuário) — o mercado abre
+  // já destacando os peixes mais valiosos, em vez de ordenado por data de listagem.
+  const [sortBy, setSortBy] = useState("rarity-desc");
   const [bandFilter, setBandFilter] = useState("all");
   const [partFilters, setPartFilters] = useState(emptyPartFilters);
 
