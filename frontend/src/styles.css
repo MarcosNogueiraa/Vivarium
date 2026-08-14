@@ -310,14 +310,16 @@ input:focus {
 .error { color: var(--coral); font-size: 0.85rem; text-align: center; }
 
 /* ---------- Section headings ---------- */
-.section-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+/* margin-bottom 16px→22px (13/08/2026, "tem coisa muito colada") — mais respiro
+   antes da caixa/lista seguinte em todas as abas que usam este cabeçalho. */
+.section-head { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
 .section-head h2 { font-size: 1.35rem; }
 .section-head .count { color: var(--faint); font-weight: 500; font-family: var(--ui); font-size: 1rem; }
 .section-head .spacer { flex: 1; }
 
 .backpack-toolbar {
   display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-  margin-bottom: 16px; padding: 10px 14px;
+  margin-bottom: 22px; padding: 10px 14px;
   border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.03); box-shadow: inset 0 0 0 1px var(--line);
 }
@@ -380,7 +382,7 @@ input:focus {
 .appearance-filter-part { display: flex; flex-direction: column; gap: 6px; }
 .appearance-filter-part strong { font-size: 0.82rem; color: var(--muted); }
 
-.pagination { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 16px; }
+.pagination { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 24px; }
 .pagination span { color: var(--muted); font-size: 0.85rem; }
 
 /* Seleção em massa na Mochila (08/08/2026) — vender vários peixes ao NPC de
@@ -409,7 +411,7 @@ input:focus {
 }
 .switch-track.on .switch-thumb { transform: translateX(16px); }
 .select-toolbar {
-  display: flex; align-items: center; gap: 12px; margin-bottom: 14px; font-size: 0.85rem;
+  display: flex; align-items: center; gap: 12px; margin-bottom: 20px; font-size: 0.85rem;
 }
 .select-check {
   position: absolute; top: 8px; right: 8px; z-index: 2;
@@ -699,12 +701,12 @@ input:focus {
 }
 
 /* ---------- Cards (mercado / loja) ---------- */
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 18px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 20px; }
 
 /* Painel fixo "Meus anúncios ativos" (Mercado, 13/08/2026) — sempre visível, separado da
    grade paginada/filtrável do resto do mercado (mesmo espírito da linha destacada do próprio
    jogador no Ranking, só que como seção própria em vez de 1 linha). */
-.market-mine-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+.market-mine-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
 
 .empty-state {
   display: flex; flex-direction: column; align-items: center; text-align: center;
@@ -1042,7 +1044,7 @@ input:focus {
 .detail-coins small { color: var(--muted); font-weight: 500; }
 .water-impact { font-size: 0.8rem; }
 
-.detail-section { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; }
+.detail-section { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 16px; }
 /* Cabeçalho clicável de .detail-section (Atributos / Por que é raro) — nasce fechado no
    FishDetail, pedido do usuário: a tela de detalhe estava grande demais, principalmente no
    mobile. Reaproveita o visual do .eyebrow (não o estilo bold do .howto-head) + a mesma
@@ -1061,7 +1063,14 @@ input:focus {
    usuário: "ficou meio escondida"). Cartão translúcido com borda/ícone, mesmo padrão visual já
    usado em .parent-preview-card/.filter-status-card — reaproveitado, não uma superfície nova. */
 .detail-section--prominent {
-  margin-top: 16px; padding-top: 0; border-top: none;
+  /* Espaçamento (13/08/2026, pedido do usuário: "tem coisa muito colada"): margin
+     simétrico (não só top) — sem isso, uma seção prominent seguida direto por uma
+     grade de cards (ex: "Meus anúncios ativos" → lista do mercado) ficava com 0px
+     de respiro embaixo, já que nem o card nem a grade tinham margin-bottom/top
+     próprios. `.content` é bloco normal (não flex/grid), então margens de irmãos
+     colapsam pro MAIOR valor, não somam — por isso o número aqui já é o gap real
+     entre duas seções vizinhas, não precisa dobrar em nenhum lado. */
+  margin: 24px 0; padding-top: 0; border-top: none;
   border-radius: var(--radius-sm); overflow: hidden;
   background: rgba(255, 255, 255, 0.03);
   box-shadow: inset 0 0 0 1px var(--line);
@@ -1348,7 +1357,7 @@ input:focus {
 .hist-date { font-variant-numeric: tabular-nums; }
 
 /* ---------- Ranking + visita a aquário de outro jogador ---------- */
-.ranking-view { display: flex; flex-direction: column; gap: 14px; }
+.ranking-view { display: flex; flex-direction: column; gap: 22px; }
 .leaderboard { display: flex; flex-direction: column; padding: 6px; }
 .leaderboard-row {
   display: flex; align-items: center; gap: 12px; padding: 10px 12px;
@@ -1430,7 +1439,7 @@ input:focus {
   .detail-section-head--prominent .eyebrow { font-size: 1rem; }
   .detail-section-head--prominent .chevron { font-size: 1rem; }
   .detail-section--prominent {
-    margin-top: 22px; margin-bottom: 4px;
+    margin: 26px 0;
     box-shadow: inset 0 0 0 1.5px var(--line);
   }
   .detail-section--prominent:has(.detail-section-head--prominent[aria-expanded="true"]) {
