@@ -123,7 +123,7 @@ describe("Mochila", () => {
 
   it("filtro por faixa de raridade esconde peixes de outras faixas", () => {
     const common = creature(305, 5555, 3.0);   // Comum
-    const legendary = creature(306, 6666, 16.0); // Lendário
+    const legendary = creature(306, 6666, 20.0); // Lendário (corte atual: score >= 16.60)
     cy.intercept("GET", "/api/game/backpack", { body: { capacity: 50, creatures: [common, legendary] } }).as("backpack");
     login();
     cy.wait("@backpack");
@@ -209,8 +209,8 @@ describe("Mochila", () => {
     cy.contains("19 moedas");
   });
 
-  it("peixe novo comum (< 7.5) esconde score/produção, abre revelação instantânea e marca visto", () => {
-    const fresh = creature(309, 9999, 6.0, false, true); // < 7.5: sem suspense
+  it("peixe novo comum (< 12.24) esconde score/produção, abre revelação instantânea e marca visto", () => {
+    const fresh = creature(309, 9999, 6.0, false, true); // < 12.24: sem suspense
     cy.intercept("GET", "/api/game/backpack", { body: { capacity: 50, creatures: [fresh] } }).as("backpack");
     login();
     cy.wait("@backpack");
@@ -224,7 +224,7 @@ describe("Mochila", () => {
     cy.intercept("POST", "/api/game/creatures/309/mark-seen", { statusCode: 200, body: {} }).as("markSeen");
     cy.get(".fish-stage.as-button").click();
     cy.get(".modal.celebrate").should("be.visible");
-    cy.wait("@markSeen"); // < 7.5: revela e marca visto assim que o modal abre, sem clique extra
+    cy.wait("@markSeen"); // < 12.24: revela e marca visto assim que o modal abre, sem clique extra
 
     cy.get(".modal-close").click();
     cy.contains(".card", "??? — clique pra revelar").should("not.exist");
@@ -232,8 +232,8 @@ describe("Mochila", () => {
     cy.contains(".card", "Pro tanque"); // ações voltam a aparecer
   });
 
-  it("peixe novo Raro+ (>= 7.5) revela clique-a-clique antes de marcar visto", () => {
-    const rare = creature(310, 8888, 8.5, false, true); // >= 7.5: suspense
+  it("peixe novo Raro+ (>= 12.24) revela clique-a-clique antes de marcar visto", () => {
+    const rare = creature(310, 8888, 13.0, false, true); // >= 12.24: suspense
     cy.intercept("GET", "/api/game/backpack", { body: { capacity: 50, creatures: [rare] } }).as("backpack");
     login();
     cy.wait("@backpack");
