@@ -380,8 +380,13 @@ public static class TraitGenerator
         if (subtraitsFromSource)
         {
             patternColor = patternSource.PatternColor!.Value;
-            patternSize = patternSource.PatternSize!.Value;
-            patternOpacity = patternSource.PatternOpacity!.Value;
+            // Jitter em vez de cópia exata (13/08/2026, pedido do usuário) — variação pequena
+            // em torno do valor do pai, não um clone. Ver TraitConfigV1.PatternSubtraitInheritJitterStdDev.
+            patternSize = NormalPick(childSeed, partSalt + "_pattern_size_jitter",
+                patternSource.PatternSize!.Value, TraitConfigV1.PatternSubtraitInheritJitterStdDev);
+            patternOpacity = NormalPick(childSeed, partSalt + "_pattern_opacity_jitter",
+                patternSource.PatternOpacity!.Value, TraitConfigV1.PatternSubtraitInheritJitterStdDev,
+                TraitConfigV1.PatternOpacityMin, TraitConfigV1.PatternOpacityMax);
             mix = patternSource.Mix; // não-nulo quando o padrão herdado é Gradient, senão null
         }
         else
@@ -562,13 +567,13 @@ public static class TraitGenerator
             .ToArray();
     }
 
-    /// <summary>Normal(mean, sd) determinística via Box-Muller, clampada em [0,100].</summary>
-    private static double NormalPick(long seed, string salt, double mean, double stdDev)
+    /// <summary>Normal(mean, sd) determinística via Box-Muller, clampada em [min,max] (default [0,100]).</summary>
+    private static double NormalPick(long seed, string salt, double mean, double stdDev, double min = 0, double max = 100)
     {
         double u1 = 1.0 - DeterministicHash.Roll01(seed, salt);          // (0,1] evita log(0)
         double u2 = DeterministicHash.Roll01(seed, salt + "_phase");
         double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-        return Math.Clamp(mean + stdDev * z, 0, 100);
+        return Math.Clamp(mean + stdDev * z, min, max);
     }
 
     /// <summary>CDF da normal(mean, sd) (aprox. Abramowitz-Stegun 7.1.26).</summary>

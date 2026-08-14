@@ -109,6 +109,17 @@ public static class TraitConfigV1
     public const double PatternOpacityExtremeLow = 30.0;
     public const double PatternOpacityExtremeHigh = 80.0;
 
+    /// <summary>
+    /// Desvio-padrão do jitter aplicado a tamanho/opacidade de padrão HERDADOS (13/08/2026,
+    /// pedido do usuário) — sem isso, o filhote copiava o valor exato do pai (ex: pai com
+    /// tamanho 90 sempre passava 90,000...). ~25% do espalhamento natural de cada trait
+    /// (desvio 20 do tamanho; opacidade uniforme 20-90 tem espalhamento equivalente
+    /// ~20 = (max-min)/√12) — variação perceptível sem "quebrar" a herança: um pai com
+    /// padrão extremo ainda faz o filho nascer quase sempre extremo, só não é mais clone
+    /// exato. Só se aplica quando o subtrait vem de herança — mutação já é sorteio livre.
+    /// </summary>
+    public const double PatternSubtraitInheritJitterStdDev = 5.0;
+
     // Movimento (ranges calibrados visualmente no protótipo):
     // velocidades 0-100 em normal(50,20); extremos <10 ou >90 entram no score
     // com peso reduzido. Amplitudes uniformes, só estética (fora do score).

@@ -350,9 +350,12 @@ public class BreedTraitsTests
     public void Gradiente_MixHerdadoEmBlocoQuandoOSubtraitVemDoMesmoPai()
     {
         // Pai A com cauda em Degradê, pai B sem padrão nenhum — sem mutação, sempre
-        // que o padrão do filho vier de A E os subtraits também vierem do MESMO bloco
-        // (patternColor/size/opacity idênticos aos de A, só possível por herança
-        // literal, não coincidência), o mix precisa ter vindo junto, nunca sorteado à parte.
+        // que o padrão do filho vier de A E o subtrait de cor também vier do MESMO bloco
+        // (patternColor idêntico ao de A — só possível por herança literal, não
+        // coincidência do sorteio livre), o mix precisa ter vindo junto, nunca sorteado à
+        // parte. PatternSize/Opacity não servem mais de sinal aqui (13/08/2026): herdados
+        // agora levam um jitter pequeno (TraitConfigV1.PatternSubtraitInheritJitterStdDev),
+        // então deixam de ser exatamente iguais aos do pai mesmo quando herdados de verdade.
         long parentA = ManySeeds(50_000).First(s => TraitGenerator.Generate(s).Tail.Pattern == PatternType.Gradient);
         long parentB = ManySeeds(50_000).First(s => TraitGenerator.Generate(s).Tail.Pattern == PatternType.None);
         var traitsA = TraitGenerator.Generate(parentA);
@@ -363,8 +366,6 @@ public class BreedTraitsTests
             var (child, _) = TraitGenerator.BreedTraits(childSeed, parentA, parentB, mutationChance: 0.0, rarityBias: 0.0);
             if (child.Tail.Pattern != PatternType.Gradient) continue;
             if (child.Tail.PatternColor != traitsA.Tail.PatternColor) continue;
-            if (child.Tail.PatternSize != traitsA.Tail.PatternSize) continue;
-            if (child.Tail.PatternOpacity != traitsA.Tail.PatternOpacity) continue;
 
             foundInherited = true;
             Assert.Equal(traitsA.Tail.Mix, child.Tail.Mix);
