@@ -116,9 +116,14 @@ export function BreedingView({ tank, refreshTank, notify }) {
   // renderização de "carregando" e a normal, e o React quebrava com
   // "Rendered more hooks than during the previous render").
   const candidates = backpack ? [...tank.creatures, ...backpack.creatures] : [];
+  // Peixe já selecionado (pickA/pickB) nunca some da lista por causa de um filtro alterado
+  // depois da escolha — fica visível pra comparação até ser desselecionado, mesmo que não
+  // corresponda mais ao filtro atual (pedido do usuário).
   const visibleCandidates = useMemo(() => candidates
-    .filter((c) => bandFilter === "all" || bandOf(Number(c.rarityScore)).name === bandFilter)
+    .filter((c) => c.id === pickA?.id || c.id === pickB?.id
+      || (bandFilter === "all" || bandOf(Number(c.rarityScore)).name === bandFilter))
     .filter((c) => {
+      if (c.id === pickA?.id || c.id === pickB?.id) return true;
       const t = traitsOf(c);
       return PARTS.every((part) => {
         const f = partFilters[part];
@@ -126,9 +131,9 @@ export function BreedingView({ tank, refreshTank, notify }) {
           && (f.pattern === "all" || t[part].pattern === f.pattern);
       });
     })
-    .filter((c) => !onlyBred || c.isBred)
+    .filter((c) => c.id === pickA?.id || c.id === pickB?.id || !onlyBred || c.isBred)
     .sort(SORTS[sortBy].cmp),
-  [candidates, bandFilter, partFilters, onlyBred, sortBy]);
+  [candidates, bandFilter, partFilters, onlyBred, sortBy, pickA, pickB]);
 
   const activeAppearanceFilters = PARTS.reduce(
     (n, part) => n + (partFilters[part].color !== "all" ? 1 : 0) + (partFilters[part].pattern !== "all" ? 1 : 0),
@@ -140,6 +145,12 @@ export function BreedingView({ tank, refreshTank, notify }) {
   function setPartPattern(part, pattern) {
     setPartFilters((prev) => ({ ...prev, [part]: { ...prev[part], pattern } }));
   }
+  function resetFilters() {
+    setBandFilter("all");
+    setPartFilters({ tail: { ...emptyPartFilter }, dorsal: { ...emptyPartFilter }, pectoral: { ...emptyPartFilter } });
+    setOnlyBred(false);
+  }
+  const filtersActive = activeAppearanceFilters > 0 || bandFilter !== "all" || onlyBred;
 
   if (status === null || backpack === null) return <p className="hint">Carregando o ninho…</p>;
 
@@ -314,6 +325,12 @@ export function BreedingView({ tank, refreshTank, notify }) {
               <input type="checkbox" checked={onlyBred} onChange={(e) => setOnlyBred(e.target.checked)} />
               Só filhotes 🐣
             </label>
+            <span className="spacer" />
+            {filtersActive && (
+              <button type="button" className="filter-reset-btn" onClick={resetFilters}>
+                ↺ Redefinir filtros
+              </button>
+            )}
           </div>
           <CollapsibleSection
             variant="prominent"
