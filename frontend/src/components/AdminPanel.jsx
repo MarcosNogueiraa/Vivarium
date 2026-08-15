@@ -60,6 +60,14 @@ export function AdminPanel({ onClose, notify }) {
     }
   }
 
+  // 15/08/2026, pedido do usuário: "Dar moedas" (antes um formulário só de mensagem com
+  // recompensa opcional) vira a tela principal de dar moedas — pública (todos/lista, já
+  // existia) + recompensa em destaque + mensagem agora OPCIONAL. Sem mudança de backend: título/
+  // corpo continuam obrigatórios lá (schema não-anulável), então quando o admin não escreve nada
+  // e só quer mandar moedas, o front preenche um texto padrão antes de enviar.
+  const hasReward = Boolean(msgRewardCode && msgRewardAmount);
+  const hasCustomMessage = Boolean(msgTitle.trim() && msgBody.trim());
+
   async function sendInboxMessage(e) {
     e.preventDefault();
     setMsgError(null);
@@ -68,8 +76,10 @@ export function AdminPanel({ onClose, notify }) {
       const usernames = msgAudience === "Selected"
         ? msgUsernamesRaw.split(",").map((u) => u.trim()).filter(Boolean)
         : null;
+      const title = msgTitle.trim() || "🎁 Presente do admin";
+      const body = msgBody.trim() || "Você recebeu uma recompensa da equipe do jogo!";
       const { recipientCount, notFoundUsernames } = await api.adminSendInboxMessage(
-        msgTitle.trim(), msgBody.trim(), msgAudience, usernames,
+        title, body, msgAudience, usernames,
         msgRewardCode || null, msgRewardCode ? Number(msgRewardAmount) : null,
       );
       notify(
@@ -99,7 +109,11 @@ export function AdminPanel({ onClose, notify }) {
         </button>
       </div>
 
-      <h4 style={{ marginTop: 24 }}>Ajustar carteira de um jogador</h4>
+      <h4 style={{ marginTop: 24 }}>🔧 Corrigir carteira de um jogador</h4>
+      <p className="hint" style={{ padding: 0, marginBottom: 8 }}>
+        Crédito direto e silencioso (não passa pela Caixa de Entrada) — pra corrigir saldo, não
+        pra presentear. Pra dar moedas de verdade, use "🎁 Dar moedas" abaixo.
+      </p>
       <form className="prompt-form" onSubmit={adjustWallet}>
         <label className="prompt-label">Username</label>
         <input
@@ -134,7 +148,11 @@ export function AdminPanel({ onClose, notify }) {
         </div>
       </form>
 
-      <h4 style={{ marginTop: 24 }}>Mandar mensagem pra Caixa de Entrada</h4>
+      <h4 style={{ marginTop: 24 }}>🎁 Dar moedas</h4>
+      <p className="hint" style={{ padding: 0, marginBottom: 8 }}>
+        Vira uma entrega na Caixa de Entrada — o jogador precisa resgatar. Mensagem é opcional
+        (some com "🎁 Presente do admin" se você deixar em branco).
+      </p>
       <form className="prompt-form" onSubmit={sendInboxMessage}>
         <label className="prompt-label">Público</label>
         <select value={msgAudience} onChange={(e) => setMsgAudience(e.target.value)}>
@@ -152,15 +170,9 @@ export function AdminPanel({ onClose, notify }) {
           </>
         )}
 
-        <label className="prompt-label">Título</label>
-        <input type="text" value={msgTitle} onChange={(e) => setMsgTitle(e.target.value)} />
-
-        <label className="prompt-label">Mensagem</label>
-        <textarea value={msgBody} onChange={(e) => setMsgBody(e.target.value)} />
-
-        <label className="prompt-label">Recompensa (opcional)</label>
+        <label className="prompt-label">Moeda</label>
         <select value={msgRewardCode} onChange={(e) => setMsgRewardCode(e.target.value)}>
-          <option value="">Sem recompensa</option>
+          <option value="">Sem moeda (só mensagem)</option>
           <option value="SOFT">Soft</option>
           <option value="PREMIUM">Premium (💎)</option>
         </select>
@@ -171,13 +183,25 @@ export function AdminPanel({ onClose, notify }) {
           />
         )}
 
+        <label className="prompt-label">Título (opcional)</label>
+        <input
+          type="text" value={msgTitle} placeholder="🎁 Presente do admin"
+          onChange={(e) => setMsgTitle(e.target.value)}
+        />
+
+        <label className="prompt-label">Mensagem (opcional)</label>
+        <textarea
+          value={msgBody} placeholder="Você recebeu uma recompensa da equipe do jogo!"
+          onChange={(e) => setMsgBody(e.target.value)}
+        />
+
         {msgError && <div className="error">{msgError}</div>}
         <div className="prompt-actions">
           <button type="button" onClick={onClose}>Fechar</button>
           <button
             type="submit" className="btn-primary"
             disabled={
-              busyMsg || !msgTitle.trim() || !msgBody.trim()
+              busyMsg || (!hasReward && !hasCustomMessage)
               || (msgAudience === "Selected" && !msgUsernamesRaw.trim())
               || (msgRewardCode && !msgRewardAmount)
             }

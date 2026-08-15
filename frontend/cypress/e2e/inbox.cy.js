@@ -153,7 +153,9 @@ describe("Caixa de Entrada", () => {
     }).as("sendMessage");
 
     cy.contains("button", "🛠️ Admin").click();
-    cy.contains("h4", "Mandar mensagem pra Caixa de Entrada").should("be.visible");
+    // O modal ganhou textos explicativos (15/08/2026) — "Dar moedas" agora fica fora da área
+    // visível sem rolar; scrollIntoView antes de checar (a interação em si já rola sozinha).
+    cy.contains("h4", "🎁 Dar moedas").scrollIntoView().should("be.visible");
 
     // select[0]="Moeda" e [1]="Modo" são da seção de ajustar carteira (acima); [2]="Público".
     cy.get('select').eq(2).select("Selected");
@@ -165,6 +167,32 @@ describe("Caixa de Entrada", () => {
     cy.wait("@sendMessage").its("request.body").should("deep.equal", {
       title: "Manutenção", body: "Vai ficar fora do ar às 22h.", audience: "Selected",
       usernames: ["fulano", "beltrano"], rewardCurrencyCode: null, rewardCurrencyAmount: null,
+    });
+  });
+
+  // 15/08/2026, pedido do usuário: "Dar moedas" pra todos/lista sem escrever mensagem —
+  // título/corpo têm que ir preenchidos com um texto padrão (backend exige os dois).
+  it("dar moedas pra todos sem escrever mensagem usa o texto padrão", () => {
+    login({ isAdmin: true, inboxEntries: [] });
+    cy.intercept("POST", "/api/admin/inbox/send", {
+      statusCode: 200, body: { recipientCount: 5, notFoundUsernames: [] },
+    }).as("sendMessage");
+
+    cy.contains("button", "🛠️ Admin").click();
+    // O modal ganhou textos explicativos (15/08/2026) — "Dar moedas" agora fica fora da área
+    // visível sem rolar; scrollIntoView antes de checar (a interação em si já rola sozinha).
+    cy.contains("h4", "🎁 Dar moedas").scrollIntoView().should("be.visible");
+
+    // Público já nasce em "Todos os jogadores" — só preenche moeda/quantia, sem mexer em
+    // título/mensagem (ambos ficam em branco).
+    cy.get('select').eq(2).should("have.value", "All");
+    cy.get('select').eq(3).select("SOFT");
+    cy.get('input[placeholder="quantia"]').type("500");
+    cy.contains("button", "Enviar").click();
+
+    cy.wait("@sendMessage").its("request.body").should("deep.equal", {
+      title: "🎁 Presente do admin", body: "Você recebeu uma recompensa da equipe do jogo!",
+      audience: "All", usernames: null, rewardCurrencyCode: "SOFT", rewardCurrencyAmount: 500,
     });
   });
 });
