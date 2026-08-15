@@ -232,14 +232,17 @@ static void ReportComumAberration(double[] scores, List<CreatureTraits> all, dou
 // 15/08/2026: usuário relatou (com dados reais de produção conferidos antes de mexer aqui —
 // ver band-distribution no Vivarium.AdminReset) que Raro parece comum demais e Épico raro
 // demais — a proporção 10:1 (Raro 1,00% / Épico 0,10%) da pirâmide Íngreme acima é íngreme
-// demais na prática. Pedido: "diminuir o piso dos épicos" — só move pEpico pra baixo (Raro
-// encolhe, Épico cresce), pIncomum/pRaro/pLendario intocados. pEpico 99,88→99,50 muda a
-// proporção Raro:Épico de 10:1 pra ~1,3:1 (Raro 0,62% / Épico 0,48%), mantendo Raro+Épico
-// juntos em 1,10% (igual a antes) — só redistribui a fronteira interna, não infla o topo.
-double pEpicoAjustado = 99.50;
-Console.WriteLine("\nCORTES ÍNGREME AJUSTADO (piso de Épico mais baixo, 15/08/2026):");
+// demais na prática. 1ª tentativa: só mover pEpico pra baixo (98,88→99,50), deixando Raro
+// encolher (1,00%→0,62%) — usuário achou que Épico ficou quase igual a Raro (0,48% vs 0,62%)
+// e pediu especificamente: MANTER Raro em ~1,00% e Épico em ~0,30%. Como largura de Raro =
+// pEpicoAjustado−pRaroAjustado e largura de Épico = pLendario−pEpicoAjustado, pra manter Raro
+// em 1,00% E dar 0,30% pro Épico (era 0,10%), as DUAS fronteiras (Incomum/Raro e Raro/Épico)
+// precisam mover — Incomum doa os 0,20 pontos percentuais extra que o Épico ganhou (48,88%→
+// 48,68%, mudança pequena o bastante pra não ser perceptível). pLendario intocado.
+double pRaroAjustado = 98.68, pEpicoAjustado = 99.68;
+Console.WriteLine("\nCORTES ÍNGREME AJUSTADO (Raro=1,00%/Épico=0,30%, 15/08/2026):");
 Console.WriteLine($"  Comum    < {Percentile(scores, pIncomum):0.00}");
-Console.WriteLine($"  Incomum  < {Percentile(scores, pRaro):0.00}");
+Console.WriteLine($"  Incomum  < {Percentile(scores, pRaroAjustado):0.00}");
 Console.WriteLine($"  Raro     < {Percentile(scores, pEpicoAjustado):0.00}");
 Console.WriteLine($"  Épico    < {Percentile(scores, pLendario):0.00}");
 Console.WriteLine($"  Lendário ≥ {Percentile(scores, pLendario):0.00}");

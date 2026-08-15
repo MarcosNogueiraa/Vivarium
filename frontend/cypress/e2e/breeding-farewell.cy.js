@@ -27,7 +27,7 @@ function creature(id, seed, rarityScore) {
 
 const parentA = creature(101, 111, 6.2);
 const parentB = creature(102, 222, 7.1);
-const child = creature(103, 333, 13.0); // Raro (corte atual: score >= 12.24)
+const child = creature(103, 333, 13.0); // Raro (corte atual: score >= 12.04)
 
 const activeSlot = {
   active: true,
@@ -79,7 +79,7 @@ describe("Despedida do pai que não sobrevive à gestação", () => {
     cy.get(".farewell-fish").should("have.length", 1);
     cy.get(".farewell-fish").contains("6.2");
 
-    // Filhote é Raro (13.0 ≥ 12.24) — revelação clique-a-clique (CollectCelebration.jsx)
+    // Filhote é Raro (13.0 ≥ 12.04) — revelação clique-a-clique (CollectCelebration.jsx)
     // esconde "Maravilha!" até tocar o peixe as 4 vezes (corpo/cauda/dorsal/peitoral).
     cy.get(".celebrate-fish").click().click().click().click();
 

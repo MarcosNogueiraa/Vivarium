@@ -70,13 +70,16 @@ export const PT = {
 // algum atributo isolado raríssimo, 9,43% vs 4,99%); Incomum absorve o resto do espaço
 // liberado. Calibrado via `Vivarium.Simulation` (5M seeds).
 // 15/08/2026: usuário achou Raro comum demais / Épico raro demais na prática (proporção
-// 10:1 da pirâmide original) — piso de Épico baixado (14,85→13,27), só move a fronteira
-// interna Raro/Épico (Raro 1,00%→0,62%, Épico 0,10%→0,48%; soma das duas continua 1,10%,
-// Comum/Incomum/Lendário intocados). Ver `Vivarium.Simulation` bloco "CORTES ÍNGREME AJUSTADO".
+// 10:1 da pirâmide original). 1ª tentativa (Raro 14,85→13,27) só moveu a fronteira Raro/Épico
+// pra baixo — deixou os dois quase do mesmo tamanho (Raro 0,62%/Épico 0,48%), usuário achou
+// pouco diferenciado e pediu Raro de volta a ~1,00% com Épico em ~0,30%. Como isso exige mais
+// espaço pro Épico SEM encolher Raro, Incomum doou os 0,20 pontos percentuais extras (12,24→
+// 12,04) — mudança pequena o bastante pra não ser perceptível. Comum/Lendário intocados. Ver
+// `Vivarium.Simulation` bloco "CORTES ÍNGREME AJUSTADO".
 export const BANDS = [
   { max: 5.45, name: "Comum", color: "#93a7b0" },
-  { max: 12.24, name: "Incomum", color: "#57b876" },
-  { max: 13.27, name: "Raro", color: "#4d8fe0" },
+  { max: 12.04, name: "Incomum", color: "#57b876" },
+  { max: 13.78, name: "Raro", color: "#4d8fe0" },
   { max: 16.60, name: "Épico", color: "#a86ce4" },
   { max: Infinity, name: "Lendário", color: "#f0b93b" },
 ];

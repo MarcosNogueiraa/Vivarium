@@ -28,7 +28,7 @@ function creature(id, seed, rarityScore) {
 
 const parentA = creature(201, 111, 5.0);
 const parentB = creature(202, 222, 4.2);
-const child = creature(203, 333, 3.1); // < 12.24: sem suspense, celebração já revelada
+const child = creature(203, 333, 3.1); // < 12.04: sem suspense, celebração já revelada
 
 const activeSlot = {
   active: true,

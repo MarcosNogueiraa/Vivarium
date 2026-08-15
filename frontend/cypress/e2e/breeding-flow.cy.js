@@ -180,7 +180,7 @@ describe("Ninho — gestação ativa", () => {
     // `breedingSource` (o servidor grava isso no nascimento) — sem ela, rarityBreakdownOf não
     // tem de onde tirar o rótulo (mesmo padrão em toda a base: nada mais é derivado do seed).
     const child = {
-      ...bredCreature(404, 444444, 13.0, 111111, 222222), // Raro (corte atual: score >= 12.24)
+      ...bredCreature(404, 444444, 13.0, 111111, 222222), // Raro (corte atual: score >= 12.04)
       breedingSource: [
         { key: "shimmerTier", part: null, source: "ParentA" },
         { key: "color", part: "tail", source: "ParentB" },
@@ -199,7 +199,7 @@ describe("Ninho — gestação ativa", () => {
     cy.wait("@collect");
     cy.get(".modal.celebrate").should("be.visible");
 
-    // Score 13.0 >= 12.24: revelação clique-a-clique — clica no peixe até revelar tudo.
+    // Score 13.0 >= 12.04: revelação clique-a-clique — clica no peixe até revelar tudo.
     for (let i = 0; i < 4; i++) cy.get(".celebrate-fish").click();
 
     cy.get(".reveal-attr").should("have.length.at.least", 1);

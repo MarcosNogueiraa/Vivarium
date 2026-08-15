@@ -19,13 +19,14 @@ public class MarketService(VivariumDbContext db)
     // não existe uma representação de "banda" no backend hoje, só o RarityScore cru. Se os
     // cortes mudarem lá (recalibração via Vivarium.Simulation), espelhar aqui também.
     // 14/08/2026: pirâmide "Íngreme" (Lendário 1/5.000), sincronizado com BANDS (fishRenderer.js).
-    // 15/08/2026: piso de Épico baixado (14.85→13.27) — Raro estava comum demais/Épico raro
-    // demais na prática; ver o bloco "CORTES ÍNGREME AJUSTADO" em Vivarium.Simulation.
+    // 15/08/2026: Raro estava comum demais/Épico raro demais na prática — ajustado pra manter
+    // Raro em ~1,00% e Épico em ~0,30% (12.24→12.04, 14.85→13.78, Incomum doou o espaço);
+    // ver o bloco "CORTES ÍNGREME AJUSTADO" em Vivarium.Simulation.
     private static string BandNameOf(decimal score) => score switch
     {
         < 5.45m => "Comum",
-        < 12.24m => "Incomum",
-        < 13.27m => "Raro",
+        < 12.04m => "Incomum",
+        < 13.78m => "Raro",
         < 16.60m => "Épico",
         _ => "Lendário",
     };

@@ -130,7 +130,7 @@ switch (args[0])
 
         (string Name, decimal Max)[] bands =
         [
-            ("Comum", 5.45m), ("Incomum", 12.24m), ("Raro", 13.27m), ("Épico", 16.60m), ("Lendário", decimal.MaxValue),
+            ("Comum", 5.45m), ("Incomum", 12.04m), ("Raro", 13.78m), ("Épico", 16.60m), ("Lendário", decimal.MaxValue),
         ];
         void PrintTable(string label, IReadOnlyList<decimal> scores)
         {
