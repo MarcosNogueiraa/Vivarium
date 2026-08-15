@@ -14,6 +14,7 @@ using Vivarium.Core.Gameplay;
 // Uso:
 //   dotnet run --project tools/Vivarium.AdminReset -- reset-password <email> <novaSenha>
 //   dotnet run --project tools/Vivarium.AdminReset -- list-users
+//   dotnet run --project tools/Vivarium.AdminReset -- band-distribution
 //   dotnet run --project tools/Vivarium.AdminReset -- check-cross-refs <id1,id2,...>
 //   dotnet run --project tools/Vivarium.AdminReset -- delete-users <id1,id2,...>
 //   dotnet run --project tools/Vivarium.AdminReset -- list-creatures <email>
@@ -109,6 +110,48 @@ switch (args[0])
             Console.WriteLine($"{r.Id,-6} {r.Username,-24} {r.Email,-34} {r.CreatedAt:yyyy-MM-dd HH:mm,-20} {(r.IsAdmin ? "sim" : ""),-6} {r.FishCount,-7} {r.RarityTotal,-9:0.0}");
         }
         Console.WriteLine($"\nTotal: {rows.Count} usuário(s).");
+        return 0;
+    }
+    case "band-distribution":
+    {
+        // Só leitura — distribuição REAL de faixa de raridade na população viva (exclui mortos
+        // e vendidos ao NPC, que já saíram do jogo). Cortes espelham BANDS (fishRenderer.js) e
+        // MarketService.BandNameOf — atualizar aqui junto se a pirâmide mudar de novo.
+        // Argumento opcional <desde> (yyyy-MM-dd[THH:mm]) filtra por CreatedAt — útil pra
+        // comparar a população NOVA (nascida depois de um rebalanceamento) contra o legado
+        // (traits congelados no nascimento — peixe antigo nunca migra de faixa sozinho).
+        DateTime? since = null;
+        if (args.Length > 1 && DateTime.TryParse(args[1], out var parsed))
+            since = DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
+
+        var query = db.CreatureInstances.Where(c => !c.IsDead && c.SoldAt == null);
+        if (since is not null) query = query.Where(c => c.CreatedAt >= since);
+        var rows = await query.Select(c => new { c.RarityScore, IsBred = c.ParentAId != null }).ToListAsync();
+
+        (string Name, decimal Max)[] bands =
+        [
+            ("Comum", 5.45m), ("Incomum", 12.24m), ("Raro", 13.27m), ("Épico", 16.60m), ("Lendário", decimal.MaxValue),
+        ];
+        void PrintTable(string label, IReadOnlyList<decimal> scores)
+        {
+            decimal lo = decimal.MinValue;
+            Console.WriteLine($"\n{label} — {scores.Count} criatura(s)");
+            Console.WriteLine($"{"Faixa",-10} {"Peixes",-8} {"%",-8}");
+            foreach (var (name, hi) in bands)
+            {
+                int n = scores.Count(s => s >= lo && s < hi);
+                double pct = scores.Count == 0 ? 0 : n / (double)scores.Count * 100;
+                Console.WriteLine($"{name,-10} {n,-8} {pct,-8:0.00}%");
+                lo = hi;
+            }
+        }
+        Console.WriteLine(since is null ? "Todas as criaturas vivas" : $"Criaturas vivas desde {since:yyyy-MM-dd HH:mm} UTC");
+        // Fresco (Generate direto do seed) vs filhote (BreedTraits, herança com viés de raridade
+        // — pode manter a raridade dos pais mesmo com os pesos de geração nova bem mais raros;
+        // ver CLAUDE.md §8.8) — separar ajuda a achar a causa real de um desequilíbrio percebido.
+        PrintTable("TODAS", rows.Select(r => r.RarityScore).ToList());
+        PrintTable("Só peixe FRESCO (não-filhote)", rows.Where(r => !r.IsBred).Select(r => r.RarityScore).ToList());
+        PrintTable("Só FILHOTE (cruzamento)", rows.Where(r => r.IsBred).Select(r => r.RarityScore).ToList());
         return 0;
     }
     case "check-cross-refs":

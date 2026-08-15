@@ -229,6 +229,21 @@ static void ReportComumAberration(double[] scores, List<CreatureTraits> all, dou
     double pct = comuns.Count == 0 ? 0 : comuns.Count(HasRareTrait) / (double)comuns.Count * 100;
     Console.WriteLine($"  {label} (corte <{cutoff:0.00}, {comuns.Count:N0} peixes): {pct:0.00}% têm algum atributo raríssimo isolado");
 }
+// 15/08/2026: usuário relatou (com dados reais de produção conferidos antes de mexer aqui —
+// ver band-distribution no Vivarium.AdminReset) que Raro parece comum demais e Épico raro
+// demais — a proporção 10:1 (Raro 1,00% / Épico 0,10%) da pirâmide Íngreme acima é íngreme
+// demais na prática. Pedido: "diminuir o piso dos épicos" — só move pEpico pra baixo (Raro
+// encolhe, Épico cresce), pIncomum/pRaro/pLendario intocados. pEpico 99,88→99,50 muda a
+// proporção Raro:Épico de 10:1 pra ~1,3:1 (Raro 0,62% / Épico 0,48%), mantendo Raro+Épico
+// juntos em 1,10% (igual a antes) — só redistribui a fronteira interna, não infla o topo.
+double pEpicoAjustado = 99.50;
+Console.WriteLine("\nCORTES ÍNGREME AJUSTADO (piso de Épico mais baixo, 15/08/2026):");
+Console.WriteLine($"  Comum    < {Percentile(scores, pIncomum):0.00}");
+Console.WriteLine($"  Incomum  < {Percentile(scores, pRaro):0.00}");
+Console.WriteLine($"  Raro     < {Percentile(scores, pEpicoAjustado):0.00}");
+Console.WriteLine($"  Épico    < {Percentile(scores, pLendario):0.00}");
+Console.WriteLine($"  Lendário ≥ {Percentile(scores, pLendario):0.00}");
+
 Console.WriteLine("\nABERRAÇÃO EM PEIXE COMUM (atributo raríssimo isolado, score não decolou):");
 ReportComumAberration(scores, all, Percentile(scores, 50), "Comum=50%   (escolhido)");
 ReportComumAberration(scores, all, Percentile(scores, 55), "Comum=55%   (referência)");

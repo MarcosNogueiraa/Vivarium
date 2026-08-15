@@ -65,14 +65,18 @@ export const PT = {
 // 14/08/2026 (v3, pirâmide "Íngreme" — CLAUDE.md 5): Lendário caiu pra 1 em 5.000 (0,02%,
 // era 0,15%) — TraitConfigV1.ShimmerTiers.Legendary reduzido de 0,2%→0,02% (chance REAL de
 // sortear o brilho, não só o rótulo — mover só o corte de score sem tocar no peso não
-// desaceleraria nada de verdade). Raro 1,00%/Épico 0,10% também. Comum ficou em 50% (mesmo
-// tamanho de antes — testado em simulação: deixar Comum crescer pra 61,8% quase dobrava a
-// taxa de peixe "Comum" carregando algum atributo isolado raríssimo, 9,43% vs 4,99%);
-// Incomum absorve o resto do espaço liberado. Calibrado via `Vivarium.Simulation` (5M seeds).
+// desaceleraria nada de verdade). Comum ficou em 50% (mesmo tamanho de antes — testado em
+// simulação: deixar Comum crescer pra 61,8% quase dobrava a taxa de peixe "Comum" carregando
+// algum atributo isolado raríssimo, 9,43% vs 4,99%); Incomum absorve o resto do espaço
+// liberado. Calibrado via `Vivarium.Simulation` (5M seeds).
+// 15/08/2026: usuário achou Raro comum demais / Épico raro demais na prática (proporção
+// 10:1 da pirâmide original) — piso de Épico baixado (14,85→13,27), só move a fronteira
+// interna Raro/Épico (Raro 1,00%→0,62%, Épico 0,10%→0,48%; soma das duas continua 1,10%,
+// Comum/Incomum/Lendário intocados). Ver `Vivarium.Simulation` bloco "CORTES ÍNGREME AJUSTADO".
 export const BANDS = [
   { max: 5.45, name: "Comum", color: "#93a7b0" },
   { max: 12.24, name: "Incomum", color: "#57b876" },
-  { max: 14.85, name: "Raro", color: "#4d8fe0" },
+  { max: 13.27, name: "Raro", color: "#4d8fe0" },
   { max: 16.60, name: "Épico", color: "#a86ce4" },
   { max: Infinity, name: "Lendário", color: "#f0b93b" },
 ];

@@ -110,13 +110,24 @@ Onde cada `P_x` é a probabilidade (peso/100) do valor sorteado naquele trait. U
 Isso pode ser calculado uma vez na criação do peixe e cacheado no banco (não precisa recalcular a cada exibição).
 
 **Faixas de exibição ao jogador** — recalibradas via simulação de 100k seeds (**29/07/2026**, raridade v2: corpo pesa 2.5× no score, bônus de conjunto coeso, 11 padrões), produzindo a pirâmide 50% / 30% / 15% / 4.8% / 0.2%:
-- Comum: score < 5.4
-- Incomum: 5.4–7.5
-- Raro: 7.5–9.8
-- Épico: 9.8–14.0
-- Lendário: 14.0+
+- ~~Comum: score < 5.4~~
+- ~~Incomum: 5.4–7.5~~
+- ~~Raro: 7.5–9.8~~
+- ~~Épico: 9.8–14.0~~
+- ~~Lendário: 14.0+~~
 
 > Distribuição v2 (100k): min ~2.73, p50 5.36, p99.8 14.01, max ~18.9. O corpo pesar mais e os bônus de conjunto **subiram e alongaram a cauda** (antes máx ~14; a raridade v1 começava em ~2.6 e topava em 11.2). Recalibrar essas faixas sempre que os pesos do `TraitWeightConfig` mudarem (rodar `dotnet run --project tools/Vivarium.Simulation` e copiar os cortes p50/p80/p95/p99.8 pra `fishRenderer BANDS` + `App.jsx RARITY_RANGES`).
+
+> **Superado (14–15/08/2026) — pirâmide "Íngreme", Lendário 1 em 5.000 de verdade.** `TraitConfigV1.ShimmerTiers.Legendary` reduzido 0,2%→0,02% (chance REAL de sortear o brilho, não só o rótulo — mover só o corte de score sem tocar no peso não desaceleraria nada). `WeightedTable.BiasedInheritProbability` ganhou um amortecimento (log-ratio) pra compensar: reduzir o peso do Legendary aumentou tanto a razão de probabilidade Legendary/None que o viés de herança de raridade no cruzamento (§8.8) começou a "lavar" Legendário pro filhote AINDA mais fácil que antes — o oposto do pretendido. Cortes calibrados via `Vivarium.Simulation` (1M seeds), Comum mantido em 50% (crescer pra 61,8% quase dobrava a taxa de peixe Comum carregando algum atributo isolado raríssimo, 9,43% vs 4,99% — testado antes de decidir):
+> - Comum: score < 5.45
+> - Incomum: 5.45–12.24
+> - Raro: 12.24–13.27
+> - Épico: 13.27–16.60
+> - Lendário: 16.60+
+>
+> **15/08/2026, ajuste no mesmo dia:** o corte inicial dava Raro 1,00%/Épico 0,10% (proporção 10:1) — usuário relatou (e confirmei com dados reais de produção via `Vivarium.AdminReset -- band-distribution`) que Raro parecia comum demais e Épico raro demais na prática. Pedido explícito: "diminuir o piso dos épicos". Só o corte Raro/Épico moveu (14,85→13,27) — Comum/Incomum/Lendário intocados; Raro caiu pra 0,62%, Épico subiu pra 0,48% (soma das duas continua 1,10%, é só uma redistribuição da fronteira interna, não um infla-tudo). Espelhado em `fishRenderer.js BANDS`, `format.js RARITY_RANGES`, `MarketService.BandNameOf` e `Vivarium.AdminReset -- band-distribution`. **Sem migration/backfill** — traits são congelados no nascimento (§8.19.2) mas os cortes de banda são só uma classificação stateless do score já gravado; mover o corte reclassifica peixes já existentes instantaneamente na próxima leitura, sem tocar em nenhuma linha do banco.
+>
+> **Achado na investigação (não é bug, é composição da população):** peixes FRESCOS (gerados do zero desde o rebalanceamento) já batiam perto do alvo original; o desequilíbrio percebido vinha sobretudo de FILHOTES — o viés de herança de raridade no cruzamento (§8.8) empurra a raridade de peixes "legado" (nascidos com os pesos generosos de antes do rebalanceamento de 14/08) pra dentro da população nova. Well-understood, não corrigido separadamente — o ajuste de corte acima já resolve o sintoma percebido; se a amplificação via legado continuar incomodando depois que os peixes legado envelhecerem, a alavanca certa seria `RarityBiasStrength`/`BiasedInheritProbability`, não outro corte de banda.
 
 ### 5.1 Decisões de implementação do score (v1)
 
