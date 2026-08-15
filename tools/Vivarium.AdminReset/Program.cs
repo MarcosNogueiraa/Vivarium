@@ -112,6 +112,60 @@ switch (args[0])
         Console.WriteLine($"\nTotal: {rows.Count} usuário(s).");
         return 0;
     }
+    case "tank-income":
+    {
+        // Só leitura — breakdown REAL de renda do tanque de um jogador (raridade + sinergia por
+        // parte), pra investigar relato de "sinergia ainda tá muito forte" com dados de produção
+        // em vez de só simulação sintética. Reusa IncomeCalculator/PartColorsResolver (mesmo
+        // motor do jogo), não reimplementa nada.
+        if (args.Length != 2)
+        {
+            Console.WriteLine("Uso: dotnet run --project tools/Vivarium.AdminReset -- tank-income <email>");
+            return 1;
+        }
+        string tiEmail = args[1];
+        var tiUser = await db.Users.FirstOrDefaultAsync(u => u.Email == tiEmail);
+        if (tiUser is null) { Console.WriteLine($"Usuário com email '{tiEmail}' não encontrado."); return 1; }
+
+        int tiAquariumTypeId = await db.HabitatTypes.Where(h => h.Code == "Aquarium").Select(h => h.Id).FirstAsync();
+        var tiHabitat = await db.Habitats.FirstAsync(h => h.UserId == tiUser.Id && h.HabitatTypeId == tiAquariumTypeId);
+        var tiFish = await db.CreatureInstances
+            .Where(c => c.HabitatId == tiHabitat.Id && !c.IsDead)
+            .ToListAsync();
+
+        var tiConfig = new TickConfig();
+        var incomes = tiFish.Select(c =>
+        {
+            var (tail, dorsal, pectoral) = PartColorsResolver.Of(c);
+            return new FishIncome(c.RarityScore, tail, dorsal, pectoral);
+        }).ToList();
+
+        var tailCounts = incomes.GroupBy(f => f.TailColor).ToDictionary(g => g.Key, g => g.Count());
+        var dorsalCounts = incomes.GroupBy(f => f.DorsalColor).ToDictionary(g => g.Key, g => g.Count());
+        var pectoralCounts = incomes.GroupBy(f => f.PectoralColor).ToDictionary(g => g.Key, g => g.Count());
+
+        Console.WriteLine($"Usuário #{tiUser.Id} {tiUser.Username} — {tiFish.Count} peixe(s) no tanque, água={tiHabitat.MaintenanceLevel:0}%\n");
+        double totalBase = 0, totalWithSynergy = 0;
+        for (int i = 0; i < tiFish.Count; i++)
+        {
+            var c = tiFish[i];
+            var f = incomes[i];
+            double baseRate = IncomeCalculator.CoinsPerHour(f.RarityScore, tiConfig);
+            double synergy = IncomeCalculator.SynergyMultiplier(
+                tailCounts[f.TailColor], dorsalCounts[f.DorsalColor], pectoralCounts[f.PectoralColor], tiConfig);
+            double finalRate = baseRate * synergy;
+            totalBase += baseRate;
+            totalWithSynergy += finalRate;
+            Console.WriteLine($"#{c.Id,-6} score={f.RarityScore,6:0.00}  base={baseRate,7:0.00}/h  " +
+                $"tail={f.TailColor}({tailCounts[f.TailColor]}) dorsal={f.DorsalColor}({dorsalCounts[f.DorsalColor]}) pectoral={f.PectoralColor}({pectoralCounts[f.PectoralColor]})  " +
+                $"sinergia=×{synergy:0.000} ({(synergy - 1) * 100:+0.0;-0.0}%)  final={finalRate,7:0.00}/h");
+        }
+        double water = IncomeCalculator.WaterFactor(tiHabitat.MaintenanceLevel, tiConfig);
+        Console.WriteLine($"\nTotal base (sem sinergia): {totalBase:0.00}/h");
+        Console.WriteLine($"Total com sinergia:        {totalWithSynergy:0.00}/h  (+{(totalWithSynergy / totalBase - 1) * 100:0.0}% sobre o base)");
+        Console.WriteLine($"Total real (com água {tiHabitat.MaintenanceLevel:0}%, fator {water:0.000}): {totalWithSynergy * water:0.00}/h");
+        return 0;
+    }
     case "band-distribution":
     {
         // Só leitura — distribuição REAL de faixa de raridade na população viva (exclui mortos

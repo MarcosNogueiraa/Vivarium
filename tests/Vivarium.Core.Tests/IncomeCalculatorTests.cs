@@ -94,23 +94,24 @@ public class IncomeCalculatorTests
         decimal mesmaCor = IncomeCalculator.TankRatePerHour(SameColor(6m, 5), 100m, Cfg);
 
         // 5 peixes mesma CAUDA (dorsal/peitoral variam, sem sinergia própria): bonus(5) =
-        // min(0.15, 0.075+0.025×3) = 0.15 (teto já batido) → cada um ×1.15.
+        // min(0.10, 0.03+0.01×3) = 0.06 (ainda longe do teto, precisa de N=9) → cada um ×1.06.
         Assert.True(mesmaCor > distintas);
-        Assert.Equal(1.15, (double)(mesmaCor / distintas), 2);
+        Assert.Equal(1.06, (double)(mesmaCor / distintas), 2);
     }
 
     [Fact]
     public void Sinergia_TemTeto()
     {
-        // Bônus de UMA parte isolada (mesma fórmula pra cauda/dorsal/peitoral, 14/08/2026).
+        // Bônus de UMA parte isolada (mesma fórmula pra cauda/dorsal/peitoral, 14/08/2026;
+        // recalibrada 15/08/2026 — dados reais mostraram o teto batendo fácil demais).
         Assert.Equal(0.0, IncomeCalculator.PartSynergyBonus(1, Cfg), 3);
-        Assert.Equal(0.075, IncomeCalculator.PartSynergyBonus(2, Cfg), 3);
-        Assert.Equal(0.10, IncomeCalculator.PartSynergyBonus(3, Cfg), 3);
+        Assert.Equal(0.03, IncomeCalculator.PartSynergyBonus(2, Cfg), 3);
+        Assert.Equal(0.04, IncomeCalculator.PartSynergyBonus(3, Cfg), 3);
         // muitos peixes: limitado ao teto por parte
         Assert.Equal(Cfg.SynergyMaxBonus, IncomeCalculator.PartSynergyBonus(100, Cfg), 3);
 
         // Multiplicador total soma as 3 partes — pior caso: as 3 batendo o próprio teto ao
-        // mesmo tempo (+45%, metade do antigo +80% de uma parte só).
+        // mesmo tempo (+30%, precisa de 9+ peixes em CADA parte pra saturar).
         Assert.Equal(1.0, IncomeCalculator.SynergyMultiplier(1, 1, 1, Cfg), 3);
         Assert.Equal(1.0 + 3 * Cfg.SynergyMaxBonus, IncomeCalculator.SynergyMultiplier(100, 100, 100, Cfg), 3);
     }

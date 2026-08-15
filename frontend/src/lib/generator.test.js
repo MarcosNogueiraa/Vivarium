@@ -184,7 +184,7 @@ describe("partSynergyBonus", () => {
   it("cresce com mais peixes da mesma cor, até o teto", () => {
     expect(partSynergyBonus(2)).toBeGreaterThan(0);
     expect(partSynergyBonus(3)).toBeGreaterThan(partSynergyBonus(2));
-    expect(partSynergyBonus(1000)).toBeLessThanOrEqual(0.15); // maxBonus por parte
+    expect(partSynergyBonus(1000)).toBeLessThanOrEqual(0.10); // maxBonus por parte (15/08/2026: 0.15→0.10)
   });
 });
 
@@ -195,7 +195,7 @@ describe("synergyMultiplier", () => {
 
   it("soma o bônus das 3 partes, até o teto combinado", () => {
     expect(synergyMultiplier(2, 1, 1)).toBeCloseTo(1 + partSynergyBonus(2), 10);
-    expect(synergyMultiplier(1000, 1000, 1000)).toBeLessThanOrEqual(1.45); // 3 × 0.15
+    expect(synergyMultiplier(1000, 1000, 1000)).toBeLessThanOrEqual(1.30 + 1e-9); // 3 × 0.10 (15/08/2026: era 1.45)
   });
 });
 

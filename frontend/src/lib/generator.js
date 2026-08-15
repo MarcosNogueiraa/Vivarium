@@ -125,7 +125,9 @@ export const CONFIG = {
   income: { base: 1.5, growth: 0.42, ref: 4.0, taperScore: 16.60, taperGrowth: 0.10 },
   // 14/08/2026: sinergia por PARTE (cauda/dorsal/peitoral contam separado, bônus somam) —
   // espelha TickConfig.SynergyBaseBonus/PerExtraMatch/MaxBonus (manter em sincronia).
-  synergy: { base: 0.075, perExtra: 0.025, maxBonus: 0.15 },
+  // 15/08/2026, v3: teto 15%→10%/parte e N pra saturar 5→9 peixes (dados reais mostraram o
+  // teto sendo batido fácil demais nas 3 partes ao mesmo tempo) — ver TickConfig.cs.
+  synergy: { base: 0.03, perExtra: 0.01, maxBonus: 0.10 },
   // Venda ao NPC (vendor, §8.12) — espelha VendorCalculator/TickConfig (manter em sincronia)
   vendor: { hoursEquivalent: 2.0, minPrice: 1 },
   // Degradação da água (§8.2/8.6) — espelha TickConfig (DegradationPerMinute, DegradationPerFishFactor, manter em sincronia)

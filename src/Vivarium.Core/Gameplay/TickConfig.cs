@@ -107,12 +107,20 @@ public sealed record TickConfig
     // Por parte: N peixes com a mesma cor → bonus(N) = N<2 ? 0 :
     // min(SynergyMaxBonus, SynergyBaseBonus + SynergyPerExtraMatch·(N-2)). Antes (v1) era só
     // cauda, uniforme 15%/peixe sem teto prático até 80% — achado real do usuário: montar um
-    // tanque temático só de cauda já dava um bônus alto demais. Pior caso agora (3 partes
-    // batendo o próprio teto ao mesmo tempo) cai de +80% pra +45%, e fica bem mais difícil de
-    // alcançar (precisa de 5+ peixes combinando em CADA uma das 3 partes independentemente).
-    public double SynergyBaseBonus { get; init; } = 0.075;
-    public double SynergyPerExtraMatch { get; init; } = 0.025;
-    public double SynergyMaxBonus { get; init; } = 0.15;
+    // tanque temático só de cauda já dava um bônus alto demais.
+    //
+    // 15/08/2026, v3: a v2 assumia que bater o teto nas 3 partes ao mesmo tempo seria raro —
+    // dados reais de produção (conta do usuário, `Vivarium.AdminReset -- tank-income`) mostraram
+    // o oposto: com só 5 peixes da mesma cor numa parte já saturando o teto (7,5%+2,5%·3=15%) e
+    // poucas cores possíveis, 10 de 15 peixes de um tanque real bateram o teto nas 3 partes ao
+    // mesmo tempo, rendendo +40,4% sobre o base no tanque inteiro. Ataca as DUAS causas: teto por
+    // parte caiu 15%→10% (pior caso 3 partes: 45%→30%) E o N pra saturar subiu de 5→9 peixes
+    // (base 7,5%→3%, incremento 2,5%→1%/extra) — agora exige um tanque bem mais dedicado/
+    // temático (quase um monotanque por parte) pra alcançar o teto, não só metade de um tanque
+    // médio.
+    public double SynergyBaseBonus { get; init; } = 0.03;
+    public double SynergyPerExtraMatch { get; init; } = 0.01;
+    public double SynergyMaxBonus { get; init; } = 0.10;
 
     // --- Venda ao NPC (vendor, §8.12): preço deliberadamente baixo — poucas horas do
     // que o peixe já renderia sozinho — pra dar vazão a duplicatas/comuns acumulados
