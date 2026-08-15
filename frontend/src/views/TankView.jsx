@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api.js";
 import { bandOf, BANDS, decorTierOf, PART_HEX, PT } from "../lib/fishRenderer.js";
 import { PART_PT } from "../lib/format.js";
@@ -50,11 +50,15 @@ export function TankView({ tank, refresh, notify, cinemaEnabled = true, toggleCi
   const [pipActive, setPipActive] = useState(false);
 
   const current = Number(tank.coinsPerHour ?? 0);
-  const synergy = tankSynergy(tank.creatures);
-  const potential = tankPotential(tank.creatures);
+  // Memoizados (14/08/2026, achado real de performance): sem isso, os 3 recalculavam do zero
+  // (cada um com sua própria varredura de tail/dorsal/pectoral) a cada re-render do componente
+  // — inclusive interações que não mudam o tanque (selecionar peixe, abrir modal). `tank.creatures`
+  // só troca de referência quando o servidor manda dado novo (poll de 30s), não em cliques locais.
+  const synergy = useMemo(() => tankSynergy(tank.creatures), [tank.creatures]);
+  const potential = useMemo(() => tankPotential(tank.creatures), [tank.creatures]);
+  const listFish = useMemo(() => tankFishSorted(tank.creatures), [tank.creatures]);
   const waterLossPerHour = Math.max(0, potential - current);
   const nextFish = nextFishEta(tank);
-  const listFish = tankFishSorted(tank.creatures);
   const autoToggles = useAutoToggles(tank, notify, refresh);
 
   async function collect(itemId) {

@@ -435,6 +435,25 @@ function wavyBlit(ctx, sprite, cfg, ampTip, period, time, phaseArg) {
   }
 }
 
+// Gradientes de brilho cacheados por chave (14/08/2026) — antes recriados do zero TODO FRAME,
+// por peixe (achado real: era a única parte do peixe sem cache, ao contrário do corpo
+// `bodySpriteCache` e da aura `auraCache` — travava tanques cheios com vários peixes raros).
+// `CanvasGradient` não é preso ao contexto que o criou (é só dado de "tinta"), então cachear
+// num Map de módulo funciona pra qualquer canvas (aquário, FishCanvas de card, etc.).
+// Rainbow/metálico são 100% estáticos — cache permanente. Iridescente/Aurora dependem do
+// tempo, mas o matiz é QUANTIZADO (arredondado) antes de virar chave — o degrau é fino
+// o bastante pra ficar imperceptível, e o Map fica pequeno (só as buckets já vistas).
+const shimmerGradientCache = new Map();
+
+function cachedGradient(key, build) {
+  let grad = shimmerGradientCache.get(key);
+  if (!grad) {
+    grad = build();
+    shimmerGradientCache.set(key, grad);
+  }
+  return grad;
+}
+
 function drawShimmer(ctx, traits, time) {
   if (traits.shimmerTier === "None") return;
   const [bx, , bw] = BODY_BBOX;
@@ -444,16 +463,21 @@ function drawShimmer(ctx, traits, time) {
   ctx.globalCompositeOperation = "overlay";
 
   if (traits.shimmerColor === "Rainbow") {
-    const grad = ctx.createLinearGradient(bx, 0, bx + bw, 0);
-    ["#ff5252", "#ffb142", "#ffe94d", "#5ee07a", "#4dc4ff", "#9c6bff"].forEach((c, i, arr) =>
-      grad.addColorStop(i / (arr.length - 1), c));
-    ctx.fillStyle = grad;
+    ctx.fillStyle = cachedGradient("Rainbow", () => {
+      const grad = ctx.createLinearGradient(bx, 0, bx + bw, 0);
+      ["#ff5252", "#ffb142", "#ffe94d", "#5ee07a", "#4dc4ff", "#9c6bff"].forEach((c, i, arr) =>
+        grad.addColorStop(i / (arr.length - 1), c));
+      return grad;
+    });
   } else if (traits.shimmerColor === "Iridescent") {
     const hue = (time / 30) % 360;
-    const grad = ctx.createLinearGradient(bx, 0, bx + bw, 0);
-    for (let i = 0; i <= 4; i++)
-      grad.addColorStop(i / 4, `hsl(${(hue + i * 45) % 360} 90% 65%)`);
-    ctx.fillStyle = grad;
+    const bucket = Math.round(hue / 3) * 3; // passo de 3° — ~120 variantes cacheadas no ciclo
+    ctx.fillStyle = cachedGradient(`Iridescent-${bucket}`, () => {
+      const grad = ctx.createLinearGradient(bx, 0, bx + bw, 0);
+      for (let i = 0; i <= 4; i++)
+        grad.addColorStop(i / 4, `hsl(${(bucket + i * 45) % 360} 90% 65%)`);
+      return grad;
+    });
   } else if (traits.shimmerColor === "Aurora") {
     // "Aurora boreal" (13/08/2026, revisado — a v1 usava módulo, que reiniciava com um
     // salto brusco de matiz toda vez que o ciclo virava, e o espalhamento do gradiente
@@ -462,20 +486,25 @@ function drawShimmer(ctx, traits, time) {
     // suave pra frente e pra trás) restrito a verde/ciano — nunca sai dessa família de
     // cor — e gradiente VERTICAL (Iridescent é horizontal), mais uma diferença visual.
     const hue = 165 + 20 * Math.sin(time / 2200);
-    const grad = ctx.createLinearGradient(bx, BODY_BBOX[1], bx, BODY_BBOX[1] + BODY_BBOX[3]);
-    grad.addColorStop(0, `hsl(${hue - 12} 78% 52%)`);
-    grad.addColorStop(0.5, `hsl(${hue + 8} 85% 62%)`);
-    grad.addColorStop(1, `hsl(${hue - 12} 78% 52%)`);
-    ctx.fillStyle = grad;
+    const bucket = Math.round(hue); // faixa de ~40°, passo de 1° já é bem fino
+    ctx.fillStyle = cachedGradient(`Aurora-${bucket}`, () => {
+      const grad = ctx.createLinearGradient(bx, BODY_BBOX[1], bx, BODY_BBOX[1] + BODY_BBOX[3]);
+      grad.addColorStop(0, `hsl(${bucket - 12} 78% 52%)`);
+      grad.addColorStop(0.5, `hsl(${bucket + 8} 85% 62%)`);
+      grad.addColorStop(1, `hsl(${bucket - 12} 78% 52%)`);
+      return grad;
+    });
   } else if (METALLIC_SHIMMER[traits.shimmerColor]) {
     // Metálico: realça pra não confundir com o cinza do peixe comum
     ctx.globalAlpha = Math.min(1, (traits.shimmerOpacity / 100) * 2.2);
-    const { base, bright } = METALLIC_SHIMMER[traits.shimmerColor];
-    const grad = ctx.createLinearGradient(bx, BODY_BBOX[1], bx + bw, BODY_BBOX[1] + BODY_BBOX[3]);
-    grad.addColorStop(0, base);
-    grad.addColorStop(0.5, bright);
-    grad.addColorStop(1, base);
-    ctx.fillStyle = grad;
+    ctx.fillStyle = cachedGradient(`Metallic-${traits.shimmerColor}`, () => {
+      const { base, bright } = METALLIC_SHIMMER[traits.shimmerColor];
+      const grad = ctx.createLinearGradient(bx, BODY_BBOX[1], bx + bw, BODY_BBOX[1] + BODY_BBOX[3]);
+      grad.addColorStop(0, base);
+      grad.addColorStop(0.5, bright);
+      grad.addColorStop(1, base);
+      return grad;
+    });
   } else {
     ctx.fillStyle = SHIMMER_HEX[traits.shimmerColor];
   }
@@ -909,6 +938,45 @@ const romanticTint = (hex, theme) => (theme === "breeding" ? mixHex(hex, "#ff6e9
 /** Altura da faixa de substrato (areia/cascalho) no fundo do tanque — usada pelo chão da sombra dos peixes também. */
 export const SUBSTRATE_BAND_H = 52;
 
+// Grão do substrato (areia) é determinístico só por `i` (sem time/água/tema) — cacheado numa
+// camada off-screen por tamanho de canvas, redesenhado só na primeira vez que aquele tamanho
+// aparece (14/08/2026, mesma filosofia de `bodySpriteCache`).
+const substrateGrainCache = new Map();
+
+function getSubstrateGrainLayer(W, H, bandH) {
+  const key = `${W}x${H}`;
+  const cached = substrateGrainCache.get(key);
+  if (cached) return cached;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = bandH;
+  const sctx = canvas.getContext("2d");
+  for (let i = 0; i < 46; i++) {
+    const px = hash01(i * 3.3 + 1) * W;
+    const py = bandH - hash01(i * 3.3 + 2) * bandH * 0.7; // origem local da camada (topo = 0)
+    const r = 1.5 + hash01(i * 3.3 + 3) * 4;
+    const l = 26 + hash01(i * 3.3 + 4) * 22;
+    sctx.fillStyle = `hsl(${160 + hash01(i) * 20}, 24%, ${l}%)`;
+    sctx.beginPath();
+    sctx.ellipse(px, py, r, r * 0.72, 0, 0, Math.PI * 2);
+    sctx.fill();
+    // Grãos maiores ganham luz/sombra própria — leitura de bolinha 3D, não um disco chapado.
+    if (r > 3) {
+      sctx.fillStyle = `hsla(${160 + hash01(i) * 20}, 30%, ${Math.min(78, l + 26)}%, 0.55)`;
+      sctx.beginPath();
+      sctx.ellipse(px - r * 0.3, py - r * 0.3, r * 0.4, r * 0.28, 0, 0, Math.PI * 2);
+      sctx.fill();
+      sctx.fillStyle = `hsla(${160 + hash01(i) * 20}, 24%, ${Math.max(8, l - 16)}%, 0.5)`;
+      sctx.beginPath();
+      sctx.ellipse(px + r * 0.3, py + r * 0.22, r * 0.42, r * 0.3, 0, 0, Math.PI * 2);
+      sctx.fill();
+    }
+  }
+  substrateGrainCache.set(key, canvas);
+  return canvas;
+}
+
 /** Fundo: gradiente de água, raios de luz, plantas de trás, substrato. */
 export function drawTankBackground(ctx, W, H, time, quality = 100, theme = "default", decorTier = 0) {
   const murk = murkOf(quality);
@@ -1010,27 +1078,10 @@ export function drawTankBackground(ctx, W, H, time, quality = 100, theme = "defa
   }
   ctx.restore();
 
-  for (let i = 0; i < 46; i++) {
-    const px = hash01(i * 3.3 + 1) * W;
-    const py = H - hash01(i * 3.3 + 2) * bandH * 0.7;
-    const r = 1.5 + hash01(i * 3.3 + 3) * 4;
-    const l = 26 + hash01(i * 3.3 + 4) * 22;
-    ctx.fillStyle = `hsl(${160 + hash01(i) * 20}, 24%, ${l}%)`;
-    ctx.beginPath();
-    ctx.ellipse(px, py, r, r * 0.72, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Grãos maiores ganham luz/sombra própria — leitura de bolinha 3D, não um disco chapado.
-    if (r > 3) {
-      ctx.fillStyle = `hsla(${160 + hash01(i) * 20}, 30%, ${Math.min(78, l + 26)}%, 0.55)`;
-      ctx.beginPath();
-      ctx.ellipse(px - r * 0.3, py - r * 0.3, r * 0.4, r * 0.28, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = `hsla(${160 + hash01(i) * 20}, 24%, ${Math.max(8, l - 16)}%, 0.5)`;
-      ctx.beginPath();
-      ctx.ellipse(px + r * 0.3, py + r * 0.22, r * 0.42, r * 0.3, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
+  // Grão do substrato é 100% estático (não depende de time/água/tema) mas era redesenhado do
+  // zero (até ~138 chamadas de ellipse/fill) TODO frame — cacheado numa camada off-screen
+  // (14/08/2026, achado real de performance) e só "colado" (drawImage) a partir daqui.
+  ctx.drawImage(getSubstrateGrainLayer(W, H, bandH), 0, H - bandH);
 
   // Metade "pequena" das bolhas (ambiente + air stone) nasce aqui, no fundo —
   // fica atrás de todo peixe, dando noção de profundidade (a outra metade,
