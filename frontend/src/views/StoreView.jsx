@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.js";
-import { bandOf, BANDS } from "../lib/fishRenderer.js";
 import { Coin } from "../components/Coin.jsx";
 import { ConfirmModal } from "../components/ConfirmModal.jsx";
+import { Modal } from "../components/Modal.jsx";
 import { CollectCelebration } from "../components/CollectCelebration.jsx";
 import { FILTER_WARN_THRESHOLD, tankFishWeight } from "../lib/tankMath.js";
 import { useAutoToggles } from "../hooks/useAutoToggles.js";
@@ -32,9 +32,21 @@ const ICONS = {
   aquario_grande: "🐳",
   aquario_master: "👑",
   water_sensor: "🧪",
-  egg_common: "🥚", egg_rare: "🥚", egg_legendary: "🥚",
 };
 const TIERS = { aquario_grande: "rare", aquario_master: "premium", egg_rare: "rare", egg_legendary: "premium" };
+
+// Ovo de peixe (§7.21): tier vira cor (mesma paleta de raridade do resto do jogo — CLAUDE.md
+// §5) tanto no ícone pequeno da Loja quanto no ovo grande da celebração de compra.
+const EGG_TIER = { egg_common: "common", egg_rare: "rare", egg_legendary: "legendary" };
+
+/** Ícone do ovo na Loja — cluster de ova de peixe, não o emoji 🥚 de galinha (feedback do usuário). */
+function EggIcon({ tier }) {
+  return (
+    <span className={`mini-fish-egg mini-fish-egg--${tier}`} aria-hidden="true">
+      <span className="mfe mfe-a" /><span className="mfe mfe-b" /><span className="mfe mfe-main" />
+    </span>
+  );
+}
 
 const FILTER_KEYS = ["auto_filter", "auto_filter_2", "auto_filter_3"];
 
@@ -103,7 +115,21 @@ export function StoreView({ tank, refreshTank, notify }) {
   const [warnFilter, setWarnFilter] = useState(false);
   const [vip, setVip] = useState(null);
   const [vipBusy, setVipBusy] = useState(false);
-  const [celebrate, setCelebrate] = useState(null); // peixe raro+ recém-nascido de um ovo
+  const [celebrate, setCelebrate] = useState(null); // { creature, eggTier } — peixe recém-nascido de um ovo
+  const [readMore, setReadMore] = useState(null); // { name, text } — descrição truncada aberta por inteiro
+  const [clamped, setClamped] = useState({}); // { [itemKey]: boolean } — só true quando o texto realmente estoura 3 linhas
+
+  // Cards da loja tinham altura MUITO desigual (feedback do usuário, com print) — descrição do
+  // Sensor de Qualidade da Água (bem mais longa que as outras) esticava aquele card sozinho.
+  // Em vez de truncar por contagem de caracteres (frágil — muda com largura de tela/fonte), mede
+  // o DOM de verdade: cada <p> tem `-webkit-line-clamp` (CSS) cortando visualmente em 3 linhas;
+  // aqui só decide se o botão "Ler mais" aparece, comparando o texto cheio (scrollHeight) contra
+  // o espaço truncado (clientHeight) — funciona pra qualquer texto, em qualquer largura.
+  function measureClamp(key, el) {
+    if (!el) return;
+    const isClamped = el.scrollHeight > el.clientHeight + 1;
+    setClamped((prev) => (prev[key] === isClamped ? prev : { ...prev, [key]: isClamped }));
+  }
 
   const refresh = useCallback(async () => { setItems(await api.items()); }, []);
   useEffect(() => { refresh().catch((err) => notify(err.message)); }, [refresh, notify]);
@@ -125,11 +151,11 @@ export function StoreView({ tank, refreshTank, notify }) {
     const result = await api.buyItem(item.key);
     setWarnFilter(false);
     if (result?.creature) {
-      // Raro+ ganha o mesmo momento de celebração da coleta normal (mesmo corte de BANDS);
-      // comum/incomum só um toast — o ovo já é uma compra deliberada, não precisa de suspense
-      // pra um resultado modesto.
-      if (Number(result.creature.rarityScore) >= BANDS[1].max) setCelebrate(result.creature);
-      else notify(`${item.name}: ${bandOf(Number(result.creature.rarityScore)).name}!`);
+      // Todo ovo abre a celebração (com a animação de chocar o ovo primeiro) — não só
+      // Raro+. É uma compra deliberada, o jogador quer VER o peixe que saiu, mesmo comum.
+      // Raro+ continua ganhando a revelação clique-a-clique por baixo (CollectCelebration
+      // decide isso sozinho a partir do rarityScore).
+      setCelebrate({ creature: result.creature, eggTier: EGG_TIER[item.key] ?? "common" });
     } else {
       notify(`${item.name} comprado!`);
     }
@@ -210,9 +236,19 @@ export function StoreView({ tank, refreshTank, notify }) {
         const tier = TIERS[item.key];
         return (
         <div key={item.key} className={`card store-card${tier ? ` store-card--${tier}` : ""}${item.locked ? " store-card-locked" : ""}`}>
-          <span className="store-card-icon">{ICONS[item.key]}</span>
+          <span className="store-card-icon">
+            {EGG_TIER[item.key] ? <EggIcon tier={EGG_TIER[item.key]} /> : ICONS[item.key]}
+          </span>
           <strong>{item.name}</strong>
-          <p className="muted">{DESCRIPTIONS[item.key] ?? ""}</p>
+          <p className="muted store-card-desc" ref={(el) => measureClamp(item.key, el)}>{DESCRIPTIONS[item.key] ?? ""}</p>
+          {clamped[item.key] && (
+            <button
+              className="link-btn store-read-more"
+              onClick={() => setReadMore({ name: item.name, text: DESCRIPTIONS[item.key] })}
+            >
+              Ler mais
+            </button>
+          )}
           {item.locked && <p className="muted store-locked-reason">🔒 {item.lockedReason}</p>}
           {item.key === "water_sensor" && item.owned
             ? <WaterSensorSlider tank={tank} notify={notify} onSaved={refreshTank} />
@@ -249,7 +285,18 @@ export function StoreView({ tank, refreshTank, notify }) {
           onConfirm={() => doBuy(filterItem)} onClose={() => setWarnFilter(false)}
         />
       )}
-      {celebrate && <CollectCelebration creature={celebrate} onClose={() => setCelebrate(null)} />}
+      {celebrate && (
+        <CollectCelebration
+          creature={celebrate.creature} variant="egg" eggTier={celebrate.eggTier}
+          onClose={() => setCelebrate(null)}
+        />
+      )}
+      {readMore && (
+        <Modal onClose={() => setReadMore(null)} narrow>
+          <strong>{readMore.name}</strong>
+          <p className="muted" style={{ marginTop: 8 }}>{readMore.text}</p>
+        </Modal>
+      )}
     </div>
   );
 }

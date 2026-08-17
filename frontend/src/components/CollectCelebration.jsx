@@ -72,7 +72,7 @@ function ParentChip({ creature, dead, onEnter, onLeave, onClick }) {
  * `parentA`/`parentB` (opcional, breeding): os pais, vivos ou mortos — pequenos
  * retratos hoverable com as estatísticas, sempre visíveis nesta tela.
  */
-export function CollectCelebration({ creature, onClose, variant = "tank", deadParents = [], parentA = null, parentB = null, onRevealed = null }) {
+export function CollectCelebration({ creature, onClose, variant = "tank", eggTier = "common", deadParents = [], parentA = null, parentB = null, onRevealed = null }) {
   const score = Number(creature.rarityScore);
   const band = bandOf(score);
   const coins = coinsPerHourOf(score);
@@ -92,6 +92,19 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
   const revealed = !suspense || step >= REVEAL_STEP_COUNT;
   function revealNext() { if (!revealed) setStep((s) => Math.min(s + 1, REVEAL_STEP_COUNT)); }
   const tierColor = revealed ? band.color : "var(--muted)";
+
+  // Ovo de peixe (§7.21, 17/08/2026): antes de mostrar o peixe em si, o jogador toca no ovo
+  // pra "chocar" — casca racha (animação CSS) e some, o peixe entra por baixo com a mesma
+  // animação de entrada que o resto da celebração já usa. Depois de chocado, segue o fluxo
+  // normal (suspense clique-a-clique se for raro+, revelado na hora se não for).
+  const isEgg = variant === "egg";
+  const [hatched, setHatched] = useState(!isEgg);
+  const [cracking, setCracking] = useState(false);
+  function hatchEgg() {
+    if (cracking || hatched) return;
+    setCracking(true);
+    setTimeout(() => { setHatched(true); setCracking(false); }, 480);
+  }
 
   // Peixe "novo" da Mochila (§8.22, coletado automaticamente por VIP): avisa o chamador
   // quando a revelação termina de verdade — só aí marca IsNew=false (mark-seen), nunca antes,
@@ -170,17 +183,44 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
       <div className="celebrate-rays" style={{ "--tier": tierColor }} aria-hidden="true" />
       <div className="celebrate-body" onClick={() => setPeek((prev) => (prev?.pinned ? null : prev))}>
         <div className="eyebrow" style={{ color: tierColor }}>
-          {!revealed ? "✨ Abrindo peixe raro…" : isBreeding ? "🐣 Seu filhote nasceu!" : legendary ? "✦ Lendário! ✦" : "Peixe raro coletado"}
+          {!hatched
+            ? "🥚 Toque no ovo pra chocar…"
+            : !revealed
+              ? "✨ Abrindo peixe raro…"
+              : isBreeding
+                ? "🐣 Seu filhote nasceu!"
+                : legendary
+                  ? "✦ Lendário! ✦"
+                  : isEgg
+                    ? "🐟 Seu peixe chocou!"
+                    : "Peixe raro coletado"}
         </div>
-        <div
-          className={`celebrate-fish${suspense && !revealed ? " tap-to-reveal" : ""}`}
-          style={{ "--tier": tierColor }}
-          onClick={suspense && !revealed ? revealNext : undefined}
-        >
-          <FishCanvas creature={creature} width={220} revealStep={suspense ? step : null} />
-        </div>
+        {!hatched ? (
+          <div
+            className={`celebrate-egg celebrate-egg--${eggTier}${cracking ? " cracking" : ""}`}
+            onClick={hatchEgg}
+            role="button" tabIndex={0}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); hatchEgg(); } }}
+          >
+            <span className="fish-egg fish-egg-b" aria-hidden="true" />
+            <span className="fish-egg fish-egg-a" aria-hidden="true" />
+            <span className="fish-egg fish-egg-main" aria-hidden="true">
+              <span className="fish-egg-nucleus" />
+            </span>
+          </div>
+        ) : (
+          <div
+            className={`celebrate-fish${suspense && !revealed ? " tap-to-reveal" : ""}`}
+            style={{ "--tier": tierColor }}
+            onClick={suspense && !revealed ? revealNext : undefined}
+          >
+            <FishCanvas creature={creature} width={220} revealStep={suspense ? step : null} />
+          </div>
+        )}
 
-        {suspense && !revealed && (
+        {!hatched && <p className="faint" style={{ fontSize: "0.8rem" }}>toque no ovo pra chocar</p>}
+
+        {hatched && suspense && !revealed && (
           <>
             <div className="reveal-attrs">
               {attrLines.slice(0, step).map((a) => (
@@ -196,7 +236,7 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
             </p>
           </>
         )}
-        {revealed && suspense && (
+        {hatched && revealed && suspense && (
           <div className="reveal-attrs revealed">
             {attrLines.map((a) => (
               <div className="reveal-attr" key={a.key}>
@@ -211,7 +251,7 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
             <div className="reveal-attr reveal-total"><b>Score total:</b> {breakdown.total.toFixed(2)}</div>
           </div>
         )}
-        {revealed ? (
+        {hatched && (revealed ? (
           <>
             <span className="badge big reveal-pop" style={{ "--tier": band.color }}>
               <span className="gem" /> {band.name} · {score.toFixed(1)}
@@ -220,7 +260,7 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
           </>
         ) : (
           <span className="badge big mystery-badge" style={{ "--tier": "#3a5560" }}><span className="gem" /> ???</span>
-        )}
+        ))}
 
         {isBreeding && parents.length > 0 && (
           <div className="parents-row">
@@ -257,7 +297,7 @@ export function CollectCelebration({ creature, onClose, variant = "tank", deadPa
           </div>
         )}
 
-        {revealed && <button className="btn-primary" onClick={onClose}>Maravilha!</button>}
+        {hatched && revealed && <button className="btn-primary" onClick={onClose}>Maravilha!</button>}
       </div>
       {peek && <PeekAnchor x={peek.x} y={peek.y} creature={peek.creature} />}
     </Modal>

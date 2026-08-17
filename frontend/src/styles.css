@@ -792,6 +792,17 @@ input:focus {
 .vip-card > .card-row { max-width: 640px; }
 .store-card strong { font-family: var(--display); font-size: 1.15rem; font-weight: 600; }
 .store-card p { font-size: 0.86rem; line-height: 1.5; flex: 1; }
+/* Descrições de tamanho MUITO desigual esticavam alguns cards bem mais que outros (feedback
+   do usuário, com print — o Sensor de Qualidade da Água era o pior caso). Trunca em 3 linhas
+   sempre; "Ler mais" (só aparece quando o texto realmente estoura, medido via JS) abre o texto
+   completo num modal, sem derrubar a uniformidade do grid. */
+.store-card-desc {
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden; flex: none !important;
+  height: 4.5em; /* 3 linhas × line-height 1.5 — reserva o MESMO espaço mesmo pra texto curto,
+                    pra todo card ter a mesma altura de descrição, cheia ou não. */
+}
+.store-read-more { align-self: flex-start; font-size: 0.8rem; margin-top: -6px; }
 .owned { color: var(--muted); font-weight: 700; font-size: 0.85rem; }
 .owned-active { color: var(--r-incomum) !important; }
 .store-card-locked { opacity: 0.6; }
@@ -817,6 +828,23 @@ input:focus {
 }
 .store-card--premium .store-card-icon { filter: drop-shadow(0 0 14px rgba(240, 190, 90, 0.5)); }
 .store-card--premium .price { font-size: 1.15rem; }
+
+/* Ícone do ovo na Loja (§7.21) — mini versão da mesma ova de peixe da celebração de compra,
+   não o emoji 🥚 de galinha. */
+.mini-fish-egg { position: relative; display: inline-block; width: 26px; height: 26px; }
+.mini-fish-egg--common { --egg-color: var(--r-comum); }
+.mini-fish-egg--rare { --egg-color: var(--r-raro); }
+.mini-fish-egg--legendary { --egg-color: var(--r-lendario); }
+.mfe {
+  position: absolute; border-radius: 50%;
+  background: radial-gradient(circle at 32% 28%,
+    rgba(255, 255, 255, 0.9), color-mix(in srgb, var(--egg-color) 55%, transparent) 55%,
+    color-mix(in srgb, var(--egg-color) 80%, black 15%) 100%);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+.mfe-main { width: 20px; height: 20px; left: 3px; top: 2px; }
+.mfe-a { width: 10px; height: 10px; left: 0; bottom: 0; opacity: 0.9; }
+.mfe-b { width: 8px; height: 8px; right: 0; bottom: 1px; opacity: 0.82; }
 
 /* ---------- Badges ---------- */
 .badge {
@@ -1300,6 +1328,48 @@ input:focus {
 @keyframes rise { from { opacity: 0; transform: translateY(16px) scale(0.94); } }
 .celebrate-body .badge.big { align-self: center; }
 .celebrate-body .btn-primary { margin-top: 4px; padding: 11px 26px; }
+
+/* Ovo de peixe (§7.21, 17/08/2026): antes de revelar o peixe, o jogador toca no ovo pra
+   "chocar" — casca racha/estilhaça (animação CSS) e o peixe entra por baixo (reusa a mesma
+   entrada `rise` do celebrate-fish, já que o React troca o nó do DOM). Visual é uma ova de
+   peixe (cluster de esferas gelatinosas), não um ovo de galinha — feedback do usuário, o
+   emoji 🥚 lia como o animal errado. Cor por tier reusa a mesma paleta de raridade do resto
+   do jogo (--r-comum/raro/lendario), não cores novas.
+*/
+.celebrate-egg {
+  width: min(220px, 100%); aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+  border-radius: 16px; cursor: pointer; position: relative;
+  background: linear-gradient(180deg, #0d3a48, #072430);
+  box-shadow: 0 0 40px -6px var(--glow), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  animation: egg-idle 1.8s ease-in-out infinite;
+}
+.celebrate-egg--common { --egg-color: var(--r-comum); }
+.celebrate-egg--rare { --egg-color: var(--r-raro); }
+.celebrate-egg--legendary { --egg-color: var(--r-lendario); }
+.fish-egg {
+  position: absolute; border-radius: 50%;
+  background: radial-gradient(circle at 32% 28%,
+    rgba(255, 255, 255, 0.9), color-mix(in srgb, var(--egg-color) 55%, transparent) 55%,
+    color-mix(in srgb, var(--egg-color) 80%, black 15%) 100%);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), inset 0 0 8px rgba(255, 255, 255, 0.35);
+}
+.fish-egg-main { position: relative; width: 82px; height: 82px; }
+.fish-egg-a { width: 36px; height: 36px; left: 16%; bottom: 14%; opacity: 0.9; }
+.fish-egg-b { width: 26px; height: 26px; right: 14%; bottom: 6%; opacity: 0.82; }
+.fish-egg-nucleus {
+  position: absolute; top: 36%; left: 36%; width: 16px; height: 16px; border-radius: 50%;
+  background: color-mix(in srgb, var(--egg-color) 75%, white 10%);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--egg-color) 70%, transparent);
+}
+@keyframes egg-idle { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+.celebrate-egg.cracking { animation: egg-crack 0.48s ease-out forwards; }
+@keyframes egg-crack {
+  0% { transform: scale(1) rotate(0deg); filter: brightness(1); }
+  20% { transform: scale(1.05) rotate(-10deg); }
+  40% { transform: scale(1.05) rotate(10deg); }
+  60% { transform: scale(1.12) rotate(-6deg); filter: brightness(1.7); }
+  100% { transform: scale(1.4) rotate(0deg); opacity: 0; filter: brightness(2.4); }
+}
 
 /* Revelação suspense clique-a-clique (08/08/2026) — cada toque no peixe
    desenha uma parte a mais de verdade (FishCanvas revealStep), em vez de só

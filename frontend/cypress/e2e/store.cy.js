@@ -6,6 +6,15 @@ function fakeJwt(sub = "1", username = "jogador1") {
   return `${b64({ alg: "none", typ: "JWT" })}.${b64({ sub, unique_name: username })}.sig`;
 }
 
+function fakeTraits(tier = "None") {
+  const part = { color: "Orange", pattern: "None", patternColor: null, patternSize: null, patternOpacity: null, mix: null };
+  return {
+    shimmerTier: tier, shimmerColor: tier === "None" ? null : "Gold", shimmerOpacity: tier === "None" ? 0 : 60,
+    tail: part, dorsal: part, pectoral: part,
+    movement: { tailSpeed: 50, tailAmplitude: 0.4, finSpeed: 50, finAmplitude: 0.3 },
+  };
+}
+
 const items = [
   { key: "filter_basic", name: "Filtro", price: 20, owned: false, locked: false },
   { key: "auto_filter", name: "Filtro Automático", price: 500, owned: false, locked: false },
@@ -106,20 +115,78 @@ describe("Loja", () => {
     });
   });
 
-  it("ovo: compra gera peixe e mostra a raridade sem abrir celebração pra Comum/Incomum", () => {
+  it("ovo: compra abre a celebração — toque no ovo choca e revela o peixe (Comum, sem suspense)", () => {
     cy.intercept("GET", "/api/items/", { body: eggItems }).as("items");
     login({ maintenanceLevel: 40, wallet: { SOFT: 100, PREMIUM: 50 } });
     cy.wait("@items");
 
     cy.intercept("POST", "/api/items/egg_common/buy", {
       statusCode: 200,
-      body: { paid: 8, creature: { id: 999, rarityScore: 3, traits: {} } },
+      body: { paid: 8, creature: { id: 999, seed: "424242", rarityScore: 3, traits: fakeTraits("None") } },
     }).as("buyEgg");
     cy.intercept("GET", "/api/game/tank", { fixture: "tank-empty.json" }).as("tankAfter");
 
     cy.contains(".card", "Ovo Comum").contains("button", "Comprar").click();
     cy.wait("@buyEgg");
-    cy.contains("Ovo Comum: Comum!");
-    cy.get(".celebrate").should("not.exist");
+
+    cy.get(".celebrate").should("be.visible");
+    cy.contains("Toque no ovo pra chocar");
+    cy.get(".celebrate-egg").click();
+    cy.contains("Seu peixe chocou!"); // já revelado direto — Comum não passa pelo suspense clique-a-clique
+    cy.contains(".celebrate .badge", "Comum");
+  });
+
+  it("ovo lendário: depois de chocar, o peixe raro+ ainda passa pela revelação parcial clique-a-clique", () => {
+    const eggLegendary = [
+      ...items,
+      { key: "egg_legendary", name: "Ovo Lendário", price: 90, owned: false, locked: false, currency: "PREMIUM" },
+    ];
+    cy.intercept("GET", "/api/items/", { body: eggLegendary }).as("items");
+    login({ maintenanceLevel: 40, wallet: { SOFT: 100, PREMIUM: 100 } });
+    cy.wait("@items");
+
+    cy.intercept("POST", "/api/items/egg_legendary/buy", {
+      statusCode: 200,
+      body: { paid: 90, creature: { id: 1000, seed: "999999", rarityScore: 17, traits: fakeTraits("Legendary") } },
+    }).as("buyEgg");
+    cy.intercept("GET", "/api/game/tank", { fixture: "tank-empty.json" }).as("tankAfter");
+
+    cy.contains(".card", "Ovo Lendário").contains("button", "Comprar").click();
+    cy.wait("@buyEgg");
+
+    // Escolhe o ovo (cor por tier) antes de chocar.
+    cy.get(".celebrate-egg--legendary").should("be.visible").click();
+
+    // Chocado, mas ainda em suspense — pontuação escondida atrás de "???" até revelar tudo.
+    cy.contains("???");
+    cy.contains("toque no peixe pra revelar");
+    cy.get(".celebrate-fish.tap-to-reveal").click().click().click().click();
+
+    cy.contains("✦ Lendário! ✦");
+    cy.contains(".celebrate .badge", "Lendário");
+  });
+
+  it("descrição longa trunca com 'Ler mais', que abre o texto completo num modal", () => {
+    // Sensor de Qualidade da Água tem a descrição mais longa da loja — era o pior caso do
+    // print que motivou o pedido de padronizar o tamanho dos cards.
+    const itemsWithSensor = [...items, { key: "water_sensor", name: "Sensor de Qualidade da Água", price: 800, owned: false, locked: false }];
+    cy.intercept("GET", "/api/items/", { body: itemsWithSensor }).as("items");
+    login({ maintenanceLevel: 40 });
+    cy.wait("@items");
+
+    cy.contains("strong", "Sensor de Qualidade da Água").closest(".card").within(() => {
+      cy.contains("button", "Ler mais").click();
+    });
+    cy.get(".modal").should("be.visible").within(() => {
+      cy.contains("Sensor de Qualidade da Água");
+      cy.contains("Preço sobe se você trocar pra um aquário maior antes de comprar."); // fim do texto, só visível no modal
+    });
+    cy.get(".modal-close").click();
+    cy.get(".modal").should("not.exist");
+
+    // Card com descrição curta (cabe em 3 linhas) não ganha "Ler mais".
+    cy.contains("strong", /^Filtro$/).closest(".card").within(() => {
+      cy.contains("button", "Ler mais").should("not.exist");
+    });
   });
 });
