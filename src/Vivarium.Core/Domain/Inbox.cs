@@ -2,21 +2,24 @@ namespace Vivarium.Core.Domain;
 
 public enum InboxAudience { All, Selected }
 
-public enum InboxEntryKind { AdminMessage, MarketPurchase, DirectTransfer }
+public enum InboxEntryKind { AdminMessage, MarketPurchase, DirectTransfer, MarketSale }
 
 /// <summary>
 /// Caixa de Entrada (14/08/2026, CLAUDE.md §8.23/§8.24) — 1 linha por envio administrativo
-/// (broadcast ou segmentado); a recompensa (se houver) é a MESMA pra todo mundo que recebeu essa
-/// mensagem específica. Os destinatários reais já foram materializados em <see cref="InboxEntry"/>
-/// no momento do envio (mesmo princípio do "TransactionLog genérico" — gravar de uma vez, não
-/// recalcular quem recebeu depois).
+/// (broadcast ou segmentado) OU por notificação de sistema (ex: venda no Mercado, 16/08/2026);
+/// a recompensa (se houver) é a MESMA pra todo mundo que recebeu essa mensagem específica. Os
+/// destinatários reais já foram materializados em <see cref="InboxEntry"/> no momento do envio
+/// (mesmo princípio do "TransactionLog genérico" — gravar de uma vez, não recalcular quem
+/// recebeu depois).
 /// </summary>
 public class InboxMessage
 {
     public long Id { get; set; }
     public required string Title { get; set; }
     public required string Body { get; set; }
-    public long CreatedByAdminId { get; set; }
+    /// <summary>Null pra mensagem gerada pelo sistema (ex: notificação de venda no Mercado) —
+    /// só preenchido quando um admin de verdade disparou o envio.</summary>
+    public long? CreatedByAdminId { get; set; }
     public User? CreatedByAdmin { get; set; }
     public InboxAudience Audience { get; set; }
     public int? RewardCurrencyTypeId { get; set; }
@@ -46,7 +49,8 @@ public class InboxEntry
     /// <summary>Preenchido só quando <see cref="Kind"/> == AdminMessage.</summary>
     public long? InboxMessageId { get; set; }
     public InboxMessage? InboxMessage { get; set; }
-    /// <summary>Vendedor (compra) ou remetente (transferência); null pra mensagem administrativa.</summary>
+    /// <summary>Vendedor (compra), remetente (transferência) ou comprador (venda no Mercado);
+    /// null pra mensagem administrativa.</summary>
     public long? SenderUserId { get; set; }
     public User? SenderUser { get; set; }
     /// <summary>O peixe entregue, quando aplicável (MarketPurchase/DirectTransfer).</summary>

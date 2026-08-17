@@ -142,6 +142,27 @@ public class InboxService(VivariumDbContext db, GameService game, ILogger<InboxS
         return ServiceResult.Success();
     }
 
+    /// <summary>Cria uma mensagem+entrada de sistema pra 1 destinatário — sem admin, sem
+    /// recompensa a resgatar (o que ela anuncia, se for dinheiro, já foi creditado por quem
+    /// chamou). Não salva (deixa o SaveChangesAsync/transação pra quem chama, mesmo padrão de
+    /// <see cref="TryApplyRewardAsync"/>) — assim o disparo entra na MESMA transação do evento
+    /// que a originou (ex: venda no Mercado), sem round-trip extra nem risco de a notificação
+    /// existir sem o evento (ou vice-versa) se algo falhar no meio.</summary>
+    public void QueueSystemMessage(
+        long recipientId, InboxEntryKind kind, string title, string body, long? senderUserId, DateTime now)
+    {
+        var message = new InboxMessage { Title = title, Body = body, CreatedAt = now };
+        db.InboxMessages.Add(message);
+        db.InboxEntries.Add(new InboxEntry
+        {
+            RecipientId = recipientId,
+            Kind = kind,
+            InboxMessage = message,
+            SenderUserId = senderUserId,
+            CreatedAt = now,
+        });
+    }
+
     public async Task<ServiceResult> AdminSendMessageAsync(
         long requestingUserId, string title, string body, InboxAudience audience,
         IReadOnlyList<string>? usernames, string? rewardCurrencyCode, decimal? rewardCurrencyAmount, DateTime now)

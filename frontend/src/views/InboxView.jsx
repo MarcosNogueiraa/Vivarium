@@ -8,11 +8,15 @@ const KIND_LABELS = {
   AdminMessage: "📨 Mensagem",
   MarketPurchase: "🛒 Comprado no mercado",
   DirectTransfer: "🎁 Recebido por transferência",
+  MarketSale: "💰 Vendido no mercado",
 };
+
+const isDeliveryKind = (kind) => kind === "MarketPurchase" || kind === "DirectTransfer";
 
 function EntryCard({ entry, onClaim, busy }) {
   const claimed = Boolean(entry.claimedAt);
-  const isDelivery = entry.kind === "MarketPurchase" || entry.kind === "DirectTransfer";
+  const isDelivery = isDeliveryKind(entry.kind);
+  const hasMessage = entry.kind === "AdminMessage" || entry.kind === "MarketSale";
 
   return (
     <div className={`card${claimed ? " inbox-claimed" : ""}`}>
@@ -30,7 +34,7 @@ function EntryCard({ entry, onClaim, busy }) {
         </>
       )}
 
-      {entry.kind === "AdminMessage" && (
+      {hasMessage && (
         <>
           <strong>{entry.title}</strong>
           <p className="hint" style={{ padding: 0 }}>{entry.body}</p>
@@ -65,7 +69,7 @@ export function InboxView({ entries, refresh, refreshTank, notify }) {
     setBusyId(entry.id);
     try {
       await api.claimInboxEntry(entry.id);
-      notify(entry.kind === "AdminMessage" ? "Resgatado!" : "Peixe entregue!");
+      notify(isDeliveryKind(entry.kind) ? "Peixe entregue!" : "Resgatado!");
       await Promise.all([refresh(), refreshTank()]);
     } catch (e) {
       notify(e.message);
@@ -120,7 +124,7 @@ export function InboxView({ entries, refresh, refreshTank, notify }) {
       </div>
 
       {entries.length === 0 ? (
-        <p className="hint">Sua caixa de entrada está vazia. Peixes comprados no mercado ou recebidos por transferência aparecem aqui pra resgatar.</p>
+        <p className="hint">Sua caixa de entrada está vazia. Peixes comprados no mercado ou recebidos por transferência aparecem aqui pra resgatar, e você recebe um aviso quando um peixe seu é vendido.</p>
       ) : (
         <>
           <div className="backpack-toolbar">

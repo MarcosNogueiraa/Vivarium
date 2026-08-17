@@ -314,9 +314,10 @@ Dois rankings (`rarity`/`income`), sem opt-out, top 100 + posição própria. `L
 
 Peixe comprado no Mercado ou recebido via transferência **não aparece mais direto no tanque/mochila** — vira entrada pendente na Caixa de Entrada, entregue só quando o jogador clica "Resgatar" (tanque se houver espaço, senão mochila).
 
-- Schema: `InboxMessage` (1 por envio administrativo) + `InboxEntry` (1 por destinatário/evento, `Kind`: `AdminMessage`/`MarketPurchase`/`DirectTransfer`). `CreatureInstance.PendingInboxClaim`+`OriginalOwnerId` (FK imutável, "primeiro dono", preparado pra suporte futuro a troca de username — não exposto em nenhum DTO ainda).
+- Schema: `InboxMessage` (1 por envio administrativo OU notificação de sistema — `CreatedByAdminId` nullable, null quando gerada pelo sistema) + `InboxEntry` (1 por destinatário/evento, `Kind`: `AdminMessage`/`MarketPurchase`/`DirectTransfer`/`MarketSale`). `CreatureInstance.PendingInboxClaim`+`OriginalOwnerId` (FK imutável, "primeiro dono", preparado pra suporte futuro a troca de username — não exposto em nenhum DTO ainda).
 - Compra/transferência não checam mais espaço no momento da ação — sempre funciona (dado saldo/posse ok); marca `PendingInboxClaim=true`. Checagem de espaço migrou pro momento do resgate.
 - **6 bloqueios enquanto pendente:** some da Mochila, não pode ser retransferido, relistado, usado como pai de breeding, nem vendido ao NPC.
+- **Notificação de venda no Mercado (16/08/2026):** quando uma listagem é vendida, o VENDEDOR recebe uma entrada `Kind.MarketSale` avisando o valor já creditado — só informativa (sem `CreatureInstanceId`, sem reward pra resgatar; o soft já foi creditado direto na hora da venda por `MarketService.BuyAsync`, na mesma transação). `InboxService.QueueSystemMessage` é o helper reusável pra qualquer notificação de sistema (sem admin) — mesmo padrão vale pra futuras notificações do backlog.
 - Ações do jogador: resgate individual/em massa, "Ler tudo", "Apagar mensagens lidas" (nunca remove recompensa em aberto).
 - Admin: `POST /api/admin/inbox/send` — broadcast ou lista de usernames (username inexistente não bloqueia o envio, loga os não encontrados).
 - Endpoints: `GET /api/inbox/`, `POST /api/inbox/{id}/claim`, `POST /api/inbox/claim-all`, `POST /api/inbox/mark-all-read`, `POST /api/inbox/clear-claimed`, `POST /api/admin/inbox/send`.

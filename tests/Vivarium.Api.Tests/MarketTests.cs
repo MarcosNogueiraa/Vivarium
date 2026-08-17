@@ -12,7 +12,7 @@ public class MarketTests : IClassFixture<VivariumApiFactory>
 
     public MarketTests(VivariumApiFactory factory) => _factory = factory;
 
-    private record InboxEntryRow(long Id, string Kind, InboxCreatureRow? Creature);
+    private record InboxEntryRow(long Id, string Kind, InboxCreatureRow? Creature, string? Title, string? Body, string? SenderUsername);
     private record InboxCreatureRow(long Id);
     private record InboxListRow(List<InboxEntryRow> Entries);
 
@@ -91,6 +91,14 @@ public class MarketTests : IClassFixture<VivariumApiFactory>
         var sellerTank = await seller.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
         Assert.Equal(140m, sellerTank!.Wallet["SOFT"]); // 100 + 40
         Assert.DoesNotContain(sellerTank.Creatures, c => c.Id == creatureId);
+
+        // Vendedor recebe uma notificação informativa na Caixa de Entrada (BACKLOG.md #1,
+        // 16/08/2026) — o soft já foi creditado acima, essa entrada é só um aviso.
+        var sellerInbox = await seller.GetFromJsonAsync<InboxListRow>("/api/inbox/");
+        var saleNotice = Assert.Single(sellerInbox!.Entries, e => e.Kind == "MarketSale");
+        Assert.Contains("40", saleNotice.Body);
+        Assert.Equal("comprador1", saleNotice.SenderUsername);
+        Assert.Null(saleNotice.Creature); // não é entrega de peixe — não deve acionar posicionamento no resgate
 
         var inbox = await buyer.GetFromJsonAsync<InboxListRow>("/api/inbox/");
         var entry = Assert.Single(inbox!.Entries, e => e.Creature?.Id == creatureId);

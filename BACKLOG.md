@@ -4,19 +4,9 @@
 
 ---
 
-## 1. Notificação de venda no Mercado (16/08/2026)
+## ~~1. Notificação de venda no Mercado~~ — IMPLEMENTADO (16/08/2026)
 
-**O quê:** quando um peixe listado no Mercado é vendido, o VENDEDOR recebe uma mensagem na Caixa de Entrada informando o valor creditado na conta.
-
-**Decisão de design:** é só informativa — o soft já é creditado na hora da venda (`MarketService.BuyAsync` já paga o vendedor direto, fora do fluxo de claim da Caixa de Entrada); a mensagem não carrega reward pra resgatar, só avisa. Isso já cabe no fluxo existente de `InboxMessage` sem reward (reward é opcional/nullable).
-
-**Estado atual do código (verificado):** `MarketService.BuyAsync` (linhas 202-269) hoje só cria `InboxEntry` pro COMPRADOR (`InboxEntryKind.MarketPurchase`, entrega do peixe pendente de resgate). O vendedor não recebe nada além de um `TransactionLog` (`TransactionType.MarketSale`), que é só auditoria — não aparece pro usuário em lugar nenhum.
-
-**A fazer quando implementar:**
-- Extrair um helper genérico em `InboxService.cs` (algo como `SendSystemMessageAsync`, sem exigir contexto de admin) que tanto `AdminSendMessageAsync` (linhas 145-212) quanto esse novo trigger em `MarketService.BuyAsync` chamem — evita duplicar a criação de `InboxMessage`+`InboxEntry`.
-- Precisa de um `InboxEntryKind` novo (ex: `MarketSale`) no enum em `Vivarium.Core/Domain/Inbox.cs`.
-
-**Bloqueios:** nenhum. É a feature mais simples das 5 — pode ser a primeira a ser puxada.
+Ver `CLAUDE.md §7.19`. `InboxService.QueueSystemMessage` é o helper genérico resultante (sem exigir contexto de admin), usado por `MarketService.BuyAsync` — reusável pras próximas notificações de sistema deste backlog.
 
 ---
 

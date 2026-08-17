@@ -13,7 +13,7 @@ namespace Vivarium.Api.Services;
 /// dos handlers HTTP; devolve <see cref="ServiceResult"/> que o endpoint traduz.
 /// Sem taxa de mercado no MVP; compra é transacional + auditada no TransactionLog.
 /// </summary>
-public class MarketService(VivariumDbContext db)
+public class MarketService(VivariumDbContext db, InboxService inbox)
 {
     // Cortes de raridade espelhados de `frontend/src/lib/fishRenderer.js` BANDS (CLAUDE.md §5) —
     // não existe uma representação de "banda" no backend hoje, só o RarityScore cru. Se os
@@ -253,6 +253,14 @@ public class MarketService(VivariumDbContext db)
             CreatureInstanceId = creature.Id,
             CreatedAt = now,
         });
+        // Notifica o vendedor (BACKLOG.md #1, 16/08/2026) — o soft já foi creditado acima, essa
+        // mensagem é só informativa (sem reward pra resgatar; TryApplyRewardAsync não faz nada
+        // com ela além de marcar ClaimedAt quando o jogador der "Resgatar"/"Ler tudo").
+        inbox.QueueSystemMessage(
+            listing.SellerId, InboxEntryKind.MarketSale,
+            "Peixe vendido no Mercado",
+            $"Seu peixe foi vendido por {listing.PriceSoft:0.##} moedas, já creditadas na sua carteira.",
+            senderUserId: buyerId, now);
 
         try
         {
