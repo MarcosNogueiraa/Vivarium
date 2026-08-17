@@ -335,9 +335,14 @@ const CONFIG = {
     ["Green", 14.0], ["Purple", 6.0], ["Black", 3.0], ["PureWhite", 1.0],
   ],
   patternTypes: [
-    ["None", 76.0], ["Stripe", 8.0], ["Dot", 8.0], ["Scales", 3.0], ["Rays", 1.6],
-    ["Chevron", 1.2], ["Net", 0.9], ["Gradient", 0.6], ["Mottled", 0.35],
+    ["None", 76.2], ["Stripe", 8.0], ["Dot", 8.0], ["Scales", 3.0], ["Rays", 1.6],
+    ["Chevron", 1.2], ["Net", 0.9], ["Gradient", 0.4], ["Mottled", 0.35],
     ["Ocellus", 0.2], ["Marble", 0.05],
+  ],
+  // Mistura de cores do Degradê (12/08/2026) — espelha TraitConfigV1.GradientMixRatios.
+  // Even (50/50) é o mais raro; nos assimétricos só a cor dominante conta no score.
+  gradientMixRatios: [
+    ["BaseDominant", 45.0], ["Even", 10.0], ["PatternDominant", 45.0],
   ],
   shimmerScoreWeight: 2.5,
   shimmerColorScoreWeight: 1.0,
@@ -454,7 +459,20 @@ function generateTraits(seed) {
     else if (opacity > CONFIG.opacityExtremeHigh)
       score += selfInfo((CONFIG.opacityMax - CONFIG.opacityExtremeHigh) / range);
 
-    return { color, pattern, patternColor, patternSize: size, patternOpacity: opacity };
+    // Degradê (12/08/2026): sorteia BaseDominant/Even/PatternDominant — o mix em si sempre
+    // soma ao score (é um trait novo), e nos assimétricos a cor MINORITÁRIA (já somada acima
+    // incondicionalmente) é subtraída de volta, deixando só a dominante contar — espelha
+    // TraitGenerator.RollGradientMix (manter em sincronia).
+    let mix = null;
+    if (pattern === "Gradient") {
+      const [m, mixP] = weightedPick(CONFIG.gradientMixRatios, roll01(seed, partSalt + "_pattern_mix"));
+      mix = m;
+      score += selfInfo(mixP);
+      if (mix === "PatternDominant") score -= selfInfo(colorP);
+      else if (mix === "BaseDominant") score -= selfInfo(patternColorP);
+    }
+
+    return { color, pattern, patternColor, patternSize: size, patternOpacity: opacity, mix };
   }
 
   const tail = generatePart("tail");
@@ -588,8 +606,8 @@ const PT = {
 // "Íngreme", Lendário 1/5.000.
 const BANDS = [
   { max: 5.45, name: "Comum", color: "var(--r-comum)" },
-  { max: 12.24, name: "Incomum", color: "var(--r-incomum)" },
-  { max: 14.85, name: "Raro", color: "var(--r-raro)" },
+  { max: 12.04, name: "Incomum", color: "var(--r-incomum)" },
+  { max: 13.78, name: "Raro", color: "var(--r-raro)" },
   { max: 16.60, name: "Épico", color: "var(--r-epico)" },
   { max: Infinity, name: "Lendário", color: "var(--r-lendario)" },
 ];
@@ -600,8 +618,9 @@ const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // Geometria das partes (Path2D em coordenadas fixas do canvas 560x420)
 const bodyPath = new Path2D(
-  "M 130 210 C 155 150 235 125 305 138 C 348 147 376 178 384 210 " +
-  "C 376 242 348 273 305 282 C 235 295 155 270 130 210 Z");
+  "M 134 199 C 158 150 235 125 305 138 C 348 147 376 178 384 210 " +
+  "C 376 242 348 273 305 282 C 235 295 158 270 134 221 " +
+  "Q 122 210 134 199 Z");
 const tailPath = new Path2D(
   "M 378 200 C 405 185 432 168 452 152 C 440 172 426 192 422 210 " +
   "C 426 228 440 248 452 268 C 432 252 405 235 378 220 Q 371 210 378 200 Z");
@@ -614,7 +633,7 @@ const pectoralPath = new Path2D(
 const TAIL_BBOX = [372, 148, 84, 124];
 const DORSAL_BBOX = [224, 78, 110, 68];
 const PECTORAL_BBOX = [220, 240, 70, 56];
-const BODY_BBOX = [128, 124, 260, 172];
+const BODY_BBOX = [122, 124, 266, 172];
 const TAIL_JOINT = [380, 210];
 
 let currentSeed = null;
@@ -638,7 +657,24 @@ function mixHex(a, b, t) {
   return `rgb(${r}, ${g}, ${bl})`;
 }
 
-function drawPattern(part, path, bbox) {
+/** Grade de arcos de escama — compartilhada pelo padrão "Scales" e pela textura fixa
+ * e sutil do corpo (espelha fishRenderer.js drawScaleTexture, manter em sincronia). */
+function drawScaleTexture(bbox, r, strokeStyle, lineWidth) {
+  const [bx, by, bw, bh] = bbox;
+  const stepX = r * 1.8, stepY = r * 1.05;
+  ctx.lineWidth = lineWidth;
+  ctx.strokeStyle = strokeStyle;
+  for (let row = 0, y = by; y < by + bh + stepY; row++, y += stepY) {
+    const off = row % 2 ? stepX / 2 : 0;
+    for (let x = bx + off; x < bx + bw + stepX; x += stepX) {
+      ctx.beginPath();
+      ctx.arc(x, y, r, Math.PI * 0.15, Math.PI * 0.85);
+      ctx.stroke();
+    }
+  }
+}
+
+function drawPattern(part, path, bbox, randomDots = false) {
   if (part.pattern === "None") return;
   const color = PART_HEX[part.patternColor];
   const alpha = part.patternOpacity / 100;
@@ -657,6 +693,26 @@ function drawPattern(part, path, bbox) {
     ctx.rotate(-0.35);
     for (let x = -bw; x < bw; x += width + gap)
       ctx.fillRect(x, -bh, width, bh * 2);
+  } else if (part.pattern === "Dot" && randomDots) {
+    // Corpo: grade regular numa área bem maior que as partes ficava com cara de
+    // papel de parede/artificial. Grade jitada (stratified sampling) resolveu a
+    // distribuição, mas o mesmo tamanho/densidade de uma nadadeira pequena numa
+    // área ~4x maior virava "sarampo" — bolinha bem maior e mais espaçada lê
+    // como padrão de verdade (18/08/2026, mesma calibração de fishRenderer.js).
+    const r = (1.5 + size * 0.07) * 2.4;
+    const step = Math.max(18, r * 5.2);
+    let i = 0;
+    for (let row = 0; row * step < bh + step; row++) {
+      for (let col = 0; col * step < bw + step; col++, i++) {
+        const jitter = step * 0.32;
+        const cx = bx + col * step + step / 2 + (roll01(currentSeed, `bodydot_jx_${i}`) - 0.5) * jitter;
+        const cy = by + row * step + (roll01(currentSeed, `bodydot_jy_${i}`) - 0.5) * jitter;
+        const radius = r * (0.75 + 0.5 * roll01(currentSeed, `bodydot_r_${i}`));
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
   } else if (part.pattern === "Dot") {
     const r = 1.5 + size * 0.07;
     const step = Math.max(6, r * 3.2);
@@ -669,10 +725,17 @@ function drawPattern(part, path, bbox) {
       }
     }
   } else if (part.pattern === "Gradient") {
+    // patternSize controla a suavidade da transição; mix (12/08/2026) controla ONDE o
+    // corte fica — base dominante (75/25) desce o corte, padrão dominante (25/75) sobe,
+    // Even (50/50) centraliza (espelha fishRenderer.js, manter em sincronia).
     const extent = 0.35 + (size / 100) * 0.65;
-    const grad = ctx.createLinearGradient(0, by, 0, by + bh / extent);
-    grad.addColorStop(0, color + "00");
-    grad.addColorStop(1, color);
+    const t = part.mix === "BaseDominant" ? 0.75 : part.mix === "PatternDominant" ? 0.25 : 0.5;
+    const halfWidth = extent * 0.5;
+    const stop0 = Math.max(0, t - halfWidth);
+    const stop1 = Math.min(1, t + halfWidth);
+    const grad = ctx.createLinearGradient(0, by, 0, by + bh);
+    grad.addColorStop(stop0, color + "00");
+    grad.addColorStop(stop1, color);
     ctx.fillStyle = grad;
     ctx.fillRect(bx, by, bw, bh);
   } else if (part.pattern === "Mottled") {
@@ -689,17 +752,7 @@ function drawPattern(part, path, bbox) {
     }
   } else if (part.pattern === "Scales") {
     const r = 4 + size * 0.09;
-    const stepX = r * 1.8, stepY = r * 1.05;
-    ctx.lineWidth = Math.max(1, r * 0.16);
-    ctx.strokeStyle = color;
-    for (let row = 0, y = by; y < by + bh + stepY; row++, y += stepY) {
-      const off = row % 2 ? stepX / 2 : 0;
-      for (let x = bx + off; x < bx + bw + stepX; x += stepX) {
-        ctx.beginPath();
-        ctx.arc(x, y, r, Math.PI * 0.15, Math.PI * 0.85);
-        ctx.stroke();
-      }
-    }
+    drawScaleTexture(bbox, r, color, Math.max(1, r * 0.16));
   } else if (part.pattern === "Chevron") {
     const amp = 5 + size * 0.07;
     const wl = amp * 1.8;
@@ -771,6 +824,39 @@ function fillPart(path, color) {
   ctx.stroke(path);
 }
 
+// Ponto de encaixe (onde a nadadeira nasce do corpo) e o leque de ângulos dos raios,
+// por nadadeira — espelha fishRenderer.js FIN_RAYS (manter em sincronia).
+const FIN_RAYS = {
+  tail: { joint: [378, 206], angleFrom: -0.85, angleTo: 0.85, length: 74, count: 6 },
+  dorsal: { joint: [228, 138], angleFrom: -2.15, angleTo: -1.05, length: 62, count: 5 },
+  pectoral: { joint: [228, 244], angleFrom: 0.35, angleTo: 1.15, length: 48, count: 4 },
+};
+
+/** Linhas finas translúcidas irradiando do encaixe — dá leitura de "raio de nadadeira". */
+function drawFinRays(name, path) {
+  const spec = FIN_RAYS[name];
+  if (!spec) return;
+  const { joint, angleFrom, angleTo, length, count } = spec;
+  const [jx, jy] = joint;
+
+  ctx.save();
+  ctx.clip(path);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.22)";
+  ctx.lineWidth = 1.1;
+  ctx.lineCap = "round";
+  for (let i = 0; i < count; i++) {
+    const t = count > 1 ? i / (count - 1) : 0.5;
+    const jitter = (roll01(currentSeed, `finray_${name}_${i}`) - 0.5) * 0.12;
+    const angle = angleFrom + (angleTo - angleFrom) * t + jitter;
+    const len = length * (0.85 + roll01(currentSeed, `finraylen_${name}_${i}`) * 0.25);
+    ctx.beginPath();
+    ctx.moveTo(jx, jy);
+    ctx.lineTo(jx + Math.cos(angle) * len, jy + Math.sin(angle) * len);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 // Rasteriza a parte (fill + padrão) 1× num canvas offscreen, cacheada por seed+nome.
 const spriteCache = new Map();
 
@@ -791,6 +877,7 @@ function getPartSprite(name, part, path, bbox) {
   ctx.translate(-bx + M, -by + M);
   fillPart(path, part.color);
   drawPattern(part, path, bbox);
+  drawFinRays(name, path);
   ctx = realCtx;
 
   const sprite = { canvas: sc, ox: bx - M, oy: by - M };
@@ -878,6 +965,65 @@ function drawBubbles(time) {
   ctx.restore();
 }
 
+// Corpo: gradiente + textura de escama são idênticos pra todo peixe cinza comum —
+// cacheado por variante de cor ("cor absoluta") ou, quando houver "padrão absoluto"
+// (posições aleatórias dependem do seed), por peixe. Espelha fishRenderer.js
+// getBodySprite (manter em sincronia).
+const bodySpriteCache = new Map();
+
+function getBodySprite(tintColor, patternPart) {
+  const cacheKey = patternPart ? `${currentSeed}|${tintColor ?? "-"}|pattern` : (tintColor ?? "default");
+  const cached = bodySpriteCache.get(cacheKey);
+  if (cached) return cached;
+
+  const M = MOVEMENT_TUNING.spriteMargin;
+  const [bx, by, bw, bh] = BODY_BBOX;
+  const sc = document.createElement("canvas");
+  sc.width = bw + 2 * M;
+  sc.height = bh + 2 * M;
+  const sctx = sc.getContext("2d");
+  const realCtx = ctx;
+  ctx = sctx;
+  ctx.translate(-bx + M, -by + M);
+
+  const bodyGrad = ctx.createLinearGradient(0, by, 0, by + bh);
+  bodyGrad.addColorStop(0, "#9aa1a9");
+  bodyGrad.addColorStop(0.55, "#7d848d");
+  bodyGrad.addColorStop(1, "#5f666f");
+  ctx.fillStyle = bodyGrad;
+  ctx.fill(bodyPath);
+  ctx.strokeStyle = "rgba(0,0,0,0.3)";
+  ctx.lineWidth = 2;
+  ctx.stroke(bodyPath);
+
+  ctx.save();
+  ctx.clip(bodyPath);
+  ctx.globalAlpha = 0.09;
+  drawScaleTexture(BODY_BBOX, 9, "#e8edf1", 1);
+  ctx.restore();
+
+  // "Padrão absoluto" (18/08/2026): cauda/dorsal/peitoral com o MESMO tipo de padrão
+  // também pinta o corpo com ele.
+  if (patternPart) drawPattern(patternPart, bodyPath, BODY_BBOX, true);
+
+  // "Cor absoluta" (08/08/2026): cauda/dorsal/peitoral na MESMA cor tingem o corpo
+  // também, por cima do gradiente cinza (overlay), mantendo a textura por baixo.
+  if (tintColor) {
+    ctx.save();
+    ctx.clip(bodyPath);
+    ctx.globalCompositeOperation = "overlay";
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = PART_HEX[tintColor];
+    ctx.fillRect(...BODY_BBOX);
+    ctx.restore();
+  }
+  ctx = realCtx;
+
+  const sprite = { canvas: sc, ox: bx - M, oy: by - M };
+  bodySpriteCache.set(cacheKey, sprite);
+  return sprite;
+}
+
 function drawFish(traits, time) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawBubbles(time);
@@ -902,28 +1048,20 @@ function drawFish(traits, time) {
     MOVEMENT_TUNING.dorsalWave, MOVEMENT_TUNING.dorsalWave.ampBase * movement.tailAmp * A,
     tailPeriod, animTime, 0);
 
-  // 3. Corpo base cinza
-  const bodyGrad = ctx.createLinearGradient(0, BODY_BBOX[1], 0, BODY_BBOX[1] + BODY_BBOX[3]);
-  bodyGrad.addColorStop(0, "#9aa1a9");
-  bodyGrad.addColorStop(0.55, "#7d848d");
-  bodyGrad.addColorStop(1, "#5f666f");
-  ctx.fillStyle = bodyGrad;
-  ctx.fill(bodyPath);
-  ctx.strokeStyle = "rgba(0,0,0,0.3)";
-  ctx.lineWidth = 2;
-  ctx.stroke(bodyPath);
-
-  // 3b. "Cor absoluta" (CLAUDE.md §4, 08/08/2026): cauda/dorsal/peitoral na MESMA cor
-  // tingem o corpo também, por cima do cinza (overlay), mantendo o degradê por baixo.
-  if (traits.tail.color === traits.dorsal.color && traits.dorsal.color === traits.pectoral.color) {
-    ctx.save();
-    ctx.clip(bodyPath);
-    ctx.globalCompositeOperation = "overlay";
-    ctx.globalAlpha = 0.85;
-    ctx.fillStyle = PART_HEX[traits.tail.color];
-    ctx.fillRect(...BODY_BBOX);
-    ctx.restore();
-  }
+  // 3. Corpo (gradiente + textura + "cor absoluta"/"padrão absoluto" quando as 3
+  // partes baterem — CLAUDE.md §4) — sprite cacheado, ver getBodySprite.
+  const absoluteColor = traits.tail.color === traits.dorsal.color && traits.dorsal.color === traits.pectoral.color
+    ? traits.tail.color : null;
+  const absolutePattern = traits.tail.pattern !== "None"
+    && traits.tail.pattern === traits.dorsal.pattern && traits.dorsal.pattern === traits.pectoral.pattern
+    ? {
+        ...traits.tail,
+        patternSize: (traits.tail.patternSize + traits.dorsal.patternSize + traits.pectoral.patternSize) / 3,
+        patternOpacity: (traits.tail.patternOpacity + traits.dorsal.patternOpacity + traits.pectoral.patternOpacity) / 3,
+      }
+    : null;
+  const body = getBodySprite(absoluteColor, absolutePattern);
+  ctx.drawImage(body.canvas, body.ox, body.oy);
 
   // 4. Shimmer sobre o corpo (blend overlay)
   drawShimmer(traits, time);
