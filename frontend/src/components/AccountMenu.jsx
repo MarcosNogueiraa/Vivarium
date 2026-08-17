@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.js";
+import { ProfileModal } from "./ProfileModal.jsx";
 
 /** Botão de conta (ícone de pessoa) — dropdown com username/email, editar perfil + sair. */
 export function AccountMenu({ onLogout, notify }) {
   const [open, setOpen] = useState(false);
   const [me, setMe] = useState(null);
+  const [showProfile, setShowProfile] = useState(false);
   const ref = useRef(null);
 
   useEffect(() => {
@@ -32,8 +34,19 @@ export function AccountMenu({ onLogout, notify }) {
             <div className="account-username">{me?.username ?? "…"}</div>
             <div className="account-email faint">{me?.email ?? ""}</div>
           </div>
+          <button className="account-edit" onClick={() => { setShowProfile(true); setOpen(false); }}>
+            ✏️ Editar perfil
+          </button>
           <button className="account-logout" onClick={onLogout}>Sair</button>
         </div>
+      )}
+      {showProfile && (
+        <ProfileModal
+          me={me}
+          notify={notify}
+          onUpdated={(updated) => setMe((prev) => ({ ...prev, ...updated }))}
+          onClose={() => setShowProfile(false)}
+        />
       )}
     </div>
   );

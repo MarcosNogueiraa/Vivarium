@@ -1,12 +1,12 @@
 // E2E do fluxo "esqueci minha senha" (14/08/2026): pedir o link na tela de login e
 // redefinir via `?resetToken=...` (sem router — App.jsx checa a URL direto).
 //
-// .skip (14/08/2026): UI temporariamente desativada em AuthView.jsx/App.jsx — a feature
-// ainda não foi implantada no backend (Oracle VM), subir o frontend com esses pontos de
-// entrada ativos quebrava "Esqueceu sua senha?" pros jogadores de verdade. Reativar (e tirar
-// o .skip) junto com o deploy do backend (AccountEndpoints.cs/PasswordResetService.cs +
-// migration AddPasswordResetToken).
-describe.skip("Esqueci minha senha", () => {
+// Reativado 18/08/2026 — o .skip de 14/08 era temporário até o backend (Oracle VM) subir
+// AccountEndpoints.cs/PasswordResetService.cs + migration AddPasswordResetToken; confirmado
+// ao vivo em produção (POST /api/auth/forgot-password responde 200) há um tempo, mas a UI
+// (AuthView.jsx/AccountMenu.jsx/App.jsx) tinha ficado desativada sem ninguém reverter o
+// hotfix — achado revisando um relato do usuário ("perdemos o ajuste de redefinição de senha").
+describe("Esqueci minha senha", () => {
   it("pedir o link mostra a confirmação genérica, exista ou não a conta", () => {
     cy.intercept("POST", "/api/auth/forgot-password", {
       statusCode: 200, body: { message: "Se esse email tiver uma conta, um link de redefinição foi enviado." },
