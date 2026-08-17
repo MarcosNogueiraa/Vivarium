@@ -225,9 +225,15 @@ public class VivariumDbContext(DbContextOptions<VivariumDbContext> options) : Db
                 },
                 new ItemDefinition
                 {
+                    // 0.55→0.75 (17/08/2026): usuário reportou 3 ovos lendários rendendo Incomum
+                    // (não bug — Incomum é uma faixa enorme, 64% de chance mesmo com bias 0.55,
+                    // medido via `Vivarium.Simulation -- eggodds`). Recalibrado com
+                    // `Vivarium.Simulation -- eggbias` (10 valores testados, 3M seeds cada):
+                    // 0.75 dá Raro+ 58%/Épico+ 38%/só-Lendário 14% — resultado "valeu a pena"
+                    // claro sem virar certeza. Comum/Raro não mudaram nesta rodada.
                     Id = 11, Key = "egg_legendary", Name = "Ovo Lendário",
                     Category = ItemCategory.Egg,
-                    EffectJson = """{"eggBiasStrength":0.55}""", PriceSoft = 0m, PricePremium = 90m,
+                    EffectJson = """{"eggBiasStrength":0.75}""", PriceSoft = 0m, PricePremium = 90m,
                 });
         });
 

@@ -14,6 +14,12 @@ if (args.Length >= 1 && args[0] == "eggodds")
     return;
 }
 
+if (args.Length >= 1 && args[0] == "eggbias")
+{
+    Vivarium.Simulation.EggOddsScratch.RunBiasOptions();
+    return;
+}
+
 if (args.Length >= 1 && args[0] == "dump")
 {
     int count = args.Length > 1 && int.TryParse(args[1], out var c) ? c : 1000;
