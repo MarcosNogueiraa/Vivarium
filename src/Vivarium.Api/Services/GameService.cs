@@ -568,9 +568,11 @@ public class GameService(VivariumDbContext db)
         // depende de GameService, injetar o inverso criaria dependência circular); a criação
         // direta aqui é só 2 objetos, não vale a pena quebrar a separação de camadas por isso.
         bool gotEgg = DailyRewardCalculator.RollsEgg(Random.Shared.NextDouble(), TickConfig.Default);
+        string? eggItemKey = null;
         if (gotEgg)
         {
             var eggItem = await db.ItemDefinitions.FirstAsync(i => i.Key == TickConfig.Default.DailyRewardEggItemKey);
+            eggItemKey = eggItem.Key;
             var eggMessage = new InboxMessage
             {
                 Title = "🎁 Recompensa diária: sorte grande!",
@@ -596,7 +598,7 @@ public class GameService(VivariumDbContext db)
         {
             return ServiceResult.Conflict("Resgate concorrente — tente de novo.");
         }
-        return ServiceResult.Success(new ClaimDailyRewardResponse(amount, wallet.Amount, nextStreak, gotEgg));
+        return ServiceResult.Success(new ClaimDailyRewardResponse(amount, wallet.Amount, nextStreak, gotEgg, eggItemKey));
     }
 
     /// <summary>

@@ -40,4 +40,4 @@ public record DailyRewardStatusDto(
     bool CanClaim, decimal MinAmount, decimal MaxAmount, int CurrentStreak, double StreakBonusPercent,
     double EggChancePercent, DateTime? NextAvailableAtUtc);
 
-public record ClaimDailyRewardResponse(decimal Amount, decimal Wallet, int Streak, bool GotEgg);
+public record ClaimDailyRewardResponse(decimal Amount, decimal Wallet, int Streak, bool GotEgg, string? EggItemKey);

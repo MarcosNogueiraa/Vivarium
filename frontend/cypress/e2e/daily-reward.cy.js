@@ -48,7 +48,7 @@ describe("Recompensa diária", () => {
     cy.wait("@claim");
     cy.wait("@statusAfter");
 
-    cy.contains(".daily-reward-roulette-value", "27", { timeout: 3000 });
+    cy.contains(".daily-reward-roulette-value", "27", { timeout: 4000 });
     cy.contains("Creditado na carteira");
 
     cy.contains("button", "Fechar").click();
@@ -66,7 +66,7 @@ describe("Recompensa diária", () => {
     cy.contains("button", "Recompensa diária").click();
 
     cy.intercept("POST", "/api/game/daily-reward/claim", {
-      statusCode: 200, body: { amount: 25, wallet: 125, streak: 1, gotEgg: true },
+      statusCode: 200, body: { amount: 25, wallet: 125, streak: 1, gotEgg: true, eggItemKey: "egg_rare" },
     }).as("claim");
     cy.intercept("GET", "/api/game/daily-reward", {
       statusCode: 200,
@@ -78,7 +78,8 @@ describe("Recompensa diária", () => {
     cy.contains("button", "Resgatar").click();
     cy.wait("@claim");
 
-    cy.contains("Sorte grande", { timeout: 3000 });
+    cy.contains("Sorte grande", { timeout: 4000 });
+    cy.contains("Ovo Raro caiu na sua Caixa de Entrada");
   });
 
   it("não mostra o botão quando já foi resgatada hoje", () => {

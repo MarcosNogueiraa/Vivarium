@@ -114,8 +114,8 @@ public class DailyRewardTests : IClassFixture<VivariumApiFactory>
     {
         var (client, userId) = await _factory.RegisterAsync("diaria6");
 
-        bool gotEgg = false;
-        for (int i = 0; i < 200 && !gotEgg; i++)
+        ClaimDto? lastClaimed = null;
+        for (int i = 0; i < 200 && lastClaimed?.GotEgg != true; i++)
         {
             if (i > 0)
             {
@@ -128,11 +128,11 @@ public class DailyRewardTests : IClassFixture<VivariumApiFactory>
 
             var claim = await client.PostAsync("/api/game/daily-reward/claim", null);
             claim.EnsureSuccessStatusCode();
-            var claimed = await claim.Content.ReadFromJsonAsync<ClaimDto>();
-            gotEgg = claimed!.GotEgg;
+            lastClaimed = await claim.Content.ReadFromJsonAsync<ClaimDto>();
         }
 
-        Assert.True(gotEgg, "200 resgates com 3% de chance cada — nenhum ovo saiu, algo está errado na chamada.");
+        Assert.True(lastClaimed?.GotEgg, "200 resgates com 3% de chance cada — nenhum ovo saiu, algo está errado na chamada.");
+        Assert.Equal("egg_rare", lastClaimed!.EggItemKey);
 
         var inbox = await client.GetFromJsonAsync<InboxListRow>("/api/inbox/");
         Assert.Contains(inbox!.Entries, e => e.Kind == "DailyRewardEgg");
@@ -154,5 +154,5 @@ public class DailyRewardTests : IClassFixture<VivariumApiFactory>
     public record StatusDto(bool CanClaim, decimal MinAmount, decimal MaxAmount, int CurrentStreak,
         double StreakBonusPercent, double EggChancePercent, DateTime? NextAvailableAtUtc);
 
-    public record ClaimDto(decimal Amount, decimal Wallet, int Streak, bool GotEgg);
+    public record ClaimDto(decimal Amount, decimal Wallet, int Streak, bool GotEgg, string? EggItemKey);
 }
