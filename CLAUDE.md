@@ -90,6 +90,8 @@ Se o corpo saiu em Tier 2, 3 ou 4, a tabela de peso de cor das partes é ajustad
 
 **Cor absoluta (visual):** quando cauda, dorsal e peitoral saem todas na MESMA cor (mesma condição do bônus `sameColor3`, §5.1), o corpo — normalmente cinza — é tingido com essa cor também (`fishRenderer.getBodySprite(tintColor)`, overlay sobre o gradiente cinza, mantém a textura por baixo). Puramente visual, o score não muda — o bônus de conjunto já existe desde antes. Chance do zero (sem correlação de brilho ativa) é baixa, em torno de 3% somando todas as cores. Cruzar dois pais com as 3 partes já na mesma cor no Ninho aumenta bastante a chance, mas mutação sempre pode resortear.
 
+**Padrão absoluto (visual, 18/08/2026):** mesma ideia da cor absoluta, mas pro TIPO de padrão — quando cauda, dorsal e peitoral saem todas com o mesmo padrão (≠ Sem padrão, mesma condição do bônus `samePattern3`), esse padrão também é desenhado no corpo (`fishRenderer.drawPattern` reaproveitado, cor/tamanho/opacidade da cauda, aplicado sobre o gradiente cinza antes do tint de cor absoluta). Puramente visual, score não muda. Padrões que dependem de posição aleatória por seed (Manchado/Ocelo/Mármore) fazem o sprite do corpo deixar de ser cacheável pelas ~9 variantes de tint compartilhadas — cai pra um cache por peixe nesse caso específico (raro o bastante pra não pesar), igual ao cache das partes.
+
 ---
 
 ## 5. Cálculo de Rarity Score

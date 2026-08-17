@@ -603,6 +603,7 @@ switch (args[0])
             Seed = seed,
             TraitConfigVersion = Vivarium.Core.Generation.TraitConfigV1.Version,
             RarityScore = (decimal)traits.RarityScore,
+            TraitsJson = Vivarium.Core.Generation.TraitsSerialization.Serialize(traits),
             CreatedAt = DateTime.UtcNow,
         };
         db.CreatureInstances.Add(creature);

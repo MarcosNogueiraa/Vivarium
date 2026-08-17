@@ -374,9 +374,19 @@ const bodySpriteCache = new Map();
  * nada muda no cálculo de score. Tint em "overlay" por cima do gradiente
  * cinza mantém a luz/sombra e a textura de escama aparecendo através da
  * cor, em vez de virar uma cor chapada sem volume.
+ *
+ * `patternPart` (opcional, mesmo shape de `traits.tail`/etc.): "padrão absoluto"
+ * (18/08/2026, mesma ideia da cor absoluta) — quando cauda, dorsal e peitoral
+ * saem todas com o MESMO tipo de padrão, esse padrão também é desenhado no
+ * corpo (`drawPattern`, reaproveitado das partes). Como os padrões "Mottled"/
+ * "Ocellus"/"Marble" usam posições aleatórias por seed, um corpo com padrão só
+ * pode ser cacheado por PEIXE (não pelas ~9 variantes de tint compartilhadas) —
+ * por isso o cache key vira seed-specific só nesse caso, igual ao `spriteCache`
+ * das partes; o caminho comum (sem padrão) continua compartilhando as poucas
+ * variantes de sempre.
  */
-function getBodySprite(tintColor = null) {
-  const cacheKey = tintColor ?? "default";
+function getBodySprite(tintColor = null, patternPart = null, seed = 0n) {
+  const cacheKey = patternPart ? `${seed}|${tintColor ?? "-"}|pattern` : (tintColor ?? "default");
   const cached = bodySpriteCache.get(cacheKey);
   if (cached) return cached;
 
@@ -403,6 +413,8 @@ function getBodySprite(tintColor = null) {
   sctx.globalAlpha = 0.09;
   drawScaleTexture(sctx, BODY_BBOX, 9, "#e8edf1", 1);
   sctx.restore();
+
+  if (patternPart) drawPattern(sctx, seed, patternPart, bodyPath, BODY_BBOX);
 
   if (tintColor) {
     sctx.save();
@@ -564,7 +576,13 @@ export function drawFish(ctx, seed, traits, time = 0, phase = 0, layers = FULL_F
   const absoluteColor = allPartsShown
     && traits.tail.color === traits.dorsal.color && traits.dorsal.color === traits.pectoral.color
     ? traits.tail.color : null;
-  const body = getBodySprite(absoluteColor);
+  // "Padrão absoluto" (18/08/2026, mesma ideia da cor absoluta): as 3 partes com o MESMO tipo
+  // de padrão também pinta o corpo com ele — usa cor/tamanho/opacidade da cauda (arbitrário,
+  // mesmo critério já usado pra cor absoluta), já que só o TIPO precisa bater entre as partes.
+  const absolutePattern = allPartsShown && traits.tail.pattern !== "None"
+    && traits.tail.pattern === traits.dorsal.pattern && traits.dorsal.pattern === traits.pectoral.pattern
+    ? traits.tail : null;
+  const body = getBodySprite(absoluteColor, absolutePattern, seed);
   ctx.drawImage(body.canvas, body.ox, body.oy);
 
   if (layers.shimmer) drawShimmer(ctx, traits, time);
