@@ -182,19 +182,17 @@ function drawPattern(ctx, seed, part, path, bbox, randomDots = false) {
       ctx.fillRect(x, -bh, width, bh * 2);
   } else if (part.pattern === "Dot" && randomDots) {
     // Corpo: grade regular numa área bem maior que as partes ficava com cara de
-    // papel de parede/artificial (feedback do usuário, 18/08/2026). 1ª tentativa
-    // (posição 100% aleatória) ficou pior ainda — puramente aleatório clusteriza
-    // (várias bolinhas grudadas) e deixa buracos grandes, lê como sujeira, não
-    // como padrão. Solução: GRADE JITADA (stratified sampling) — mantém uma
-    // célula por bolinha (cobertura uniforme, sem buracos), mas desloca cada
-    // bolinha dentro da própria célula + varia raio + descarta ~15% delas, o
-    // suficiente pra quebrar a regularidade sem virar ruído.
-    const r = 1.5 + size * 0.07;
-    const step = Math.max(7, r * 3.4);
+    // papel de parede/artificial (feedback do usuário, 18/08/2026). Aleatório puro
+    // clusteriza (várias bolinhas grudadas + buracos grandes, lê como sujeira).
+    // Grade jitada (stratified sampling) resolveu a distribuição, mas ainda usava o
+    // mesmo tamanho/densidade de uma nadadeira pequena — numa área ~4x maior isso
+    // vira "sarampo" (muitas bolinhas pequenas demais pro espaço). Bolinha bem
+    // maior e mais espaçada (poucas, deliberadas) lê como padrão de verdade.
+    const r = (1.5 + size * 0.07) * 2.4;
+    const step = Math.max(18, r * 5.2);
     let i = 0;
     for (let row = 0; row * step < bh + step; row++) {
       for (let col = 0; col * step < bw + step; col++, i++) {
-        if (roll01(seed, `bodydot_skip_${i}`) < 0.15) continue;
         const jitter = step * 0.32;
         const cx = bx + col * step + step / 2 + (roll01(seed, `bodydot_jx_${i}`) - 0.5) * jitter;
         const cy = by + row * step + (roll01(seed, `bodydot_jy_${i}`) - 0.5) * jitter;
