@@ -162,7 +162,7 @@ function drawScaleTexture(ctx, bbox, r, strokeStyle, lineWidth) {
   }
 }
 
-function drawPattern(ctx, seed, part, path, bbox) {
+function drawPattern(ctx, seed, part, path, bbox, randomDots = false) {
   if (part.pattern === "None") return;
   const color = PART_HEX[part.patternColor];
   const size = part.patternSize;
@@ -180,6 +180,30 @@ function drawPattern(ctx, seed, part, path, bbox) {
     ctx.rotate(-0.35);
     for (let x = -bw; x < bw; x += width + gap)
       ctx.fillRect(x, -bh, width, bh * 2);
+  } else if (part.pattern === "Dot" && randomDots) {
+    // Corpo: grade regular numa área bem maior que as partes ficava com cara de
+    // papel de parede/artificial (feedback do usuário, 18/08/2026). 1ª tentativa
+    // (posição 100% aleatória) ficou pior ainda — puramente aleatório clusteriza
+    // (várias bolinhas grudadas) e deixa buracos grandes, lê como sujeira, não
+    // como padrão. Solução: GRADE JITADA (stratified sampling) — mantém uma
+    // célula por bolinha (cobertura uniforme, sem buracos), mas desloca cada
+    // bolinha dentro da própria célula + varia raio + descarta ~15% delas, o
+    // suficiente pra quebrar a regularidade sem virar ruído.
+    const r = 1.5 + size * 0.07;
+    const step = Math.max(7, r * 3.4);
+    let i = 0;
+    for (let row = 0; row * step < bh + step; row++) {
+      for (let col = 0; col * step < bw + step; col++, i++) {
+        if (roll01(seed, `bodydot_skip_${i}`) < 0.15) continue;
+        const jitter = step * 0.32;
+        const cx = bx + col * step + step / 2 + (roll01(seed, `bodydot_jx_${i}`) - 0.5) * jitter;
+        const cy = by + row * step + (roll01(seed, `bodydot_jy_${i}`) - 0.5) * jitter;
+        const radius = r * (0.75 + 0.5 * roll01(seed, `bodydot_r_${i}`));
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
   } else if (part.pattern === "Dot") {
     const r = 1.5 + size * 0.07;
     const step = Math.max(6, r * 3.2);
@@ -414,7 +438,7 @@ function getBodySprite(tintColor = null, patternPart = null, seed = 0n) {
   drawScaleTexture(sctx, BODY_BBOX, 9, "#e8edf1", 1);
   sctx.restore();
 
-  if (patternPart) drawPattern(sctx, seed, patternPart, bodyPath, BODY_BBOX);
+  if (patternPart) drawPattern(sctx, seed, patternPart, bodyPath, BODY_BBOX, true);
 
   if (tintColor) {
     sctx.save();
@@ -577,11 +601,17 @@ export function drawFish(ctx, seed, traits, time = 0, phase = 0, layers = FULL_F
     && traits.tail.color === traits.dorsal.color && traits.dorsal.color === traits.pectoral.color
     ? traits.tail.color : null;
   // "Padrão absoluto" (18/08/2026, mesma ideia da cor absoluta): as 3 partes com o MESMO tipo
-  // de padrão também pinta o corpo com ele — usa cor/tamanho/opacidade da cauda (arbitrário,
-  // mesmo critério já usado pra cor absoluta), já que só o TIPO precisa bater entre as partes.
+  // de padrão também pinta o corpo com ele — cor da cauda (arbitrário, só o TIPO precisa bater
+  // entre as partes), mas tamanho/opacidade são a MÉDIA das 3 (pedido do usuário: um valor só
+  // "representa" melhor o conjunto do que pegar de uma parte específica).
   const absolutePattern = allPartsShown && traits.tail.pattern !== "None"
     && traits.tail.pattern === traits.dorsal.pattern && traits.dorsal.pattern === traits.pectoral.pattern
-    ? traits.tail : null;
+    ? {
+        ...traits.tail,
+        patternSize: (traits.tail.patternSize + traits.dorsal.patternSize + traits.pectoral.patternSize) / 3,
+        patternOpacity: (traits.tail.patternOpacity + traits.dorsal.patternOpacity + traits.pectoral.patternOpacity) / 3,
+      }
+    : null;
   const body = getBodySprite(absoluteColor, absolutePattern, seed);
   ctx.drawImage(body.canvas, body.ox, body.oy);
 
