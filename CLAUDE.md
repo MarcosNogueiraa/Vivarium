@@ -1,6 +1,6 @@
 # Vivarium — Contexto do Projeto
 
-> Este arquivo é a fonte única de verdade sobre o **estado vigente** das decisões de design e arquitetura do Vivarium — leia-o por completo antes de sugerir código ou mudanças estruturais. Ao tomar novas decisões, atualize este arquivo (e commite a mudança) pra manter o contexto sempre atual entre sessões. Ele contém só o que está valendo HOJE; a jornada de como se chegou a cada número/decisão (investigações, bugs corrigidos, calibrações superadas, mecanismos removidos) vive em `HISTORY.md`, que não é carregado por padrão — consulte-o só quando precisar entender o *porquê* de algo.
+> Este arquivo é a fonte única de verdade sobre o **estado vigente** das decisões de design e arquitetura do Vivarium — leia-o por completo antes de sugerir código ou mudanças estruturais. Ao tomar novas decisões, atualize este arquivo (e commite a mudança) pra manter o contexto sempre atual entre sessões. Ele contém só o que está valendo HOJE; a jornada de como se chegou a cada número/decisão (investigações, bugs corrigidos, calibrações superadas, mecanismos removidos) vive em `HISTORY.md`, que não é carregado por padrão — consulte-o só quando precisar entender o *porquê* de algo. Ideias de feature já discutidas mas ainda não implementadas vivem em `BACKLOG.md` (idem, não carregado por padrão).
 
 ## 0. Sobre o projeto
 
@@ -257,7 +257,8 @@ Sink de soft (custo dinâmico) + sink de tempo (pais fora do tanque durante a ge
 - **Sujeira visual (cocô):** decidido ser puramente decorativo, sincronizado com o `murk` existente — a física real de degradação da água continua exatamente como está, sem estado novo no servidor.
 - **Cascudo:** peixe futuro (não item de loja) que ajudaria na limpeza passiva — hook comentado em `GameService.ApplyTickAsync`, sem implementação. O filtro automático (item comprado) já cobre a função equivalente hoje.
 - **Fusão de peixes:** cogitada e adiada — risco de canibalizar o sink de breeding se virar caminho determinístico/sem risco pra subir de raridade.
-- **Caixa de entrada com recompensa em item/comentários no aquário visitado:** ver §7.19 e o plano ainda não implementado em memória (`plano-caixa-de-entrada.md`).
+- **Comentários no aquário visitado:** ver §7.16 — precisa de moderação básica antes de ir pra produção.
+- **Backlog de ideias novas ainda não implementadas** (notificação de venda no Mercado, link de indicação, ovo de peixe/loot box, redesenho da recompensa diária, rate limiting de login/forgot-password): ver `BACKLOG.md`.
 
 ### 7.10 Recompensa diária
 
