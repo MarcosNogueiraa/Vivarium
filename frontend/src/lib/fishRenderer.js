@@ -162,7 +162,7 @@ function drawScaleTexture(ctx, bbox, r, strokeStyle, lineWidth) {
   }
 }
 
-function drawPattern(ctx, seed, part, path, bbox, randomDots = false) {
+function drawPattern(ctx, seed, part, path, bbox, isBody = false) {
   if (part.pattern === "None") return;
   const color = PART_HEX[part.patternColor];
   const size = part.patternSize;
@@ -180,22 +180,28 @@ function drawPattern(ctx, seed, part, path, bbox, randomDots = false) {
     ctx.rotate(-0.35);
     for (let x = -bw; x < bw; x += width + gap)
       ctx.fillRect(x, -bh, width, bh * 2);
-  } else if (part.pattern === "Dot" && randomDots) {
+  } else if (part.pattern === "Dot" && isBody) {
     // Corpo: grade regular numa área bem maior que as partes ficava com cara de
-    // papel de parede/artificial (feedback do usuário, 18/08/2026). Aleatório puro
-    // clusteriza (várias bolinhas grudadas + buracos grandes, lê como sujeira).
-    // Grade jitada (stratified sampling) resolveu a distribuição, mas ainda usava o
-    // mesmo tamanho/densidade de uma nadadeira pequena — numa área ~4x maior isso
-    // vira "sarampo" (muitas bolinhas pequenas demais pro espaço). Bolinha bem
-    // maior e mais espaçada (poucas, deliberadas) lê como padrão de verdade.
-    const r = (1.5 + size * 0.07) * 2.4;
-    const step = Math.max(18, r * 5.2);
+    // papel de parede/artificial. Aleatório puro clusteriza (várias bolinhas grudadas
+    // + buracos grandes, lê como sujeira). Grade jitada (stratified sampling) resolveu
+    // a distribuição; bolinha maior/mais espaçada que a das partes evita "sarampo"
+    // numa área ~4x maior.
+    // Fase ancorada no encaixe da cauda (18/08/2026, mesmo joint de FIN_RAYS.tail —
+    // pedido do usuário: "encaixar melhor... com o padrão da cauda") — sem isso a
+    // grade começava do canto do corpo com fase arbitrária, parecendo duas bolinhas
+    // desconectadas (corpo/cauda) em vez de um pelego contínuo que só muda de escala
+    // na costura entre as partes.
+    const r = (1.5 + size * 0.07) * 1.7;
+    const step = Math.max(14, r * 4.4);
+    const [anchorX, anchorY] = FIN_RAYS.tail.joint;
+    const phaseX = ((anchorX - bx) % step + step) % step;
+    const phaseY = ((anchorY - by) % step + step) % step;
     let i = 0;
-    for (let row = 0; row * step < bh + step; row++) {
-      for (let col = 0; col * step < bw + step; col++, i++) {
+    for (let row = -1; row * step < bh + step; row++) {
+      for (let col = -1; col * step < bw + step; col++, i++) {
         const jitter = step * 0.32;
-        const cx = bx + col * step + step / 2 + (roll01(seed, `bodydot_jx_${i}`) - 0.5) * jitter;
-        const cy = by + row * step + (roll01(seed, `bodydot_jy_${i}`) - 0.5) * jitter;
+        const cx = bx + phaseX + col * step + step / 2 + (roll01(seed, `bodydot_jx_${i}`) - 0.5) * jitter;
+        const cy = by + phaseY + row * step + (roll01(seed, `bodydot_jy_${i}`) - 0.5) * jitter;
         const radius = r * (0.75 + 0.5 * roll01(seed, `bodydot_r_${i}`));
         ctx.beginPath();
         ctx.arc(cx, cy, radius, 0, Math.PI * 2);
@@ -268,7 +274,12 @@ function drawPattern(ctx, seed, part, path, bbox, randomDots = false) {
         ctx.stroke();
       }
   } else if (part.pattern === "Rays") {
-    const baseX = bx + bw * 0.08, baseY = by + bh / 2;
+    // No corpo, o foco a só 8% da largura ficava DENTRO da própria área (bbox bem maior
+    // que o de uma nadadeira) — um ponto visível de onde saíam todos os raios, esquisito
+    // (18/08/2026, feedback do usuário). Empurra o foco bem pra fora do corpo (2x a
+    // largura pra trás) — os raios cruzam como luz vindo de longe, sem vértice visível.
+    const baseX = isBody ? bx - bw * 2 : bx + bw * 0.08;
+    const baseY = by + bh / 2;
     const rays = Math.round(7 + size * 0.08);
     ctx.lineWidth = Math.max(1, 1.5 + size * 0.02);
     ctx.strokeStyle = color;
