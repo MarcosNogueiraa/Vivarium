@@ -272,35 +272,17 @@ input:focus {
   font-weight: 700; padding: 4px 10px; border-radius: 999px; font-size: 0.85rem;
   background: linear-gradient(180deg, #ffe6a6, var(--gold-soft)); color: #3a2a02;
 }
-.daily-reward-roulette-wrap { position: relative; border-radius: 14px; }
-.daily-reward-roulette-ring {
-  position: absolute; inset: -4px; border-radius: 18px;
-  background: conic-gradient(from 0deg, var(--gold), transparent 20%, var(--gold) 45%, transparent 65%, var(--gold) 90%, transparent 100%);
-  animation: daily-reward-ring-spin 0.65s linear infinite;
+/* Roleta clássica de 8 fatias (PrizeWheel.jsx) — giro de verdade, seta fixa aponta o resultado. */
+.prize-wheel-wrap { position: relative; width: 220px; height: 220px; margin: 4px auto; }
+.prize-wheel { width: 100%; height: 100%; display: block; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.4)); }
+.prize-wheel-pointer {
+  position: absolute; top: -6px; left: 50%; transform: translateX(-50%);
+  width: 0; height: 0; z-index: 2;
+  border-left: 10px solid transparent; border-right: 10px solid transparent;
+  border-top: 16px solid var(--gold);
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5));
 }
-@keyframes daily-reward-ring-spin { to { transform: rotate(360deg); } }
-.daily-reward-roulette {
-  position: relative; z-index: 1;
-  display: flex; align-items: baseline; justify-content: center; gap: 8px;
-  padding: 18px 12px; border-radius: 14px;
-  background: var(--panel-strong); border: 1px solid var(--line-strong);
-  font-family: "Fraunces", serif;
-}
-.daily-reward-roulette-value { font-size: 2.2rem; font-weight: 700; line-height: 1; transition: color 0.15s; }
-.daily-reward-roulette.is-spinning .daily-reward-roulette-value {
-  color: var(--gold); filter: blur(0.4px); animation: daily-reward-value-shake 0.12s linear infinite;
-}
-@keyframes daily-reward-value-shake {
-  0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); }
-}
-.daily-reward-roulette.is-settled {
-  animation: daily-reward-settle 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.4);
-}
-@keyframes daily-reward-settle {
-  0% { transform: scale(1.25); box-shadow: 0 0 0 8px rgba(224, 144, 15, 0.35); }
-  60% { transform: scale(0.96); }
-  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(224, 144, 15, 0); }
-}
+.daily-reward-roulette-result { text-align: center; font-weight: 700; }
 .daily-reward-egg-card {
   display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 12px;
   background: var(--panel-strong); border: 1px solid var(--r-raro);

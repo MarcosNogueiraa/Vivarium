@@ -1,4 +1,4 @@
-// E2E da recompensa diária (CLAUDE.md §8.10, redesenho 17/08/2026 — roleta + streak + bônus).
+// E2E da recompensa diária (CLAUDE.md §8.10 — roleta clássica de 8 fatias, giro de verdade).
 // API mockada via cy.intercept.
 
 function fakeJwt(sub = "1", username = "jogador1") {
@@ -20,7 +20,7 @@ function loginAndReachTank() {
 }
 
 describe("Recompensa diária", () => {
-  it("mostra o botão quando resgatável; abrir a roleta mostra sequência/bônus/faixa e resgatar credita o saldo", () => {
+  it("mostra o botão quando resgatável; abrir a roleta mostra sequência/bônus/faixa e girar credita o saldo", () => {
     cy.intercept("GET", "/api/game/daily-reward", {
       statusCode: 200,
       body: { canClaim: true, minAmount: 15, maxAmount: 35, currentStreak: 3, streakBonusPercent: 10, eggChancePercent: 3, nextAvailableAtUtc: null },
@@ -33,6 +33,8 @@ describe("Recompensa diária", () => {
     cy.contains("3 dias seguidos");
     cy.contains("+10% de bônus");
     cy.contains("15–35 soft");
+    cy.get(".prize-wheel").should("be.visible");
+    cy.get(".prize-wheel-pointer").should("be.visible");
 
     cy.intercept("POST", "/api/game/daily-reward/claim", {
       statusCode: 200, body: { amount: 27, wallet: 127, streak: 3, gotEgg: false },
@@ -44,18 +46,17 @@ describe("Recompensa diária", () => {
     cy.intercept("GET", "/api/game/tank", { fixture: "tank-empty.json" }).as("tankAfter");
     cy.intercept("GET", "/api/inbox/", { statusCode: 200, body: { entries: [] } }).as("inboxAfter");
 
-    cy.contains("button", "Resgatar").click();
+    cy.contains("button", "Girar a roleta").click();
     cy.wait("@claim");
     cy.wait("@statusAfter");
 
-    cy.contains(".daily-reward-roulette-value", "27", { timeout: 4000 });
-    cy.contains("Creditado na carteira");
+    cy.contains("+27 soft creditado na carteira", { timeout: 6000 });
 
     cy.contains("button", "Fechar").click();
     cy.contains("button", "Recompensa diária").should("not.exist");
   });
 
-  it("mostra o brinde de ovo quando a roleta concede um", () => {
+  it("mostra o brinde de ovo (separado da moeda) quando a roleta concede um", () => {
     cy.intercept("GET", "/api/game/daily-reward", {
       statusCode: 200,
       body: { canClaim: true, minAmount: 25, maxAmount: 25, currentStreak: 1, streakBonusPercent: 0, eggChancePercent: 3, nextAvailableAtUtc: null },
@@ -75,10 +76,10 @@ describe("Recompensa diária", () => {
     cy.intercept("GET", "/api/game/tank", { fixture: "tank-empty.json" }).as("tankAfter");
     cy.intercept("GET", "/api/inbox/", { statusCode: 200, body: { entries: [] } }).as("inboxAfter");
 
-    cy.contains("button", "Resgatar").click();
+    cy.contains("button", "Girar a roleta").click();
     cy.wait("@claim");
 
-    cy.contains("Sorte grande", { timeout: 4000 });
+    cy.contains("sorte grande", { timeout: 6000, matchCase: false });
     cy.contains("Ovo Raro caiu na sua Caixa de Entrada");
   });
 
