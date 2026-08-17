@@ -23,7 +23,7 @@ public class InboxService(VivariumDbContext db, GameService game, ILogger<InboxS
         e.SenderUser?.Username,
         e.CreatureInstance is not null ? CreatureDto.From(e.CreatureInstance) : null,
         e.InboxMessage?.RewardCurrencyType?.Code, e.InboxMessage?.RewardCurrencyAmount,
-        e.InboxMessage?.RewardItemDefinition is { Category: ItemCategory.Egg } egg ? egg.Key : null,
+        e.RewardItemDefinition is { Category: ItemCategory.Egg } egg ? egg.Key : null,
         e.ReadAt, e.ClaimedAt, e.CreatedAt);
 
     public async Task<ServiceResult> ListAsync(long userId)
@@ -31,7 +31,7 @@ public class InboxService(VivariumDbContext db, GameService game, ILogger<InboxS
         var entries = await db.InboxEntries
             .Where(e => e.RecipientId == userId)
             .Include(e => e.InboxMessage).ThenInclude(m => m!.RewardCurrencyType)
-            .Include(e => e.InboxMessage).ThenInclude(m => m!.RewardItemDefinition)
+            .Include(e => e.RewardItemDefinition)
             .Include(e => e.SenderUser)
             .Include(e => e.CreatureInstance)
             // Pendentes primeiro (o que precisa de atenção), depois mais recentes primeiro dentro
@@ -47,6 +47,7 @@ public class InboxService(VivariumDbContext db, GameService game, ILogger<InboxS
     {
         var entry = await db.InboxEntries
             .Include(e => e.InboxMessage)
+            .Include(e => e.RewardItemDefinition)
             .FirstOrDefaultAsync(e => e.Id == entryId && e.RecipientId == userId && e.ClaimedAt == null);
         if (entry is null)
             return ServiceResult.NotFound("Item não encontrado ou já resgatado");
@@ -70,13 +71,13 @@ public class InboxService(VivariumDbContext db, GameService game, ILogger<InboxS
             eggCreature is not null ? CreatureDto.From(eggCreature) : null));
     }
 
-    /// <summary>Coloca o peixe pendente no tanque/mochila e/ou credita a recompensa da mensagem
-    /// (moeda e/ou ovo) — SEM marcar a entrada como resgatada (isso é responsabilidade de quem
-    /// chama). Devolve erro (sem persistir nada) se não houver espaço pro peixe (entregue ou
-    /// gerado pelo ovo). <c>EggCreature</c> só vem preenchido quando a mensagem tinha um ovo
-    /// como recompensa — o chamador usa isso pra devolver o peixe recém-gerado na resposta do
-    /// claim (a celebração de abrir o ovo precisa do peixe de verdade, não só de saber que "deu
-    /// certo").</summary>
+    /// <summary>Coloca o peixe pendente no tanque/mochila e/ou credita a recompensa (moeda da
+    /// MENSAGEM, ovo desta ENTRADA específica) — SEM marcar a entrada como resgatada (isso é
+    /// responsabilidade de quem chama). Devolve erro (sem persistir nada) se não houver espaço
+    /// pro peixe (entregue ou gerado pelo ovo). <c>EggCreature</c> só vem preenchido quando ESTA
+    /// entrada tinha um ovo como recompensa — o chamador usa isso pra devolver o peixe recém-
+    /// gerado na resposta do claim (a celebração de abrir o ovo precisa do peixe de verdade).
+    /// </summary>
     private async Task<(ServiceResult Result, CreatureInstance? EggCreature)> TryApplyRewardAsync(InboxEntry entry, long userId, DateTime now)
     {
         if (entry.CreatureInstanceId is not null)
@@ -92,36 +93,43 @@ public class InboxService(VivariumDbContext db, GameService game, ILogger<InboxS
 
         if (entry.InboxMessage is { RewardCurrencyTypeId: not null, RewardCurrencyAmount: not null } msg)
         {
-            var wallet = await db.WalletBalances
-                .FirstAsync(w => w.UserId == userId && w.CurrencyTypeId == msg.RewardCurrencyTypeId);
-            wallet.Amount += msg.RewardCurrencyAmount!.Value;
-            db.TransactionLogs.Add(new TransactionLog
+            // Uma mensagem pode ter VÁRIAS entradas agora (1 por ovo, 17/08/2026) — a moeda é
+            // por MENSAGEM, não por entrada, então só credita na primeira entrada resgatada
+            // dessa mensagem (checa se algum "irmão" já foi resgatado antes) — senão um jogador
+            // com 3 ovos na mesma mensagem ganharia a moeda 3 vezes.
+            bool alreadyCredited = await db.InboxEntries.AnyAsync(e =>
+                e.InboxMessageId == entry.InboxMessageId && e.RecipientId == userId
+                && e.Id != entry.Id && e.ClaimedAt != null);
+            if (!alreadyCredited)
             {
-                Type = TransactionType.InboxReward,
-                ToUserId = userId,
-                CurrencyTypeId = msg.RewardCurrencyTypeId,
-                Amount = msg.RewardCurrencyAmount,
-                CreatedAt = now,
-            });
+                var wallet = await db.WalletBalances
+                    .FirstAsync(w => w.UserId == userId && w.CurrencyTypeId == msg.RewardCurrencyTypeId);
+                wallet.Amount += msg.RewardCurrencyAmount!.Value;
+                db.TransactionLogs.Add(new TransactionLog
+                {
+                    Type = TransactionType.InboxReward,
+                    ToUserId = userId,
+                    CurrencyTypeId = msg.RewardCurrencyTypeId,
+                    Amount = msg.RewardCurrencyAmount,
+                    CreatedAt = now,
+                });
+            }
         }
 
-        // Ovo de recompensa (§7.21, 17/08/2026) — gera o peixe SÓ no momento do resgate (mesma
-        // regra "direto, sem espaço = bloqueia" da compra de ovo na Loja), reusando o mesmo
-        // helper (GameService.GenerateEggCreatureAsync) pra não duplicar a lógica.
+        // Ovo de recompensa (§7.21, 17/08/2026) — por ENTRADA, não por mensagem, já que uma
+        // mensagem pode carregar vários ovos (de tiers diferentes) ao mesmo tempo. Gera o peixe
+        // SÓ no momento do resgate (mesma regra "direto, sem espaço = bloqueia" da compra na
+        // Loja), reusando o mesmo helper (GameService.GenerateEggCreatureAsync).
         CreatureInstance? eggCreature = null;
-        if (entry.InboxMessage?.RewardItemDefinitionId is { } itemId)
+        if (entry.RewardItemDefinition is { Category: ItemCategory.Egg } eggItem)
         {
-            var itemDef = await db.ItemDefinitions.FirstAsync(i => i.Id == itemId);
-            if (itemDef.Category == ItemCategory.Egg)
-            {
-                var habitat = await game.FindHabitatAsync(userId);
-                if (habitat is null)
-                    return (ServiceResult.NotFound("Habitat não encontrado"), null);
-                eggCreature = await game.GenerateEggCreatureAsync(userId, habitat, itemDef, now);
-                if (eggCreature is null)
-                    return (ServiceResult.Bad("Tanque e mochila cheios — libere espaço antes de resgatar o ovo."), null);
-                db.CreatureInstances.Add(eggCreature);
-            }
+            var habitat = await game.FindHabitatAsync(userId);
+            if (habitat is null)
+                return (ServiceResult.NotFound("Habitat não encontrado"), null);
+            eggCreature = await game.GenerateEggCreatureAsync(userId, habitat, eggItem, now);
+            if (eggCreature is null)
+                return (ServiceResult.Bad("Tanque e mochila cheios — libere espaço antes de resgatar o ovo."), null);
+            db.CreatureInstances.Add(eggCreature);
         }
 
         return (ServiceResult.Success(), eggCreature);
@@ -190,7 +198,7 @@ public class InboxService(VivariumDbContext db, GameService game, ILogger<InboxS
     public async Task<ServiceResult> AdminSendMessageAsync(
         long requestingUserId, string title, string body, InboxAudience audience,
         IReadOnlyList<string>? usernames, string? rewardCurrencyCode, decimal? rewardCurrencyAmount,
-        string? rewardEggKey, DateTime now)
+        IReadOnlyList<string>? rewardEggKeys, DateTime now)
     {
         if (!await IsAdminAsync(requestingUserId))
             return ServiceResult.Forbidden("Só administradores podem fazer isso");
@@ -210,18 +218,27 @@ public class InboxService(VivariumDbContext db, GameService game, ILogger<InboxS
             rewardCurrencyId = await db.CurrencyTypes.Where(c => c.Code == code).Select(c => c.Id).FirstAsync();
         }
 
-        // Ovo como recompensa (§7.21, 17/08/2026) — reusa o mesmo catálogo de ovos da Loja
-        // (nenhum item novo, nenhuma duplicação de preço/bias); a mensagem carrega SÓ a
-        // referência ao ItemDefinition, o peixe em si é gerado no momento do resgate
-        // (TryApplyRewardAsync), nunca aqui — evita gerar N peixes de uma vez num broadcast
-        // "Todos os jogadores" que ninguém resgatou ainda.
-        int? rewardEggItemId = null;
-        if (!string.IsNullOrWhiteSpace(rewardEggKey))
+        // Ovos como recompensa (§7.21, 17/08/2026) — reusa o mesmo catálogo de ovos da Loja
+        // (nenhum item novo, nenhuma duplicação de preço/bias). Lista com repetição = quantidade
+        // (ex: ["egg_common","egg_common","egg_legendary"] = 2 Ovo Comum + 1 Ovo Lendário) — 1
+        // ItemDefinition resolvida por unidade, várias unidades/tiers na MESMA mensagem. O peixe
+        // em si só é gerado no momento do resgate de CADA entrada (TryApplyRewardAsync), nunca
+        // aqui — evita gerar N peixes de uma vez num broadcast que ninguém resgatou ainda.
+        var eggItems = new List<ItemDefinition>();
+        if (rewardEggKeys is { Count: > 0 })
         {
-            var eggItem = await db.ItemDefinitions.FirstOrDefaultAsync(i => i.Key == rewardEggKey);
-            if (eggItem is not { Category: ItemCategory.Egg })
-                return ServiceResult.Bad("Ovo inválido");
-            rewardEggItemId = eggItem.Id;
+            // Resolve as keys distintas de uma vez (1 query), depois remonta a lista na ordem/
+            // quantidade pedida — evita 1 query por unidade quando o admin repete o mesmo tier.
+            var distinctKeys = rewardEggKeys.Distinct().ToList();
+            var found = await db.ItemDefinitions
+                .Where(i => distinctKeys.Contains(i.Key) && i.Category == ItemCategory.Egg)
+                .ToDictionaryAsync(i => i.Key);
+            foreach (string key in rewardEggKeys)
+            {
+                if (!found.TryGetValue(key, out var eggItem))
+                    return ServiceResult.Bad($"Ovo inválido: {key}");
+                eggItems.Add(eggItem);
+            }
         }
 
         List<long> recipientIds;
@@ -253,21 +270,38 @@ public class InboxService(VivariumDbContext db, GameService game, ILogger<InboxS
             Audience = audience,
             RewardCurrencyTypeId = rewardCurrencyId,
             RewardCurrencyAmount = rewardCurrencyId is not null ? rewardCurrencyAmount : null,
-            RewardItemDefinitionId = rewardEggItemId,
-            RewardItemQuantity = rewardEggItemId is not null ? 1 : null,
             CreatedAt = now,
         };
         db.InboxMessages.Add(message);
 
         foreach (long recipientId in recipientIds)
         {
-            db.InboxEntries.Add(new InboxEntry
+            // 1 entrada por ovo (17/08/2026) — se não há ovo nenhum, cai no caminho de sempre
+            // (1 entrada "genérica" pra mensagem/moeda). Todas apontam pra MESMA InboxMessage.
+            if (eggItems.Count == 0)
             {
-                RecipientId = recipientId,
-                Kind = InboxEntryKind.AdminMessage,
-                InboxMessage = message,
-                CreatedAt = now,
-            });
+                db.InboxEntries.Add(new InboxEntry
+                {
+                    RecipientId = recipientId,
+                    Kind = InboxEntryKind.AdminMessage,
+                    InboxMessage = message,
+                    CreatedAt = now,
+                });
+            }
+            else
+            {
+                foreach (var eggItem in eggItems)
+                {
+                    db.InboxEntries.Add(new InboxEntry
+                    {
+                        RecipientId = recipientId,
+                        Kind = InboxEntryKind.AdminMessage,
+                        InboxMessage = message,
+                        RewardItemDefinitionId = eggItem.Id,
+                        CreatedAt = now,
+                    });
+                }
+            }
         }
 
         return ServiceResult.Success(new AdminSendInboxMessageResponse(recipientIds.Count, notFoundUsernames));

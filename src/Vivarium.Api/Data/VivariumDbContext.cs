@@ -293,6 +293,7 @@ public class VivariumDbContext(DbContextOptions<VivariumDbContext> options) : Db
             e.HasOne(i => i.InboxMessage).WithMany().HasForeignKey(i => i.InboxMessageId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(i => i.SenderUser).WithMany().HasForeignKey(i => i.SenderUserId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(i => i.CreatureInstance).WithMany().HasForeignKey(i => i.CreatureInstanceId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(i => i.RewardItemDefinition).WithMany().HasForeignKey(i => i.RewardItemDefinitionId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

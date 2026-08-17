@@ -9,4 +9,6 @@ public record AdjustWalletRequest(string Username, string CurrencyCode, string M
 public record AdminSendInboxMessageRequest(
     string Title, string Body, InboxAudience Audience,
     IReadOnlyList<string>? Usernames, string? RewardCurrencyCode, decimal? RewardCurrencyAmount,
-    string? RewardEggKey = null);
+    // Lista com repetição = quantidade (ex: ["egg_common","egg_common","egg_legendary"]) — vários
+    // ovos, de tiers diferentes até, na mesma mensagem (17/08/2026).
+    IReadOnlyList<string>? RewardEggKeys = null);

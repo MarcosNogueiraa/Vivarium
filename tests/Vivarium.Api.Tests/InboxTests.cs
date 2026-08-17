@@ -312,7 +312,7 @@ public class InboxTests : IClassFixture<VivariumApiFactory>
         {
             title = "Presente de aniversário", body = "Um ovo pra você!", audience = "All",
             usernames = (string[]?)null, rewardCurrencyCode = (string?)null, rewardCurrencyAmount = (decimal?)null,
-            rewardEggKey = "egg_legendary",
+            rewardEggKeys = new[] { "egg_legendary" },
         });
         sendResponse.EnsureSuccessStatusCode();
 
@@ -347,7 +347,7 @@ public class InboxTests : IClassFixture<VivariumApiFactory>
         {
             title = "Ovo", body = "Toma", audience = "All",
             usernames = (string[]?)null, rewardCurrencyCode = (string?)null, rewardCurrencyAmount = (decimal?)null,
-            rewardEggKey = "egg_common",
+            rewardEggKeys = new[] { "egg_common" },
         });
 
         var inbox = await player.GetFromJsonAsync<InboxListRow>("/api/inbox/");
@@ -371,9 +371,52 @@ public class InboxTests : IClassFixture<VivariumApiFactory>
         {
             title = "x", body = "y", audience = "All",
             usernames = (string[]?)null, rewardCurrencyCode = (string?)null, rewardCurrencyAmount = (decimal?)null,
-            rewardEggKey = "nao_existe",
+            rewardEggKeys = new[] { "nao_existe" },
         });
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AdminMandaVariosOvosDeTiersDiferentes_CriaUmaEntradaPorOvoEMoedaSoCreditaUmaVez()
+    {
+        var (admin, adminId) = await _factory.RegisterAsync("inbox-admin-egg4");
+        await TornarAdmin(adminId);
+        var (player, playerId) = await _factory.RegisterAsync("inbox-jog-egg4");
+        await _factory.WithDbAsync(async db =>
+        {
+            var habitat = await db.Habitats.FirstAsync(h => h.UserId == playerId && h.HabitatType!.Code == "Aquarium");
+            habitat.Capacity = 20; // espaço de sobra pros 3 peixes dos 3 ovos
+            await db.SaveChangesAsync();
+        });
+
+        var sendResponse = await admin.PostAsJsonAsync("/api/admin/inbox/send", new
+        {
+            title = "Cesta de ovos", body = "Presentão!", audience = "All",
+            usernames = (string[]?)null, rewardCurrencyCode = "SOFT", rewardCurrencyAmount = 30m,
+            rewardEggKeys = new[] { "egg_common", "egg_common", "egg_legendary" },
+        });
+        sendResponse.EnsureSuccessStatusCode();
+
+        var inbox = await player.GetFromJsonAsync<InboxListRow>("/api/inbox/");
+        var entries = inbox!.Entries.Where(e => e.Title == "Cesta de ovos").ToList();
+        Assert.Equal(3, entries.Count); // 1 entrada por ovo, mesma mensagem
+        Assert.Equal(2, entries.Count(e => e.RewardEggKey == "egg_common"));
+        Assert.Single(entries, e => e.RewardEggKey == "egg_legendary");
+
+        // Resgata os 3 — a moeda (30 SOFT) só pode ser creditada UMA vez no total, não 3x.
+        foreach (var entry in entries)
+            (await player.PostAsync($"/api/inbox/{entry.Id}/claim", null)).EnsureSuccessStatusCode();
+
+        var tank = await player.GetFromJsonAsync<TankWalletDto>("/api/game/tank");
+        Assert.Equal(130m, tank!.Wallet["SOFT"]); // 100 inicial + 30 (não 190)
+
+        await _factory.WithDbAsync(async db =>
+        {
+            int creaturesFromEggs = await db.CreatureInstances.CountAsync(c => c.OwnerId == playerId);
+            Assert.Equal(3, creaturesFromEggs); // 1 peixe por ovo resgatado
+            int rewardLogs = await db.TransactionLogs.CountAsync(t => t.Type == TransactionType.InboxReward && t.ToUserId == playerId);
+            Assert.Equal(1, rewardLogs); // moeda creditada uma única vez
+        });
     }
 
     [Fact]

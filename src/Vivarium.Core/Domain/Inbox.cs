@@ -25,8 +25,10 @@ public class InboxMessage
     public int? RewardCurrencyTypeId { get; set; }
     public CurrencyType? RewardCurrencyType { get; set; }
     public decimal? RewardCurrencyAmount { get; set; }
-    /// <summary>Dormente nesta leva — schema genérico pra quando existir loja de itens premium
-    /// (CLAUDE.md §8.11), mas nenhuma UI admin ainda seta isso.</summary>
+    /// <summary>Dormente de novo (17/08/2026) — item de recompensa por mensagem migrou pra
+    /// <see cref="InboxEntry.RewardItemDefinitionId"/> (por ENTRADA, não por mensagem), já que
+    /// uma mensagem agora pode carregar vários ovos de tiers diferentes ao mesmo tempo (1 entrada
+    /// por ovo). Campos preservados sem uso pra não precisar de migration de remoção.</summary>
     public int? RewardItemDefinitionId { get; set; }
     public ItemDefinition? RewardItemDefinition { get; set; }
     public int? RewardItemQuantity { get; set; }
@@ -56,6 +58,13 @@ public class InboxEntry
     /// <summary>O peixe entregue, quando aplicável (MarketPurchase/DirectTransfer).</summary>
     public long? CreatureInstanceId { get; set; }
     public CreatureInstance? CreatureInstance { get; set; }
+    /// <summary>Ovo de recompensa DESTA entrada específica (17/08/2026) — por entrada, não por
+    /// mensagem, pra uma mesma mensagem poder carregar vários ovos (de tiers diferentes até) ao
+    /// mesmo tempo: 1 entrada por ovo, todas apontando pra mesma <see cref="InboxMessage"/>
+    /// (título/corpo/recompensa em moeda continuam compartilhados). O peixe em si só é gerado no
+    /// resgate desta entrada (<see cref="CreatureInstanceId"/> continua null até lá).</summary>
+    public int? RewardItemDefinitionId { get; set; }
+    public ItemDefinition? RewardItemDefinition { get; set; }
     public DateTime? ReadAt { get; set; }
     /// <summary>Null = ainda pendente de resgate. Resgatar também marca <see cref="ReadAt"/> se
     /// ainda estiver vazio.</summary>

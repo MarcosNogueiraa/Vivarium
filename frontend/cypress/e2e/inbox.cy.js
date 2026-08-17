@@ -180,12 +180,10 @@ describe("Caixa de Entrada", () => {
     }).as("sendMessage");
 
     cy.contains("button", "🛠️ Admin").click();
-    // O modal ganhou textos explicativos (15/08/2026) — "Dar moedas" agora fica fora da área
-    // visível sem rolar; scrollIntoView antes de checar (a interação em si já rola sozinha).
-    cy.contains("h4", "🎁 Dar moedas").scrollIntoView().should("be.visible");
-
-    // select[0]="Moeda" e [1]="Modo" são da seção de ajustar carteira (acima); [2]="Público".
-    cy.get('select').eq(2).select("Selected");
+    // Seções ficam recolhidas por padrão (17/08/2026) — abre "Dar moedas / ovo" antes de mexer
+    // nos campos de dentro dela.
+    cy.contains("button", "🎁 Dar moedas / ovo").click();
+    cy.contains("label", "Público").next("select").select("Selected");
     cy.get('input[placeholder="ex: fulano, beltrano"]').type("fulano, beltrano");
     cy.contains("label", "Título").next("input").type("Manutenção");
     cy.contains("label", "Mensagem").next("textarea").type("Vai ficar fora do ar às 22h.");
@@ -194,7 +192,7 @@ describe("Caixa de Entrada", () => {
     cy.wait("@sendMessage").its("request.body").should("deep.equal", {
       title: "Manutenção", body: "Vai ficar fora do ar às 22h.", audience: "Selected",
       usernames: ["fulano", "beltrano"], rewardCurrencyCode: null, rewardCurrencyAmount: null,
-      rewardEggKey: null,
+      rewardEggKeys: null,
     });
   });
 
@@ -207,21 +205,51 @@ describe("Caixa de Entrada", () => {
     }).as("sendMessage");
 
     cy.contains("button", "🛠️ Admin").click();
-    // O modal ganhou textos explicativos (15/08/2026) — "Dar moedas" agora fica fora da área
-    // visível sem rolar; scrollIntoView antes de checar (a interação em si já rola sozinha).
-    cy.contains("h4", "🎁 Dar moedas").scrollIntoView().should("be.visible");
+    // Seções ficam recolhidas por padrão (17/08/2026) — abre "Dar moedas / ovo" antes de mexer
+    // nos campos de dentro dela.
+    cy.contains("button", "🎁 Dar moedas / ovo").click();
 
     // Público já nasce em "Todos os jogadores" — só preenche moeda/quantia, sem mexer em
     // título/mensagem (ambos ficam em branco).
-    cy.get('select').eq(2).should("have.value", "All");
-    cy.get('select').eq(3).select("SOFT");
+    cy.contains("label", "Público").next("select").should("have.value", "All");
+    cy.contains("label", "Moeda").next("select").select("SOFT");
     cy.get('input[placeholder="quantia"]').type("500");
     cy.contains("button", "Enviar").click();
 
     cy.wait("@sendMessage").its("request.body").should("deep.equal", {
       title: "🎁 Presente do admin", body: "Você recebeu uma recompensa da equipe do jogo!",
       audience: "All", usernames: null, rewardCurrencyCode: "SOFT", rewardCurrencyAmount: 500,
-      rewardEggKey: null,
+      rewardEggKeys: null,
     });
+  });
+
+  it("admin adiciona vários ovos de tiers diferentes ao carrinho antes de enviar", () => {
+    login({ isAdmin: true, inboxEntries: [] });
+    cy.intercept("POST", "/api/admin/inbox/send", {
+      statusCode: 200, body: { recipientCount: 3, notFoundUsernames: [] },
+    }).as("sendMessage");
+
+    cy.contains("button", "🛠️ Admin").click();
+    cy.contains("button", "🎁 Dar moedas / ovo").click();
+
+    cy.contains("label", "Ovos").next(".card-row").within(() => {
+      cy.get("select").select("egg_common");
+      cy.contains("button", "+ Adicionar").click();
+      cy.get("select").select("egg_common");
+      cy.contains("button", "+ Adicionar").click();
+      cy.get("select").select("egg_legendary");
+      cy.contains("button", "+ Adicionar").click();
+    });
+
+    cy.contains("Ovo Comum ×2");
+    cy.contains("Ovo Lendário ×1");
+
+    cy.contains("label", "Título").next("input").type("Cesta de ovos");
+    cy.contains("label", "Mensagem").next("textarea").type("Presentão!");
+    cy.contains("button", "Enviar").click();
+
+    cy.wait("@sendMessage").its("request.body.rewardEggKeys").should("deep.equal", [
+      "egg_common", "egg_common", "egg_legendary",
+    ]);
   });
 });
