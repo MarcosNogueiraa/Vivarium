@@ -41,7 +41,11 @@ export function FishCanvas({ creature, width = 220, revealStep = null }) {
       const time = reducedMotion ? 0 : now;
       ctx.setTransform(width / VIEW_W, 0, 0, width / VIEW_W, 0, 0);
       ctx.clearRect(0, 0, VIEW_W, VIEW_H);
-      drawFish(ctx, bigSeed, traits, time, 0, layers);
+      // Traits corrompidos (ex: TraitsJson nulo) fazem drawFish lançar — sem isso, o rAF
+      // desse card parava pra sempre no primeiro frame ruim, deixando o canvas em branco
+      // silenciosamente (achado 18/08/2026 revisando um relato de aquário "transparente").
+      try { drawFish(ctx, bigSeed, traits, time, 0, layers); }
+      catch (err) { console.error(`Falha ao desenhar a criatura #${creature.id ?? "?"}:`, err); }
       if (!reducedMotion) raf = requestAnimationFrame(frame);
     }
     raf = requestAnimationFrame(frame);

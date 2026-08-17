@@ -349,28 +349,40 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
 
         const y = s.y + Math.sin(time / 900 + s.phase) * 7;
 
-        // Sombra no substrato — quanto mais fundo o peixe, maior/mais escura.
-        drawFishShadow(ctx, s.x, y, H - SUBSTRATE_BAND_H);
-
-        // Aura no contorno pra peixes raros+ (lendário reluz de leve).
-        // Cortes seguem BANDS (não literais soltos) — acompanham a recalibração.
-        const rscore = Number(c.rarityScore);
-        if (rscore >= BANDS[1].max) {
-          const legendary = rscore >= BANDS[3].max;
-          const pulse = legendary ? 0.82 + 0.18 * Math.sin(time / 650 + s.phase) : 1;
-          drawAura(ctx, getAuraSprite(c, bandOf(rscore).color), s.x, y, s.facing > 0, (legendary ? 0.55 : 0.36) * pulse);
-        }
-        // Aura de seleção (aqua, seguindo o contorno)
-        if (c.id === selectedRef.current) {
-          drawAura(ctx, getAuraSprite(c, "#54e6d1"), s.x, y, s.facing > 0, 0.5);
-        }
-
+        // Um peixe com traits corrompidos (ex: TraitsJson nulo — já aconteceu por bug real
+        // de ferramenta admin, ver AdminReset give-seed) faz drawFish/buildAuraSprite lançar
+        // exceção; sem isolamento, isso derrubava o requestAnimationFrame do aquário INTEIRO
+        // pra sempre (nenhum outro peixe rendeiza mais, tela congela só com sombra/aura do
+        // que já tinha desenhado antes de travar — achado 18/08/2026, print de um usuário
+        // com o aquário quase transparente). Try/catch por peixe: um peixe ruim só falha o
+        // PRÓPRIO desenho deste frame, o resto do aquário continua normal.
         ctx.save();
-        ctx.translate(s.x, y);
-        ctx.scale(s.facing > 0 ? -SCALE : SCALE, SCALE);
-        ctx.translate(-FISH_CX, -FISH_CY);
-        drawFish(ctx, c.bigSeed, c.traits, time, s.phase);
-        ctx.restore();
+        try {
+          // Sombra no substrato — quanto mais fundo o peixe, maior/mais escura.
+          drawFishShadow(ctx, s.x, y, H - SUBSTRATE_BAND_H);
+
+          // Aura no contorno pra peixes raros+ (lendário reluz de leve).
+          // Cortes seguem BANDS (não literais soltos) — acompanham a recalibração.
+          const rscore = Number(c.rarityScore);
+          if (rscore >= BANDS[1].max) {
+            const legendary = rscore >= BANDS[3].max;
+            const pulse = legendary ? 0.82 + 0.18 * Math.sin(time / 650 + s.phase) : 1;
+            drawAura(ctx, getAuraSprite(c, bandOf(rscore).color), s.x, y, s.facing > 0, (legendary ? 0.55 : 0.36) * pulse);
+          }
+          // Aura de seleção (aqua, seguindo o contorno)
+          if (c.id === selectedRef.current) {
+            drawAura(ctx, getAuraSprite(c, "#54e6d1"), s.x, y, s.facing > 0, 0.5);
+          }
+
+          ctx.translate(s.x, y);
+          ctx.scale(s.facing > 0 ? -SCALE : SCALE, SCALE);
+          ctx.translate(-FISH_CX, -FISH_CY);
+          drawFish(ctx, c.bigSeed, c.traits, time, s.phase);
+        } catch (err) {
+          console.error(`Falha ao desenhar a criatura #${c.id} (seed=${c.seed}):`, err);
+        } finally {
+          ctx.restore(); // sempre desfaz o save() de cima, mesmo se algo no meio lançou
+        }
       }
 
       drawTankForeground(ctx, W, H, time, q, th, decor);
