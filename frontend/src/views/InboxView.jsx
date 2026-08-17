@@ -2,7 +2,10 @@ import { useState } from "react";
 import { api } from "../lib/api.js";
 import { FishCanvas } from "../components/FishCanvas.jsx";
 import { ConfirmModal } from "../components/ConfirmModal.jsx";
+import { CollectCelebration } from "../components/CollectCelebration.jsx";
+import { EggIcon } from "../components/EggIcon.jsx";
 import { Coin } from "../components/Coin.jsx";
+import { EGG_TIER, EGG_NAMES } from "../lib/eggs.js";
 
 const KIND_LABELS = {
   AdminMessage: "📨 Mensagem",
@@ -17,6 +20,7 @@ function EntryCard({ entry, onClaim, busy }) {
   const claimed = Boolean(entry.claimedAt);
   const isDelivery = isDeliveryKind(entry.kind);
   const hasMessage = entry.kind === "AdminMessage" || entry.kind === "MarketSale";
+  const eggTier = entry.rewardEggKey ? EGG_TIER[entry.rewardEggKey] : null;
 
   return (
     <div className={`card${claimed ? " inbox-claimed" : ""}`}>
@@ -43,13 +47,21 @@ function EntryCard({ entry, onClaim, busy }) {
               <span className="produces mono"><Coin /> {Number(entry.rewardCurrencyAmount).toFixed(0)} {entry.rewardCurrencyCode}</span>
             </div>
           )}
+          {/* O peixe do ovo só existe depois do resgate (gerado na hora) — antes disso mostra
+              só o ícone tingido pelo tier, como uma prévia do que está esperando. */}
+          {eggTier && !claimed && (
+            <div className="card-row">
+              <EggIcon tier={eggTier} />
+              <span className="produces mono">{EGG_NAMES[entry.rewardEggKey]}</span>
+            </div>
+          )}
         </>
       )}
 
       {!claimed && (
         <div className="card-row">
           <button className="btn-primary" disabled={busy} onClick={() => onClaim(entry)}>
-            {isDelivery ? "Resgatar pro tanque/mochila" : "Resgatar"}
+            {isDelivery ? "Resgatar pro tanque/mochila" : eggTier ? "Chocar ovo" : "Resgatar"}
           </button>
         </div>
       )}
@@ -64,12 +76,19 @@ export function InboxView({ entries, refresh, refreshTank, notify }) {
   const [busyId, setBusyId] = useState(null);
   const [busyBulk, setBusyBulk] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [celebrate, setCelebrate] = useState(null); // { creature, eggTier } — ovo de admin recém-chocado
 
   async function claim(entry) {
     setBusyId(entry.id);
     try {
-      await api.claimInboxEntry(entry.id);
-      notify(isDeliveryKind(entry.kind) ? "Peixe entregue!" : "Resgatado!");
+      const result = await api.claimInboxEntry(entry.id);
+      if (result?.creature) {
+        // Ovo de admin (§7.21) — mesma celebração de abrir o ovo já usada na Loja, com a
+        // cor do tier certa (a mensagem já dizia qual ovo era, antes mesmo do resgate).
+        setCelebrate({ creature: result.creature, eggTier: EGG_TIER[entry.rewardEggKey] ?? "common" });
+      } else {
+        notify(isDeliveryKind(entry.kind) ? "Peixe entregue!" : "Resgatado!");
+      }
       await Promise.all([refresh(), refreshTank()]);
     } catch (e) {
       notify(e.message);
@@ -152,6 +171,12 @@ export function InboxView({ entries, refresh, refreshTank, notify }) {
           danger
           onConfirm={clearClaimed}
           onClose={() => setConfirmClear(false)}
+        />
+      )}
+      {celebrate && (
+        <CollectCelebration
+          creature={celebrate.creature} variant="egg" eggTier={celebrate.eggTier}
+          onClose={() => setCelebrate(null)}
         />
       )}
     </>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Modal } from "./Modal.jsx";
 import { api } from "../lib/api.js";
+import { EGG_NAMES } from "../lib/eggs.js";
 
 /**
  * Menu único de ferramentas administrativas (13/08/2026) — antes eram 2 botões soltos
@@ -24,6 +25,7 @@ export function AdminPanel({ onClose, notify }) {
   const [msgBody, setMsgBody] = useState("");
   const [msgRewardCode, setMsgRewardCode] = useState("");
   const [msgRewardAmount, setMsgRewardAmount] = useState("");
+  const [msgRewardEgg, setMsgRewardEgg] = useState(""); // §7.21 (17/08/2026): admin também pode dar ovo, não só moeda
   const [busyMsg, setBusyMsg] = useState(false);
   const [msgError, setMsgError] = useState(null);
 
@@ -65,7 +67,7 @@ export function AdminPanel({ onClose, notify }) {
   // existia) + recompensa em destaque + mensagem agora OPCIONAL. Sem mudança de backend: título/
   // corpo continuam obrigatórios lá (schema não-anulável), então quando o admin não escreve nada
   // e só quer mandar moedas, o front preenche um texto padrão antes de enviar.
-  const hasReward = Boolean(msgRewardCode && msgRewardAmount);
+  const hasReward = Boolean((msgRewardCode && msgRewardAmount) || msgRewardEgg);
   const hasCustomMessage = Boolean(msgTitle.trim() && msgBody.trim());
 
   async function sendInboxMessage(e) {
@@ -76,18 +78,19 @@ export function AdminPanel({ onClose, notify }) {
       const usernames = msgAudience === "Selected"
         ? msgUsernamesRaw.split(",").map((u) => u.trim()).filter(Boolean)
         : null;
-      const title = msgTitle.trim() || "🎁 Presente do admin";
+      const title = msgTitle.trim() || (msgRewardEgg ? "🥚 Presente do admin" : "🎁 Presente do admin");
       const body = msgBody.trim() || "Você recebeu uma recompensa da equipe do jogo!";
       const { recipientCount, notFoundUsernames } = await api.adminSendInboxMessage(
         title, body, msgAudience, usernames,
         msgRewardCode || null, msgRewardCode ? Number(msgRewardAmount) : null,
+        msgRewardEgg || null,
       );
       notify(
         notFoundUsernames?.length
           ? `Enviado pra ${recipientCount} jogador(es). Não encontrados: ${notFoundUsernames.join(", ")}`
           : `Enviado pra ${recipientCount} jogador(es).`,
       );
-      setMsgTitle(""); setMsgBody(""); setMsgUsernamesRaw(""); setMsgRewardCode(""); setMsgRewardAmount("");
+      setMsgTitle(""); setMsgBody(""); setMsgUsernamesRaw(""); setMsgRewardCode(""); setMsgRewardAmount(""); setMsgRewardEgg("");
     } catch (err) {
       setMsgError(err.message);
     } finally {
@@ -148,7 +151,7 @@ export function AdminPanel({ onClose, notify }) {
         </div>
       </form>
 
-      <h4 style={{ marginTop: 24 }}>🎁 Dar moedas</h4>
+      <h4 style={{ marginTop: 24 }}>🎁 Dar moedas / ovo</h4>
       <p className="hint" style={{ padding: 0, marginBottom: 8 }}>
         Vira uma entrega na Caixa de Entrada — o jogador precisa resgatar. Mensagem é opcional
         (some com "🎁 Presente do admin" se você deixar em branco).
@@ -172,7 +175,7 @@ export function AdminPanel({ onClose, notify }) {
 
         <label className="prompt-label">Moeda</label>
         <select value={msgRewardCode} onChange={(e) => setMsgRewardCode(e.target.value)}>
-          <option value="">Sem moeda (só mensagem)</option>
+          <option value="">Sem moeda</option>
           <option value="SOFT">Soft</option>
           <option value="PREMIUM">Premium (💎)</option>
         </select>
@@ -182,6 +185,17 @@ export function AdminPanel({ onClose, notify }) {
             onChange={(e) => setMsgRewardAmount(e.target.value)}
           />
         )}
+
+        <label className="prompt-label">Ovo (opcional — dá pra combinar com moeda)</label>
+        <select value={msgRewardEgg} onChange={(e) => setMsgRewardEgg(e.target.value)}>
+          <option value="">Sem ovo</option>
+          {Object.entries(EGG_NAMES).map(([key, name]) => (
+            <option key={key} value={key}>{name}</option>
+          ))}
+        </select>
+        <p className="hint" style={{ padding: 0, marginTop: -6 }}>
+          O peixe é gerado só quando o jogador resgatar (mesma sorte de comprar o ovo na Loja).
+        </p>
 
         <label className="prompt-label">Título (opcional)</label>
         <input

@@ -46,7 +46,7 @@ public static class AdminEndpoints
         {
             var result = await inbox.AdminSendMessageAsync(
                 TokenService.GetUserId(principal), body.Title, body.Body, body.Audience,
-                body.Usernames, body.RewardCurrencyCode, body.RewardCurrencyAmount, DateTime.UtcNow);
+                body.Usernames, body.RewardCurrencyCode, body.RewardCurrencyAmount, body.RewardEggKey, DateTime.UtcNow);
             if (result.Ok)
                 await db.SaveChangesAsync();
             return result.ToHttp();

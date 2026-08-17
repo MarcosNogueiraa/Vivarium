@@ -95,19 +95,8 @@ public class ItemService(VivariumDbContext db, GameService game)
         CreatureInstance? eggCreature = null;
         if (item.Category == ItemCategory.Egg)
         {
-            double biasStrength = ItemEffect.Parse(item.EffectJson).EggBiasStrength ?? 0;
-            var collected = CreatureCollector.CollectBiased(biasStrength, CreatureCollector.NewRandomSeed);
-            int speciesId = await db.Species
-                .Where(s => s.HabitatTypeId == habitat.HabitatTypeId).Select(s => s.Id).FirstAsync();
-            eggCreature = new CreatureInstance
-            {
-                SpeciesId = speciesId, OwnerId = userId, OriginalOwnerId = userId,
-                Seed = collected.Seed, TraitConfigVersion = collected.TraitConfigVersion,
-                RarityScore = collected.RarityScore,
-                TraitsJson = TraitsSerialization.Serialize(collected.Traits),
-                CreatedAt = now,
-            };
-            if (!await game.TryPlaceAsync(eggCreature, habitat))
+            eggCreature = await game.GenerateEggCreatureAsync(userId, habitat, item, now);
+            if (eggCreature is null)
                 return ServiceResult.Bad("Tanque e mochila cheios — libere espaço antes de comprar um ovo.");
         }
 

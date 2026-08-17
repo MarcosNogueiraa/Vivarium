@@ -8,4 +8,5 @@ public record AdjustWalletRequest(string Username, string CurrencyCode, string M
 
 public record AdminSendInboxMessageRequest(
     string Title, string Body, InboxAudience Audience,
-    IReadOnlyList<string>? Usernames, string? RewardCurrencyCode, decimal? RewardCurrencyAmount);
+    IReadOnlyList<string>? Usernames, string? RewardCurrencyCode, decimal? RewardCurrencyAmount,
+    string? RewardEggKey = null);

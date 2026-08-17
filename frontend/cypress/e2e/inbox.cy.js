@@ -120,6 +120,33 @@ describe("Caixa de Entrada", () => {
     cy.wait("@claim");
   });
 
+  it("mensagem com ovo mostra a prévia do tier e chocar abre a celebração", () => {
+    login({
+      inboxEntries: [
+        {
+          id: 4, kind: "AdminMessage", title: "🥚 Presente do admin", body: "Toma um ovo!",
+          senderUsername: null, creature: null, rewardCurrencyCode: null, rewardCurrencyAmount: null,
+          rewardEggKey: "egg_legendary", readAt: null, claimedAt: null, createdAt: "2026-01-01T00:00:00Z",
+        },
+      ],
+    });
+    cy.intercept("POST", "/api/inbox/4/claim", {
+      statusCode: 200,
+      body: { creature: inboxCreature(999, 424242, 3) },
+    }).as("claim");
+
+    cy.get(".inbox-btn").click();
+    cy.contains(".card", "Toma um ovo!").within(() => {
+      cy.contains("Ovo Lendário");
+      cy.get(".mini-fish-egg--legendary").should("be.visible");
+    });
+    cy.contains("button", "Chocar ovo").click();
+    cy.wait("@claim");
+
+    cy.get(".celebrate-egg--legendary").should("be.visible").click();
+    cy.contains("Seu peixe chocou!");
+  });
+
   it("Resgatar tudo / Ler tudo / Apagar mensagens lidas chamam os endpoints certos", () => {
     login({
       inboxEntries: [
@@ -167,6 +194,7 @@ describe("Caixa de Entrada", () => {
     cy.wait("@sendMessage").its("request.body").should("deep.equal", {
       title: "Manutenção", body: "Vai ficar fora do ar às 22h.", audience: "Selected",
       usernames: ["fulano", "beltrano"], rewardCurrencyCode: null, rewardCurrencyAmount: null,
+      rewardEggKey: null,
     });
   });
 
@@ -193,6 +221,7 @@ describe("Caixa de Entrada", () => {
     cy.wait("@sendMessage").its("request.body").should("deep.equal", {
       title: "🎁 Presente do admin", body: "Você recebeu uma recompensa da equipe do jogo!",
       audience: "All", usernames: null, rewardCurrencyCode: "SOFT", rewardCurrencyAmount: 500,
+      rewardEggKey: null,
     });
   });
 });

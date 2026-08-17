@@ -398,6 +398,31 @@ public class GameService(VivariumDbContext db)
     }
 
     /// <summary>
+    /// Gera 1 peixe via ovo (§7.21) e tenta posicionar — usado tanto pela compra direta
+    /// (ItemService.BuyAsync) quanto pela recompensa de ovo na Caixa de Entrada
+    /// (InboxService.TryApplyRewardAsync, 17/08/2026), pra não duplicar a lógica de geração+
+    /// posicionamento nos dois lugares. Não salva (`db.CreatureInstances.Add`/SaveChanges ficam
+    /// a cargo de quem chama, mesmo padrão de <see cref="TryPlaceAsync"/>). Null = sem espaço
+    /// no tanque nem na mochila — nada foi criado.
+    /// </summary>
+    public async Task<CreatureInstance?> GenerateEggCreatureAsync(long userId, Habitat habitat, ItemDefinition eggItem, DateTime now)
+    {
+        double biasStrength = ItemEffect.Parse(eggItem.EffectJson).EggBiasStrength ?? 0;
+        var collected = CreatureCollector.CollectBiased(biasStrength, CreatureCollector.NewRandomSeed);
+        int speciesId = await db.Species
+            .Where(s => s.HabitatTypeId == habitat.HabitatTypeId).Select(s => s.Id).FirstAsync();
+        var creature = new CreatureInstance
+        {
+            SpeciesId = speciesId, OwnerId = userId, OriginalOwnerId = userId,
+            Seed = collected.Seed, TraitConfigVersion = collected.TraitConfigVersion,
+            RarityScore = collected.RarityScore,
+            TraitsJson = TraitsSerialization.Serialize(collected.Traits),
+            CreatedAt = now,
+        };
+        return await TryPlaceAsync(creature, habitat) ? creature : null;
+    }
+
+    /// <summary>
     /// Resgata peixe(s) presos no habitat de reprodução por falta de espaço no momento da
     /// coleta (§8.8/§8.19) — antes da checagem de espaço em BreedingService.CollectAsync
     /// (12/08/2026), um pai sobrevivente sem vaga no tanque/mochila ficava parado ali pra

@@ -101,6 +101,6 @@ export const api = {
   claimAllInboxEntries: () => request("POST", "/api/inbox/claim-all"),
   markAllInboxRead: () => request("POST", "/api/inbox/mark-all-read"),
   clearClaimedInboxEntries: () => request("POST", "/api/inbox/clear-claimed"),
-  adminSendInboxMessage: (title, body, audience, usernames, rewardCurrencyCode, rewardCurrencyAmount) =>
-    request("POST", "/api/admin/inbox/send", { title, body, audience, usernames, rewardCurrencyCode, rewardCurrencyAmount }),
+  adminSendInboxMessage: (title, body, audience, usernames, rewardCurrencyCode, rewardCurrencyAmount, rewardEggKey) =>
+    request("POST", "/api/admin/inbox/send", { title, body, audience, usernames, rewardCurrencyCode, rewardCurrencyAmount, rewardEggKey }),
 };

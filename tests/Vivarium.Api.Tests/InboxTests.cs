@@ -18,7 +18,8 @@ public class InboxTests : IClassFixture<VivariumApiFactory>
     private record InboxEntryRow(
         long Id, string Kind, string? Title, string? Body, string? SenderUsername,
         InboxCreatureRow? Creature, string? RewardCurrencyCode, decimal? RewardCurrencyAmount,
-        DateTime? ReadAt, DateTime? ClaimedAt, DateTime CreatedAt);
+        string? RewardEggKey, DateTime? ReadAt, DateTime? ClaimedAt, DateTime CreatedAt);
+    private record ClaimResponseRow(InboxCreatureRow? Creature);
     private record InboxCreatureRow(long Id);
     private record InboxListRow(List<InboxEntryRow> Entries);
     private record ClaimAllRow(int ClaimedCount, int FailedCount);
@@ -298,6 +299,81 @@ public class InboxTests : IClassFixture<VivariumApiFactory>
             var log = await db.TransactionLogs.SingleAsync(t => t.Type == TransactionType.InboxReward && t.ToUserId == playerId);
             Assert.Equal(50m, log.Amount);
         });
+    }
+
+    [Fact]
+    public async Task MensagemComOvo_MostraOTierAntesDoResgateEGeraOPeixeNoResgate()
+    {
+        var (admin, adminId) = await _factory.RegisterAsync("inbox-admin-egg1");
+        await TornarAdmin(adminId);
+        var (player, playerId) = await _factory.RegisterAsync("inbox-jog-egg1");
+
+        var sendResponse = await admin.PostAsJsonAsync("/api/admin/inbox/send", new
+        {
+            title = "Presente de aniversário", body = "Um ovo pra você!", audience = "All",
+            usernames = (string[]?)null, rewardCurrencyCode = (string?)null, rewardCurrencyAmount = (decimal?)null,
+            rewardEggKey = "egg_legendary",
+        });
+        sendResponse.EnsureSuccessStatusCode();
+
+        // O tier do ovo já aparece ANTES do resgate — o peixe em si só existe depois.
+        var inbox = await player.GetFromJsonAsync<InboxListRow>("/api/inbox/");
+        var entry = Assert.Single(inbox!.Entries, e => e.Title == "Presente de aniversário");
+        Assert.Equal("egg_legendary", entry.RewardEggKey);
+        Assert.Null(entry.Creature);
+
+        var claimResponse = await player.PostAsync($"/api/inbox/{entry.Id}/claim", null);
+        claimResponse.EnsureSuccessStatusCode();
+        var claimed = await claimResponse.Content.ReadFromJsonAsync<ClaimResponseRow>();
+        Assert.NotNull(claimed!.Creature);
+
+        await _factory.WithDbAsync(async db =>
+        {
+            var creature = await db.CreatureInstances.SingleAsync(c => c.Id == claimed.Creature!.Id);
+            Assert.Equal(playerId, creature.OwnerId);
+            Assert.NotNull(creature.HabitatId); // tanque vazio, cabe direto
+        });
+    }
+
+    [Fact]
+    public async Task MensagemComOvo_TanqueEMochilaCheios_Bloqueia400_NaoConsomeAEntrada()
+    {
+        var (admin, adminId) = await _factory.RegisterAsync("inbox-admin-egg2");
+        await TornarAdmin(adminId);
+        var (player, playerId) = await _factory.RegisterAsync("inbox-jog-egg2");
+        await FillTankAndBackpack(playerId, tankCount: 3, backpackCount: HabitatDefaults.BackpackCapacity);
+
+        await admin.PostAsJsonAsync("/api/admin/inbox/send", new
+        {
+            title = "Ovo", body = "Toma", audience = "All",
+            usernames = (string[]?)null, rewardCurrencyCode = (string?)null, rewardCurrencyAmount = (decimal?)null,
+            rewardEggKey = "egg_common",
+        });
+
+        var inbox = await player.GetFromJsonAsync<InboxListRow>("/api/inbox/");
+        var entry = Assert.Single(inbox!.Entries, e => e.Title == "Ovo");
+
+        var response = await player.PostAsync($"/api/inbox/{entry.Id}/claim", null);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        // Ainda pendente — pode tentar de novo depois de abrir espaço.
+        var inboxAfter = await player.GetFromJsonAsync<InboxListRow>("/api/inbox/");
+        Assert.Null(Assert.Single(inboxAfter!.Entries, e => e.Title == "Ovo").ClaimedAt);
+    }
+
+    [Fact]
+    public async Task AdminMandaOvo_KeyInvalida_Retorna400()
+    {
+        var (admin, adminId) = await _factory.RegisterAsync("inbox-admin-egg3");
+        await TornarAdmin(adminId);
+
+        var response = await admin.PostAsJsonAsync("/api/admin/inbox/send", new
+        {
+            title = "x", body = "y", audience = "All",
+            usernames = (string[]?)null, rewardCurrencyCode = (string?)null, rewardCurrencyAmount = (decimal?)null,
+            rewardEggKey = "nao_existe",
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]

@@ -4,6 +4,8 @@ import { Coin } from "../components/Coin.jsx";
 import { ConfirmModal } from "../components/ConfirmModal.jsx";
 import { Modal } from "../components/Modal.jsx";
 import { CollectCelebration } from "../components/CollectCelebration.jsx";
+import { EggIcon } from "../components/EggIcon.jsx";
+import { EGG_TIER } from "../lib/eggs.js";
 import { FILTER_WARN_THRESHOLD, tankFishWeight } from "../lib/tankMath.js";
 import { useAutoToggles } from "../hooks/useAutoToggles.js";
 
@@ -34,19 +36,6 @@ const ICONS = {
   water_sensor: "🧪",
 };
 const TIERS = { aquario_grande: "rare", aquario_master: "premium", egg_rare: "rare", egg_legendary: "premium" };
-
-// Ovo de peixe (§7.21): tier vira cor (mesma paleta de raridade do resto do jogo — CLAUDE.md
-// §5) tanto no ícone pequeno da Loja quanto no ovo grande da celebração de compra.
-const EGG_TIER = { egg_common: "common", egg_rare: "rare", egg_legendary: "legendary" };
-
-/** Ícone do ovo na Loja — cluster de ova de peixe, não o emoji 🥚 de galinha (feedback do usuário). */
-function EggIcon({ tier }) {
-  return (
-    <span className={`mini-fish-egg mini-fish-egg--${tier}`} aria-hidden="true">
-      <span className="mfe mfe-a" /><span className="mfe mfe-b" /><span className="mfe mfe-main" />
-    </span>
-  );
-}
 
 const FILTER_KEYS = ["auto_filter", "auto_filter_2", "auto_filter_3"];
 
