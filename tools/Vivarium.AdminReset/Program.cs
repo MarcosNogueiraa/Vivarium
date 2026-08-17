@@ -22,6 +22,7 @@ using Vivarium.Core.Gameplay;
 //   dotnet run --project tools/Vivarium.AdminReset -- give-seed <username-ou-email> <seed>
 //   dotnet run --project tools/Vivarium.AdminReset -- give-premium-all <quantidade>
 //   dotnet run --project tools/Vivarium.AdminReset -- delete-creature <id>
+//   dotnet run --project tools/Vivarium.AdminReset -- reset-daily-reward-all
 
 if (args.Length == 0)
 {
@@ -39,6 +40,7 @@ if (args.Length == 0)
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- give-seed <username-ou-email> <seed>");
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- give-premium-all <quantidade>");
     Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- delete-creature <id>");
+    Console.WriteLine("  dotnet run --project tools/Vivarium.AdminReset -- reset-daily-reward-all");
     return 1;
 }
 
@@ -648,6 +650,36 @@ switch (args[0])
             await db.SaveChangesAsync();
             await tx.CommitAsync();
             Console.WriteLine($"\n{wallets.Count} carteira(s) creditada(s) com {amount:0} premium cada.");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            await tx.RollbackAsync();
+            Console.WriteLine($"\nERRO, nada foi alterado (rollback): {ex.Message}");
+            return 1;
+        }
+    }
+    case "reset-daily-reward-all":
+    {
+        // Zera `LastDailyRewardAt` de TODO usuário — ação pontual pra liberar o resgate de
+        // novo pra todo mundo testar o redesenho da recompensa diária (roleta/streak/ovo,
+        // CLAUDE.md §7.10) sem esperar virar o dia UTC. Não mexe em `DailyRewardStreak`: como
+        // `DailyRewardCalculator.NextStreak` trata "sem resgate anterior" como dia 1 de
+        // qualquer forma, o campo de streak fica órfão até o próximo claim recalculá-lo — não
+        // precisa zerar à parte. Não credita nem debita nada (não é uma ação de moeda).
+        var users = await db.Users.Where(u => u.LastDailyRewardAt != null).ToListAsync();
+
+        Console.WriteLine($"Vai liberar o resgate de hoje pra {users.Count} usuário(s).");
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+        try
+        {
+            foreach (var u in users)
+                u.LastDailyRewardAt = null;
+
+            await db.SaveChangesAsync();
+            await tx.CommitAsync();
+            Console.WriteLine($"\n{users.Count} usuário(s) liberado(s) pra resgatar a recompensa diária de novo.");
             return 0;
         }
         catch (Exception ex)
