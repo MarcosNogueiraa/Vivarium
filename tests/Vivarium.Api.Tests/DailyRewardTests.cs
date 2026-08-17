@@ -18,20 +18,29 @@ public class DailyRewardTests : IClassFixture<VivariumApiFactory>
         var status = await client.GetFromJsonAsync<StatusDto>("/api/game/daily-reward");
 
         Assert.True(status!.CanClaim);
-        Assert.Equal(25m, status.Amount);
+        // Tanque vazio → base = piso (25); roleta ±40% → faixa [15,35].
+        Assert.Equal(15m, status.MinAmount);
+        Assert.Equal(35m, status.MaxAmount);
+        Assert.Equal(1, status.CurrentStreak);
+        Assert.Equal(0, status.StreakBonusPercent);
+        Assert.Equal(3, status.EggChancePercent);
         Assert.Null(status.NextAvailableAtUtc);
     }
 
     [Fact]
-    public async Task Resgatar_CreditaSaldoEDesabilitaNovoResgateNoMesmoDia()
+    public async Task Resgatar_CreditaSaldoDentroDaFaixaEDesabilitaNovoResgateNoMesmoDia()
     {
         var (client, _) = await _factory.RegisterAsync("diaria2");
 
         var claim = await client.PostAsync("/api/game/daily-reward/claim", null);
         claim.EnsureSuccessStatusCode();
+        var claimed = await claim.Content.ReadFromJsonAsync<ClaimDto>();
+
+        Assert.InRange(claimed!.Amount, 15m, 35m);
+        Assert.Equal(1, claimed.Streak);
 
         var tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
-        Assert.Equal(125m, tank!.Wallet["SOFT"]); // 100 + 25
+        Assert.Equal(100m + claimed.Amount, tank!.Wallet["SOFT"]);
 
         var status = await client.GetFromJsonAsync<StatusDto>("/api/game/daily-reward");
         Assert.False(status!.CanClaim);
@@ -50,12 +59,13 @@ public class DailyRewardTests : IClassFixture<VivariumApiFactory>
     }
 
     [Fact]
-    public async Task DiaSeguinte_PodeResgatarDeNovo()
+    public async Task DiaSeguinte_StreakSobeComBonusEACreditaOValorCerto()
     {
         var (client, userId) = await _factory.RegisterAsync("diaria4");
-        (await client.PostAsync("/api/game/daily-reward/claim", null)).EnsureSuccessStatusCode();
+        var first = await client.PostAsync("/api/game/daily-reward/claim", null);
+        first.EnsureSuccessStatusCode();
+        var firstClaimed = await first.Content.ReadFromJsonAsync<ClaimDto>();
 
-        // Simula "ontem": empurra o último resgate um dia pra trás
         await _factory.WithDbAsync(async db =>
         {
             var user = await db.Users.FirstAsync(u => u.Id == userId);
@@ -64,13 +74,72 @@ public class DailyRewardTests : IClassFixture<VivariumApiFactory>
 
         var status = await client.GetFromJsonAsync<StatusDto>("/api/game/daily-reward");
         Assert.True(status!.CanClaim);
+        Assert.Equal(2, status.CurrentStreak);
+        Assert.Equal(5.0, status.StreakBonusPercent, 3);
+
+        var second = await client.PostAsync("/api/game/daily-reward/claim", null);
+        second.EnsureSuccessStatusCode();
+        var secondClaimed = await second.Content.ReadFromJsonAsync<ClaimDto>();
+        Assert.Equal(2, secondClaimed!.Streak);
+
+        var tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
+        Assert.Equal(100m + firstClaimed!.Amount + secondClaimed.Amount, tank!.Wallet["SOFT"]);
+    }
+
+    [Fact]
+    public async Task LacunaDeDoisDias_QuebraOStreak_VoltaParaUm()
+    {
+        var (client, userId) = await _factory.RegisterAsync("diaria5");
+        (await client.PostAsync("/api/game/daily-reward/claim", null)).EnsureSuccessStatusCode();
+
+        await _factory.WithDbAsync(async db =>
+        {
+            var user = await db.Users.FirstAsync(u => u.Id == userId);
+            user.LastDailyRewardAt = user.LastDailyRewardAt!.Value.AddDays(-2);
+        });
+
+        var status = await client.GetFromJsonAsync<StatusDto>("/api/game/daily-reward");
+        Assert.True(status!.CanClaim);
+        Assert.Equal(1, status.CurrentStreak);
+        Assert.Equal(0, status.StreakBonusPercent);
 
         var claim = await client.PostAsync("/api/game/daily-reward/claim", null);
         claim.EnsureSuccessStatusCode();
-
-        var tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
-        Assert.Equal(150m, tank!.Wallet["SOFT"]); // 100 + 25 + 25
+        var claimed = await claim.Content.ReadFromJsonAsync<ClaimDto>();
+        Assert.Equal(1, claimed!.Streak);
     }
+
+    [Fact]
+    public async Task ChanceDeOvo_EventualmenteConcedeUmOvoNaCaixaDeEntrada()
+    {
+        var (client, userId) = await _factory.RegisterAsync("diaria6");
+
+        bool gotEgg = false;
+        for (int i = 0; i < 200 && !gotEgg; i++)
+        {
+            if (i > 0)
+            {
+                await _factory.WithDbAsync(async db =>
+                {
+                    var user = await db.Users.FirstAsync(u => u.Id == userId);
+                    user.LastDailyRewardAt = user.LastDailyRewardAt!.Value.AddDays(-1);
+                });
+            }
+
+            var claim = await client.PostAsync("/api/game/daily-reward/claim", null);
+            claim.EnsureSuccessStatusCode();
+            var claimed = await claim.Content.ReadFromJsonAsync<ClaimDto>();
+            gotEgg = claimed!.GotEgg;
+        }
+
+        Assert.True(gotEgg, "200 resgates com 3% de chance cada — nenhum ovo saiu, algo está errado na chamada.");
+
+        var inbox = await client.GetFromJsonAsync<InboxListRow>("/api/inbox/");
+        Assert.Contains(inbox!.Entries, e => e.Kind == "DailyRewardEgg");
+    }
+
+    private record InboxEntryRow(long Id, string Kind);
+    private record InboxListRow(List<InboxEntryRow> Entries);
 
     [Fact]
     public async Task SemToken_Retorna401()
@@ -82,5 +151,8 @@ public class DailyRewardTests : IClassFixture<VivariumApiFactory>
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
-    public record StatusDto(bool CanClaim, decimal Amount, DateTime? NextAvailableAtUtc);
+    public record StatusDto(bool CanClaim, decimal MinAmount, decimal MaxAmount, int CurrentStreak,
+        double StreakBonusPercent, double EggChancePercent, DateTime? NextAvailableAtUtc);
+
+    public record ClaimDto(decimal Amount, decimal Wallet, int Streak, bool GotEgg);
 }

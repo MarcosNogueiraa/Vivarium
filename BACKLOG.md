@@ -37,21 +37,9 @@ Ver `CLAUDE.md §7.9` (itens) e `§7.6` (schema/motor). Preços/vieses iniciais 
 
 ---
 
-## 4. Redesenho da recompensa diária (16/08/2026)
+## ~~4. Redesenho da recompensa diária~~ — IMPLEMENTADO (17/08/2026)
 
-**O quê:** hoje (`GameService.CanClaimDailyReward`/`ClaimDailyRewardAsync`, linhas 488-532) é flat — `EconomyDefaults.DailyRewardSoft = 25`, 1x por dia calendário UTC, sem streak, sem variância. O usuário quer repensar isso combinando 4 direções:
-
-1. **Bônus por dias consecutivos.** Cuidado de design pra quando for implementar: streak QUEBRAR ao faltar um dia contradiz a filosofia já documentada no projeto ("ausência nunca pune duro" — mesmo princípio de `CLAUDE.md §7.3`/§7.6, diferença online/offline sempre moderada, água nunca "mata" nada). Recomendação: streak só ADICIONA upside (cresce o bônus), nunca reduz o valor abaixo do piso base — faltar um dia no máximo reseta o bônus acumulado, nunca deixa o jogador pior do que estava no dia 1.
-2. **Valor escalado pela renda do aquário.** Fração do `coinsPerHour` atual do jogador em vez de um valor fixo — faz sentido tanto pra tanque grande quanto pequeno. Precisa de um piso mínimo pra quem começou hoje (tanque quase vazio, renda baixa).
-3. **Roleta de valores variáveis.** Sorteio dentro de uma faixa em vez de um valor determinístico — mais expectativa/dopamina a cada resgate.
-4. **Chance de peixe grátis.** ~~Probabilidade pequena de vir um peixe já pronto~~ **Decisão tomada (17/08/2026):** não gera o peixe direto — entrega um **ovo pela Caixa de Entrada** pro jogador abrir, reusando o mecanismo de ovo-como-recompensa já implementado pra mensagens de admin (`CLAUDE.md §7.19`, `GameService.GenerateEggCreatureAsync` + `InboxMessage.RewardItemDefinitionId`). Zero trabalho novo de entrega quando for implementar — só decidir QUAL tier de ovo (ou um sorteio entre tiers) a recompensa diária usa.
-
-**Decisões em aberto:**
-- Como as 4 direções se combinam num único fluxo? (ex: valor base = f(renda do aquário) → roleta aplica variância em cima desse valor base → streak multiplica o resultado final → ovo grátis é um bônus à parte, com chance independente das outras 3 mecânicas.)
-- Schema novo provável: `User.DailyRewardStreak` (contador) + possivelmente algum campo de quando o streak quebrou, se streak resetar visualmente precisar ser mostrado ao jogador.
-- Qual tier de ovo (ou distribuição entre tiers) a "sorte" da recompensa diária usa — provavelmente algo mais barato que o Ovo Comum da Loja (8💎), já que é grátis.
-
-**Bloqueios:** nenhum.
+Ver `CLAUDE.md §7.10`. As 4 direções entraram nessa ordem: base = `max(25, coinsPerHora×3)` → roleta ±40% em cima do base → streak (+5%/dia, teto +50%, reseta pra 1 ao faltar um dia) multiplica o resultado → 3% de chance de um Ovo Raro extra pela Caixa de Entrada, independente das outras 3. Lógica pura em `DailyRewardCalculator`.
 
 ---
 

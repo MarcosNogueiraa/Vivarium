@@ -262,6 +262,30 @@ input:focus {
   50% { box-shadow: 0 0 0 6px rgba(224, 144, 15, 0); }
 }
 
+/* Roleta da recompensa diária (17/08/2026) — sequência/bônus sempre visíveis, não só o soft. */
+.daily-reward-streak { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.daily-reward-streak-count {
+  font-weight: 700; padding: 4px 10px; border-radius: 999px;
+  background: var(--panel-strong); border: 1px solid var(--line-strong);
+}
+.daily-reward-bonus-tag {
+  font-weight: 700; padding: 4px 10px; border-radius: 999px; font-size: 0.85rem;
+  background: linear-gradient(180deg, #ffe6a6, var(--gold-soft)); color: #3a2a02;
+}
+.daily-reward-roulette {
+  display: flex; align-items: baseline; justify-content: center; gap: 8px;
+  padding: 18px 12px; border-radius: 14px;
+  background: var(--panel-strong); border: 1px solid var(--line-strong);
+  font-family: "Fraunces", serif;
+}
+.daily-reward-roulette-value { font-size: 2.2rem; font-weight: 700; line-height: 1; }
+.daily-reward-roulette.is-spinning .daily-reward-roulette-value { color: var(--gold); }
+.daily-reward-roulette.is-settled { animation: daily-reward-settle 0.35s ease-out; }
+@keyframes daily-reward-settle {
+  0% { transform: scale(1.12); } 100% { transform: scale(1); }
+}
+.daily-reward-egg-note { color: var(--gold); font-weight: 600; }
+
 .content { flex: 1; width: 100%; max-width: 1160px; margin: 0 auto; padding: clamp(20px, 4vw, 40px); }
 
 /* ---------- Auth (hero imersivo) ---------- */

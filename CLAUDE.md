@@ -258,11 +258,20 @@ Sink de soft (custo dinâmico) + sink de tempo (pais fora do tanque durante a ge
 - **Cascudo:** peixe futuro (não item de loja) que ajudaria na limpeza passiva — hook comentado em `GameService.ApplyTickAsync`, sem implementação. O filtro automático (item comprado) já cobre a função equivalente hoje.
 - **Fusão de peixes:** cogitada e adiada — risco de canibalizar o sink de breeding se virar caminho determinístico/sem risco pra subir de raridade.
 - **Comentários no aquário visitado:** ver §7.16 — precisa de moderação básica antes de ir pra produção.
-- **Backlog de ideias novas ainda não implementadas** (link de indicação, redesenho da recompensa diária, rate limiting de login/forgot-password): ver `BACKLOG.md`.
+- **Backlog de ideias novas ainda não implementadas** (link de indicação, rate limiting de login/forgot-password): ver `BACKLOG.md`.
 
 ### 7.10 Recompensa diária
 
-Resgatável 1x/dia calendário UTC, sem streak, sem penalidade por pular um dia. `EconomyDefaults.DailyRewardSoft = 25`. Elegibilidade calculada on-demand (`User.LastDailyRewardAt`), sem job. Endpoints: `GET /api/game/daily-reward`, `POST /api/game/daily-reward/claim` (audita `TransactionLog.DailyReward`).
+Resgatável 1x/dia calendário UTC. Elegibilidade calculada on-demand (`User.LastDailyRewardAt`), sem job. Endpoints: `GET /api/game/daily-reward`, `POST /api/game/daily-reward/claim` (audita `TransactionLog.DailyReward`).
+
+**Redesenho 17/08/2026** — era valor fixo (25 soft, sem streak, sem variância); virou uma "roleta" com 4 componentes, lógica pura em `DailyRewardCalculator` (`Vivarium.Core/Gameplay`), parâmetros em `TickConfig`:
+- **Valor base escalado pela renda:** `max(DailyRewardMinSoft=25, coinsPerHora × DailyRewardIncomeHours=3)` — quem tem um tanque melhor ganha mais, sempre com piso de 25 pra quem tá começando.
+- **Roleta:** sorteia dentro de `base × [1−0.4, 1+0.4]` (`DailyRewardRouletteRange`) — variância visível, não um valor determinístico.
+- **Streak (dias consecutivos):** `+5%/dia` (`DailyRewardStreakBonusPerDay`) até o teto de `+50%` (`DailyRewardStreakBonusCap`); `DailyRewardCalculator.NextStreak` soma 1 se o último resgate foi ONTEM, senão **reseta pra 1** (não só "recomeça sem perder nada" — perde o bônus acumulado de verdade). Decisão explícita do usuário: reset total é o que estimula presença diária real; nunca deixa o jogador abaixo do valor BASE (só o bônus é perdido, nunca o piso).
+- **Chance de ovo:** `DailyRewardEggChance = 3%` de vir, além da moeda, um **Ovo Raro** (`DailyRewardEggItemKey = "egg_rare"`, ver §7.9-egg) de brinde — entregue via Caixa de Entrada (`InboxEntryKind.DailyRewardEgg`), montado inline em `GameService.ClaimDailyRewardAsync` (não via `InboxService.QueueSystemMessage` — `InboxService` depende de `GameService`, injetar o inverso criaria dependência circular).
+- **`User.DailyRewardStreak`** (int, migration `AddDailyRewardStreak`) persiste o streak atual.
+- **Frontend:** `DailyRewardModal.jsx` — abre ao clicar no botão do topbar (mostra a faixa min/max, sequência atual e bônus ANTES de resgatar); resgatar dispara uma animação de "roleta" (números girando dentro da faixa) que assenta no valor real devolvido pela API — sequência e bônus concedido ficam sempre visíveis durante o giro (pedido explícito do usuário).
+- **Testes:** `DailyRewardCalculatorTests.cs` (Core, todas as funções puras) + `DailyRewardTests.cs` (Api, inclui teste estatístico — 200 resgates simulados — confirmando que a chance de ovo realmente dispara) + `daily-reward.cy.js` (E2E, mocka a API).
 
 ### 7.11 Ritmo lento anti-rush + acelerar com premium
 

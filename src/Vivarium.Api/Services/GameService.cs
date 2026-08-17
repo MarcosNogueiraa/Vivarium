@@ -509,7 +509,9 @@ public class GameService(VivariumDbContext db)
         return ServiceResult.Success(new { online = true, maintenanceLevel = habitat.MaintenanceLevel });
     }
 
-    /// <summary>Resgatável 1x por dia (calendário UTC) — sem streak, sem penalidade por ausência (CLAUDE.md 8.10).</summary>
+    /// <summary>Resgatável 1x por dia (calendário UTC). Valor/streak são o que mudou no
+    /// redesenho (17/08/2026) — a REGRA de "1x por dia, sem penalidade por só um dia de
+    /// ausência" continua a mesma de sempre (CLAUDE.md §8.10).</summary>
     private static bool CanClaimDailyReward(User user, DateTime now)
         => user.LastDailyRewardAt is not { } last || now.Date > last.Date;
 
@@ -521,7 +523,17 @@ public class GameService(VivariumDbContext db)
 
         bool canClaim = CanClaimDailyReward(user, now);
         DateTime? nextAvailable = canClaim ? null : user.LastDailyRewardAt!.Value.Date.AddDays(1);
-        return ServiceResult.Success(new DailyRewardStatusDto(canClaim, EconomyDefaults.DailyRewardSoft, nextAvailable));
+
+        var habitat = await FindHabitatAsync(userId);
+        decimal coinsPerHour = habitat is null ? 0 : await CoinsPerHourAsync(habitat);
+        decimal baseAmount = DailyRewardCalculator.BaseAmount(coinsPerHour, TickConfig.Default);
+        var (min, max) = DailyRewardCalculator.RouletteRange(baseAmount, TickConfig.Default);
+        int previewStreak = DailyRewardCalculator.NextStreak(user.DailyRewardStreak, user.LastDailyRewardAt, now);
+        double streakBonusPct = (DailyRewardCalculator.StreakMultiplier(previewStreak, TickConfig.Default) - 1.0) * 100;
+
+        return ServiceResult.Success(new DailyRewardStatusDto(
+            canClaim, min, max, previewStreak, streakBonusPct,
+            TickConfig.Default.DailyRewardEggChance * 100, nextAvailable));
     }
 
     public async Task<ServiceResult> ClaimDailyRewardAsync(long userId, DateTime now)
@@ -532,19 +544,49 @@ public class GameService(VivariumDbContext db)
         if (!CanClaimDailyReward(user, now))
             return ServiceResult.Bad("Recompensa diária já resgatada hoje.");
 
+        var habitat = await FindHabitatAsync(userId);
+        decimal coinsPerHour = habitat is null ? 0 : await CoinsPerHourAsync(habitat);
+        int nextStreak = DailyRewardCalculator.NextStreak(user.DailyRewardStreak, user.LastDailyRewardAt, now);
+        decimal amount = DailyRewardCalculator.FinalAmount(coinsPerHour, nextStreak, Random.Shared.NextDouble(), TickConfig.Default);
+
         int softId = await db.CurrencyTypes.Where(c => c.Code == "SOFT").Select(c => c.Id).FirstAsync();
         var wallet = await db.WalletBalances.FirstAsync(w => w.UserId == userId && w.CurrencyTypeId == softId);
-        wallet.Amount += EconomyDefaults.DailyRewardSoft;
+        wallet.Amount += amount;
         user.LastDailyRewardAt = now;
+        user.DailyRewardStreak = nextStreak;
 
         db.TransactionLogs.Add(new TransactionLog
         {
             Type = TransactionType.DailyReward,
             ToUserId = userId,
             CurrencyTypeId = softId,
-            Amount = EconomyDefaults.DailyRewardSoft,
+            Amount = amount,
             CreatedAt = now,
         });
+
+        // Ovo bônus (17/08/2026) — não reusa InboxService.QueueSystemMessage (InboxService
+        // depende de GameService, injetar o inverso criaria dependência circular); a criação
+        // direta aqui é só 2 objetos, não vale a pena quebrar a separação de camadas por isso.
+        bool gotEgg = DailyRewardCalculator.RollsEgg(Random.Shared.NextDouble(), TickConfig.Default);
+        if (gotEgg)
+        {
+            var eggItem = await db.ItemDefinitions.FirstAsync(i => i.Key == TickConfig.Default.DailyRewardEggItemKey);
+            var eggMessage = new InboxMessage
+            {
+                Title = "🎁 Recompensa diária: sorte grande!",
+                Body = $"Além da moeda de hoje, você ganhou um {eggItem.Name} de bônus!",
+                CreatedAt = now,
+            };
+            db.InboxMessages.Add(eggMessage);
+            db.InboxEntries.Add(new InboxEntry
+            {
+                RecipientId = userId,
+                Kind = InboxEntryKind.DailyRewardEgg,
+                InboxMessage = eggMessage,
+                RewardItemDefinitionId = eggItem.Id,
+                CreatedAt = now,
+            });
+        }
 
         try
         {
@@ -554,7 +596,7 @@ public class GameService(VivariumDbContext db)
         {
             return ServiceResult.Conflict("Resgate concorrente — tente de novo.");
         }
-        return ServiceResult.Success(new { amount = EconomyDefaults.DailyRewardSoft, wallet = wallet.Amount });
+        return ServiceResult.Success(new ClaimDailyRewardResponse(amount, wallet.Amount, nextStreak, gotEgg));
     }
 
     /// <summary>

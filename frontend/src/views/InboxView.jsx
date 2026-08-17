@@ -12,14 +12,16 @@ const KIND_LABELS = {
   MarketPurchase: "🛒 Comprado no mercado",
   DirectTransfer: "🎁 Recebido por transferência",
   MarketSale: "💰 Vendido no mercado",
+  DailyRewardEgg: "🎁 Recompensa diária",
 };
 
 const isDeliveryKind = (kind) => kind === "MarketPurchase" || kind === "DirectTransfer";
+const hasMessageKind = (kind) => kind === "AdminMessage" || kind === "MarketSale" || kind === "DailyRewardEgg";
 
 function EntryCard({ entry, onClaim, busy }) {
   const claimed = Boolean(entry.claimedAt);
   const isDelivery = isDeliveryKind(entry.kind);
-  const hasMessage = entry.kind === "AdminMessage" || entry.kind === "MarketSale";
+  const hasMessage = hasMessageKind(entry.kind);
   const eggTier = entry.rewardEggKey ? EGG_TIER[entry.rewardEggKey] : null;
 
   return (

@@ -144,6 +144,23 @@ public sealed record TickConfig
     /// </summary>
     public decimal WaterSensorMaxTriggerPercent { get; init; } = 80m;
 
+    // --- Recompensa diária (§8.10 → redesenho 17/08/2026): valor escalado pela renda do
+    // tanque (em vez de fixo) + roleta + streak + chance de ovo — ver DailyRewardCalculator.
+    /// <summary>Piso — nunca menos que isso, mesmo com tanque vazio (quem tá começando).</summary>
+    public decimal DailyRewardMinSoft { get; init; } = 25m;
+    /// <summary>Valor base = renda atual do tanque × essa quantidade de horas.</summary>
+    public decimal DailyRewardIncomeHours { get; init; } = 3m;
+    /// <summary>Variação da roleta em cima do valor base (0.4 = sorteia entre 60% e 140%).</summary>
+    public double DailyRewardRouletteRange { get; init; } = 0.4;
+    /// <summary>Bônus por dia de streak consecutivo (multiplicativo em cima do valor da roleta).</summary>
+    public double DailyRewardStreakBonusPerDay { get; init; } = 0.05;
+    /// <summary>Teto do bônus de streak (0.5 = nunca passa de +50%, mesmo com streak enorme).</summary>
+    public double DailyRewardStreakBonusCap { get; init; } = 0.50;
+    /// <summary>Chance (por resgate) de ganhar também um ovo, entregue pela Caixa de Entrada.</summary>
+    public double DailyRewardEggChance { get; init; } = 0.03;
+    /// <summary>Key do ItemDefinition do ovo sorteado — reusa o catálogo da Loja (§7.21), nenhum item novo.</summary>
+    public string DailyRewardEggItemKey { get; init; } = "egg_rare";
+
     public static readonly TickConfig Default = new();
 }
 
@@ -238,14 +255,6 @@ public static class EconomyDefaults
 {
     public const decimal StartingSoftBalance = 100m;
     public const decimal StartingPremiumBalance = 0m;
-
-    /// <summary>
-    /// Recompensa diária: gancho de retenção simples, sem streak — resgatável 1x por dia
-    /// (calendário UTC), sem quebra/penalidade por ausência (mesma filosofia de "ausência
-    /// nunca pune duro" do online/offline — CLAUDE.md 8.3/8.6). Valor fixo modesto: dá pra
-    /// comprar 1 filtro (20 soft) e sobra um pouco, sem distorcer a economia (30/07/2026).
-    /// </summary>
-    public const decimal DailyRewardSoft = 25m;
 }
 
 /// <summary>Valores iniciais de um habitat novo (tanque inicial do MVP).</summary>

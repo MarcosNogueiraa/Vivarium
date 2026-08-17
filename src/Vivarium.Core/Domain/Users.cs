@@ -9,6 +9,10 @@ public class User
     public DateTime CreatedAt { get; set; }
     /// <summary>Último resgate da recompensa diária (UTC), nullable = nunca resgatou.</summary>
     public DateTime? LastDailyRewardAt { get; set; }
+    /// <summary>Dias consecutivos resgatando (17/08/2026, redesenho §8.10) — reseta pra 1 (não
+    /// pra 0) a cada resgate que não seguiu direto o dia anterior. Só afeta o BÔNUS de streak,
+    /// nunca o valor base da recompensa.</summary>
+    public int DailyRewardStreak { get; set; }
     /// <summary>Acesso a ferramentas administrativas (ex: painel /api/admin/*). Não é papel de jogo.</summary>
     public bool IsAdmin { get; set; }
 }

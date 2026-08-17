@@ -33,4 +33,11 @@ public record SetTogglesRequest(bool AutoCollectEnabled, bool AutoCleanEnabled);
 
 public record BackpackResponse(int Capacity, IReadOnlyList<CreatureDto> Creatures);
 
-public record DailyRewardStatusDto(bool CanClaim, decimal Amount, DateTime? NextAvailableAtUtc);
+// Redesenho 17/08/2026 (era valor fixo Amount) — MinAmount/MaxAmount é a faixa da roleta (o
+// valor exato só sai depois de resgatar); StreakBonusPercent já reflete o bônus que ESTE resgate
+// vai aplicar (streak+1 em relação ao atual, se for consecutivo).
+public record DailyRewardStatusDto(
+    bool CanClaim, decimal MinAmount, decimal MaxAmount, int CurrentStreak, double StreakBonusPercent,
+    double EggChancePercent, DateTime? NextAvailableAtUtc);
+
+public record ClaimDailyRewardResponse(decimal Amount, decimal Wallet, int Streak, bool GotEgg);

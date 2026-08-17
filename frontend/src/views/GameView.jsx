@@ -19,6 +19,7 @@ import { AdminPanel } from "../components/AdminPanel.jsx";
 import { AccountMenu } from "../components/AccountMenu.jsx";
 import { TankUpgradeCelebration } from "../components/TankUpgradeCelebration.jsx";
 import { Modal } from "../components/Modal.jsx";
+import { DailyRewardModal } from "../components/DailyRewardModal.jsx";
 
 export function GameView({ onLogout }) {
   const { tank, userId, refreshTank, syncError, bandUpgrade, dismissBandUpgrade } = useGame();
@@ -36,7 +37,7 @@ export function GameView({ onLogout }) {
   // volta) — toggle continua disponível (🎬 no tank-tools) pra quem preferir o efeito.
   const [cinemaEnabled, setCinemaEnabled] = useState(() => localStorage.getItem("cinemaEnabled") === "true");
   const toggleCinema = () => setCinemaEnabled((v) => { localStorage.setItem("cinemaEnabled", String(!v)); return !v; });
-  const [claimingReward, setClaimingReward] = useState(false);
+  const [showDailyReward, setShowDailyReward] = useState(false);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [showRarityGuide, setShowRarityGuide] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -59,16 +60,6 @@ export function GameView({ onLogout }) {
   async function devPremium() {
     try { await api.devCoins(100, "PREMIUM"); notify("+100 premium"); await refreshTank(); }
     catch (err) { notify(err.message); }
-  }
-
-  async function claimDailyReward() {
-    setClaimingReward(true);
-    try {
-      const { amount } = await api.claimDailyReward();
-      notify(`Recompensa diária: +${Number(amount).toFixed(0)} soft!`);
-      await Promise.all([refreshDailyReward(), refreshTank()]);
-    } catch (err) { notify(err.message); }
-    finally { setClaimingReward(false); }
   }
 
   if (tank === null) return <div className="loading">Enchendo o aquário…</div>;
@@ -116,8 +107,8 @@ export function GameView({ onLogout }) {
         <span className="spacer" />
         <div className="topbar-stats">
           {dailyReward?.canClaim && (
-            <button className="daily-reward-btn" onClick={claimDailyReward} disabled={claimingReward}
-              title={`Resgatar recompensa diária: +${Number(dailyReward.amount).toFixed(0)} soft`}>
+            <button className="daily-reward-btn" onClick={() => setShowDailyReward(true)}
+              title={`Faixa de hoje: ${Math.round(dailyReward.minAmount)}–${Math.round(dailyReward.maxAmount)} soft`}>
               🎁 Recompensa diária
             </button>
           )}
@@ -188,6 +179,14 @@ export function GameView({ onLogout }) {
         />
       )}
       {bandUpgrade && <TankUpgradeCelebration bandName={bandUpgrade} onClose={dismissBandUpgrade} />}
+      {showDailyReward && dailyReward && (
+        <DailyRewardModal
+          status={dailyReward}
+          notify={notify}
+          onClose={() => setShowDailyReward(false)}
+          onClaimed={async () => { await Promise.all([refreshDailyReward(), refreshTank(), refreshInbox()]); }}
+        />
+      )}
     </div>
   );
 }

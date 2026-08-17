@@ -2,7 +2,7 @@ namespace Vivarium.Core.Domain;
 
 public enum InboxAudience { All, Selected }
 
-public enum InboxEntryKind { AdminMessage, MarketPurchase, DirectTransfer, MarketSale }
+public enum InboxEntryKind { AdminMessage, MarketPurchase, DirectTransfer, MarketSale, DailyRewardEgg }
 
 /// <summary>
 /// Caixa de Entrada (14/08/2026, CLAUDE.md §8.23/§8.24) — 1 linha por envio administrativo

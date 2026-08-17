@@ -1,4 +1,5 @@
-// E2E do botão de recompensa diária (CLAUDE.md 8.10). API mockada via cy.intercept.
+// E2E da recompensa diária (CLAUDE.md §8.10, redesenho 17/08/2026 — roleta + streak + bônus).
+// API mockada via cy.intercept.
 
 function fakeJwt(sub = "1", username = "jogador1") {
   const b64 = (obj) => btoa(JSON.stringify(obj)).replace(/=+$/, "");
@@ -19,34 +20,71 @@ function loginAndReachTank() {
 }
 
 describe("Recompensa diária", () => {
-  it("mostra o botão quando resgatável, some depois de resgatar e credita o saldo", () => {
+  it("mostra o botão quando resgatável; abrir a roleta mostra sequência/bônus/faixa e resgatar credita o saldo", () => {
     cy.intercept("GET", "/api/game/daily-reward", {
-      statusCode: 200, body: { canClaim: true, amount: 25, nextAvailableAtUtc: null },
+      statusCode: 200,
+      body: { canClaim: true, minAmount: 15, maxAmount: 35, currentStreak: 3, streakBonusPercent: 10, eggChancePercent: 3, nextAvailableAtUtc: null },
     }).as("status");
     loginAndReachTank();
     cy.wait("@status");
 
-    cy.contains("button", "Recompensa diária").should("be.visible");
+    cy.contains("button", "Recompensa diária").should("be.visible").click();
+
+    cy.contains("3 dias seguidos");
+    cy.contains("+10% de bônus");
+    cy.contains("15–35 soft");
 
     cy.intercept("POST", "/api/game/daily-reward/claim", {
-      statusCode: 200, body: { amount: 25, wallet: 125 },
+      statusCode: 200, body: { amount: 27, wallet: 127, streak: 3, gotEgg: false },
     }).as("claim");
     cy.intercept("GET", "/api/game/daily-reward", {
-      statusCode: 200, body: { canClaim: false, amount: 25, nextAvailableAtUtc: "2026-08-01T00:00:00Z" },
+      statusCode: 200,
+      body: { canClaim: false, minAmount: 15, maxAmount: 35, currentStreak: 3, streakBonusPercent: 10, eggChancePercent: 3, nextAvailableAtUtc: "2026-08-18T00:00:00Z" },
     }).as("statusAfter");
-    cy.intercept("GET", "/api/game/tank", { fixture: "tank-empty.json" }).as("tankAfter"); // saldo real vem do backend real; aqui só validamos que o fluxo dispara
+    cy.intercept("GET", "/api/game/tank", { fixture: "tank-empty.json" }).as("tankAfter");
+    cy.intercept("GET", "/api/inbox/", { statusCode: 200, body: { entries: [] } }).as("inboxAfter");
 
-    cy.contains("button", "Recompensa diária").click();
+    cy.contains("button", "Resgatar").click();
     cy.wait("@claim");
     cy.wait("@statusAfter");
 
+    cy.contains(".daily-reward-roulette-value", "27", { timeout: 3000 });
+    cy.contains("Creditado na carteira");
+
+    cy.contains("button", "Fechar").click();
     cy.contains("button", "Recompensa diária").should("not.exist");
-    cy.contains("Recompensa diária: +25 soft"); // toast de confirmação
+  });
+
+  it("mostra o brinde de ovo quando a roleta concede um", () => {
+    cy.intercept("GET", "/api/game/daily-reward", {
+      statusCode: 200,
+      body: { canClaim: true, minAmount: 25, maxAmount: 25, currentStreak: 1, streakBonusPercent: 0, eggChancePercent: 3, nextAvailableAtUtc: null },
+    }).as("status");
+    loginAndReachTank();
+    cy.wait("@status");
+
+    cy.contains("button", "Recompensa diária").click();
+
+    cy.intercept("POST", "/api/game/daily-reward/claim", {
+      statusCode: 200, body: { amount: 25, wallet: 125, streak: 1, gotEgg: true },
+    }).as("claim");
+    cy.intercept("GET", "/api/game/daily-reward", {
+      statusCode: 200,
+      body: { canClaim: false, minAmount: 25, maxAmount: 25, currentStreak: 1, streakBonusPercent: 0, eggChancePercent: 3, nextAvailableAtUtc: "2026-08-18T00:00:00Z" },
+    }).as("statusAfter");
+    cy.intercept("GET", "/api/game/tank", { fixture: "tank-empty.json" }).as("tankAfter");
+    cy.intercept("GET", "/api/inbox/", { statusCode: 200, body: { entries: [] } }).as("inboxAfter");
+
+    cy.contains("button", "Resgatar").click();
+    cy.wait("@claim");
+
+    cy.contains("Sorte grande", { timeout: 3000 });
   });
 
   it("não mostra o botão quando já foi resgatada hoje", () => {
     cy.intercept("GET", "/api/game/daily-reward", {
-      statusCode: 200, body: { canClaim: false, amount: 25, nextAvailableAtUtc: "2026-08-01T00:00:00Z" },
+      statusCode: 200,
+      body: { canClaim: false, minAmount: 25, maxAmount: 25, currentStreak: 1, streakBonusPercent: 0, eggChancePercent: 3, nextAvailableAtUtc: "2026-08-18T00:00:00Z" },
     }).as("status");
     loginAndReachTank();
     cy.wait("@status");
