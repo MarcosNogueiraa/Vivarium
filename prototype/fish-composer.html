@@ -1239,7 +1239,6 @@ document.querySelectorAll(".tiers button").forEach(btn =>
 // pra ver o número que uma combinação "impossível" geraria — mas isso não significa
 // que o motor real algum dia produziria esse peixe a partir de um seed de verdade.
 
-const ALL_SHIMMER_COLORS = Object.values(CONFIG.shimmerColorsByTier).flat().map(([c]) => c);
 const PART_LIST = [["tail", "Cauda"], ["dorsal", "Nadadeira dorsal"], ["pectoral", "Barbatana peitoral"]];
 
 function fillSelect(select, options, labels) {
@@ -1251,10 +1250,32 @@ const manShimmerColorSelect = document.getElementById("man-shimmer-color");
 const manShimmerOpacity = document.getElementById("man-shimmer-opacity");
 const manShimmerOpacityOut = document.getElementById("man-shimmer-opacity-out");
 
+// A cor do brilho só pode ser uma das cores DO TIER selecionado (18/08/2026) — antes o
+// dropdown listava todas as cores de todos os tiers juntas, deixando montar combos
+// impossíveis (ex: Lendário + Carmesim, que só existe no tier Raro). O score dessas
+// combinações usava um piso artificial (probabilityOf, 1e-6) pra não virar Infinity,
+// o que fazia o combo "impossível" parecer MAIS raro que qualquer cor válida do tier —
+// enganoso pra quem tá usando o composer pra calibrar pesos. Trocar o tier agora
+// reconstrói a lista de cores pra sempre refletir só o que o motor real permitiria.
+function syncManShimmerColorOptions() {
+  const tier = manTierSelect.value;
+  if (tier === "None") {
+    manShimmerColorSelect.innerHTML = "";
+    manShimmerColorSelect.disabled = true;
+    return;
+  }
+  manShimmerColorSelect.disabled = false;
+  const previous = manShimmerColorSelect.value;
+  const colors = CONFIG.shimmerColorsByTier[tier].map(([v]) => v);
+  fillSelect(manShimmerColorSelect, colors, PT.shimmer);
+  manShimmerColorSelect.value = colors.includes(previous) ? previous : colors[0];
+}
+
 fillSelect(manTierSelect, CONFIG.shimmerTiers.map(([v]) => v), PT.tier);
-fillSelect(manShimmerColorSelect, ALL_SHIMMER_COLORS, PT.shimmer);
 manTierSelect.value = "Legendary";
+syncManShimmerColorOptions();
 manShimmerColorSelect.value = "Iridescent";
+manTierSelect.addEventListener("change", syncManShimmerColorOptions);
 manShimmerOpacityOut.textContent = manShimmerOpacity.value;
 manShimmerOpacity.addEventListener("input", () => { manShimmerOpacityOut.textContent = manShimmerOpacity.value; });
 
