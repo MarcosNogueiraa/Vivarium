@@ -1199,6 +1199,9 @@ input:focus {
 .trait-row { display: flex; justify-content: space-between; gap: 14px; padding: 5px 0; font-size: 0.9rem; }
 .trait-row .tr-label { color: var(--muted); flex-shrink: 0; }
 .trait-row .tr-value { text-align: right; }
+/* Nome da cor escrito na própria cor (ColorSpan.jsx) — glow claro sutil garante leitura
+   mesmo pro Preto sobre o fundo escuro do app. */
+.color-name { font-weight: 600; text-shadow: 0 0 6px rgba(255, 255, 255, 0.25); }
 
 .bd-help { color: var(--faint); font-size: 0.82rem; margin-bottom: 10px; line-height: 1.5; }
 .breakdown { display: flex; flex-direction: column; gap: 7px; }

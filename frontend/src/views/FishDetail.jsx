@@ -4,9 +4,23 @@ import { FishCanvas } from "../components/FishCanvas.jsx";
 import { Coin } from "../components/Coin.jsx";
 import { TraitRow } from "../components/TraitRow.jsx";
 import { CollapsibleSection } from "../components/CollapsibleSection.jsx";
+import { ColorSpan } from "../components/ColorSpan.jsx";
 import { coinsPerHourOf, rarityBreakdownOf, traitsOf, waterDegradationPerFishPerHour } from "../lib/generator.js";
 import { bandOf, PT, swimSpeedOf } from "../lib/fishRenderer.js";
-import { ageOf, factorLabel, partSummary, speedWord, PART_PT } from "../lib/format.js";
+import { ageOf, factorLabel, speedWord, PART_PT } from "../lib/format.js";
+
+/** Mesmo resumo de `partSummary` (format.js), mas com a cor base e a cor do padrão escritas
+ * na própria cor (18/08/2026, pedido do usuário) — precisa ser JSX, por isso vive aqui e não
+ * em format.js (que é propositalmente "sem React", ver CLAUDE.md §12). */
+function PartSummary({ part }) {
+  if (part.pattern === "None") return <><ColorSpan color={part.color} /> · sem padrão</>;
+  return (
+    <>
+      <ColorSpan color={part.color} /> · {PT.pattern[part.pattern].toLowerCase()} <ColorSpan color={part.patternColor} />
+      {` (tam ${part.patternSize.toFixed(0)}, op ${part.patternOpacity.toFixed(0)}%)`}
+    </>
+  );
+}
 
 export function FishDetail({ creature, onClose, children, inTank = false, bandFactor = 1 }) {
   const seed = creature.seed;
@@ -40,13 +54,13 @@ export function FishDetail({ creature, onClose, children, inTank = false, bandFa
         </div>
       </div>
 
-      <CollapsibleSection title="Atributos">
+      <CollapsibleSection title="Atributos" defaultOpen>
         <TraitRow label="Corpo" value={traits.shimmerTier === "None"
           ? "Cinza, sem brilho"
           : `${PT.tier[traits.shimmerTier]} · ${PT.shimmer[traits.shimmerColor]} ${traits.shimmerOpacity.toFixed(0)}%`} />
-        <TraitRow label={PART_PT.tail} value={partSummary(traits.tail)} />
-        <TraitRow label={PART_PT.dorsal} value={partSummary(traits.dorsal)} />
-        <TraitRow label={PART_PT.pectoral} value={partSummary(traits.pectoral)} />
+        <TraitRow label={PART_PT.tail} value={<PartSummary part={traits.tail} />} />
+        <TraitRow label={PART_PT.dorsal} value={<PartSummary part={traits.dorsal} />} />
+        <TraitRow label={PART_PT.pectoral} value={<PartSummary part={traits.pectoral} />} />
         <TraitRow label="Movimento" value={`cauda ${speedWord(traits.movement.tailSpeed)}, `
           + `nadadeira ${speedWord(traits.movement.finSpeed)} · nado ${swimSpeedOf(traits).toFixed(0)} px/s`} />
       </CollapsibleSection>

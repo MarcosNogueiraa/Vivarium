@@ -9,8 +9,8 @@ import { useState } from "react";
  * hierarquizado, ex: FishDetail). Sem `variant`, o comportamento/visual continua EXATAMENTE
  * igual ao original — não regride nenhum uso existente.
  */
-export function CollapsibleSection({ title, children, variant, hint, icon = "🎛️" }) {
-  const [open, setOpen] = useState(false);
+export function CollapsibleSection({ title, children, variant, hint, icon = "🎛️", defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
   const prominent = variant === "prominent";
   return (
     <div className={prominent ? "detail-section detail-section--prominent" : "detail-section"}>
