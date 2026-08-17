@@ -10,6 +10,17 @@ const GRADIENT_MIX_LABEL = {
   PatternDominant: "Padrão predominante",
 };
 
+// Multiplicador de chance vs. coleta normal (bias=0), medido empiricamente (3M seeds por tier,
+// tools/Vivarium.Simulation -- eggodds) — não é um cálculo simples de reproduzir no cliente
+// (PickBiasedTowardRare rescala a tabela inteira), então fica hardcoded aqui como referência.
+const EGG_ODDS = [
+  { tier: "Sem brilho", common: "0,93×", rare: "0,80×", legendary: "0,65×" },
+  { tier: "Sutil", common: "1,18×", rare: "1,43×", legendary: "1,62×" },
+  { tier: "Vibrante", common: "1,37×", rare: "2,03×", legendary: "2,80×" },
+  { tier: "Raro", common: "1,72×", rare: "3,36×", legendary: "6,19×" },
+  { tier: "Lendário", common: "3,24×", rare: "14,89×", legendary: "63,39×" },
+];
+
 export function RarityGuide({ onClose }) {
   return (
     <Modal onClose={onClose} narrow>
@@ -154,6 +165,32 @@ export function RarityGuide({ onClose }) {
         {CONFIG.movement.speedExtremeHigh.toFixed(0)}, numa escala de 0 a 100) entram no score, com peso
         reduzido ({CONFIG.movement.scoreWeight.toFixed(1)}×). Cauda mais rápida também deixa o peixe
         mais ágil no aquário — é o mesmo valor, não é só estética.
+      </p>
+
+      <div className="eyebrow" style={{ marginTop: 22 }}>Ovo de peixe (Loja)</div>
+      <p className="muted guide-intro">
+        O ovo gera 1 peixe na hora com uma chance melhorada de brilho raro — a tabela abaixo mostra o
+        quanto cada tier multiplica a chance normal de cada tier de brilho sair (medido, não estimado).
+        Continua sendo sorteio: nenhum ovo garante um resultado específico.
+      </p>
+      <div className="guide-bands guide-egg-table">
+        <div className="guide-band guide-egg-head">
+          <span className="gb-name">Tier de brilho</span>
+          <span className="gb-range mono">Comum</span>
+          <span className="gb-range mono">Raro</span>
+          <span className="gb-range mono">Lendário</span>
+        </div>
+        {EGG_ODDS.map((row) => (
+          <div className="guide-band guide-egg-row" key={row.tier}>
+            <span className="gb-name">{row.tier}</span>
+            <span className="gb-range mono">{row.common}</span>
+            <span className="gb-range mono">{row.rare}</span>
+            <span className="gb-range mono">{row.legendary}</span>
+          </div>
+        ))}
+      </div>
+      <p className="faint guide-foot">
+        Preço: Ovo Comum 8💎, Ovo Raro 30💎, Ovo Lendário 90💎.
       </p>
 
       <p className="faint guide-foot">Abra qualquer peixe para ver o detalhamento “por que é raro”.</p>

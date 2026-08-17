@@ -8,6 +8,20 @@ namespace Vivarium.Core.Generation;
 public static class TraitGenerator
 {
     public static CreatureTraits Generate(long seed, int configVersion = TraitConfigV1.Version)
+        => Generate(seed, 0, configVersion);
+
+    /// <summary>
+    /// Ovo de peixe (BACKLOG.md #3, 17/08/2026): mesma geração fresca de sempre, com viés de
+    /// raridade aplicado aos mesmos 7 slots que já usam <see cref="WeightedTable.PickBiasedTowardRare"/>
+    /// no piso de mutação do breeding (tier de brilho + cor/padrão de cauda/dorsal/peitoral) —
+    /// reaproveita o mecanismo existente em vez de inventar um novo. Sub-traits de padrão
+    /// (cor/tamanho/opacidade do padrão, movimento) continuam sem viés, mesma filosofia de sempre
+    /// (só os traits "grandes" que dominam o rarity score são viesados).
+    /// </summary>
+    public static CreatureTraits GenerateBiased(long seed, double biasStrength, int configVersion = TraitConfigV1.Version)
+        => Generate(seed, biasStrength, configVersion);
+
+    private static CreatureTraits Generate(long seed, double biasStrength, int configVersion)
     {
         // Só lança pra uma versão MAIOR que a atual (dado corrompido/impossível — não pode vir
         // "do futuro"). Versão igual ou anterior sempre usa a config atual, sem erro: só existe
@@ -22,7 +36,9 @@ public static class TraitGenerator
         double score = 0;
 
         // Corpo é a área de destaque: contribuição do tier multiplicada por ShimmerScoreWeight.
-        var (tier, tierP) = WeightedTable.Pick(TraitConfigV1.ShimmerTiers, DeterministicHash.Roll01(seed, "body_shimmer"));
+        // biasStrength=0 é byte-idêntico a WeightedTable.Pick (PickBiasedTowardRare já cai nesse
+        // caso internamente) — Generate(seed, configVersion) nunca muda de comportamento.
+        var (tier, tierP) = WeightedTable.PickBiasedTowardRare(TraitConfigV1.ShimmerTiers, DeterministicHash.Roll01(seed, "body_shimmer"), biasStrength);
         score += TraitConfigV1.ShimmerScoreWeight * SelfInformation(tierP);
 
         ShimmerColor? shimmerColor = null;
@@ -43,9 +59,9 @@ public static class TraitGenerator
             : null;
         var partColorTable = ApplyCorrelation(TraitConfigV1.PartColors, boosted);
 
-        var tail = GeneratePart(seed, "tail", partColorTable, ref score);
-        var dorsal = GeneratePart(seed, "dorsal", partColorTable, ref score);
-        var pectoral = GeneratePart(seed, "pectoral", partColorTable, ref score);
+        var tail = GeneratePart(seed, "tail", partColorTable, biasStrength, ref score);
+        var dorsal = GeneratePart(seed, "dorsal", partColorTable, biasStrength, ref score);
+        var pectoral = GeneratePart(seed, "pectoral", partColorTable, biasStrength, ref score);
 
         // Bônus de conjunto coeso: mesmo padrão (≠None) / mesma cor entre as partes.
         score += SetBonus(tail, dorsal, pectoral);
@@ -499,12 +515,12 @@ public static class TraitGenerator
     }
 
     private static PartTraits GeneratePart(
-        long seed, string partSalt, IReadOnlyList<WeightedValue<PartColor>> colorTable, ref double score)
+        long seed, string partSalt, IReadOnlyList<WeightedValue<PartColor>> colorTable, double biasStrength, ref double score)
     {
-        var (color, colorP) = WeightedTable.Pick(colorTable, DeterministicHash.Roll01(seed, partSalt + "_color"));
+        var (color, colorP) = WeightedTable.PickBiasedTowardRare(colorTable, DeterministicHash.Roll01(seed, partSalt + "_color"), biasStrength);
         score += SelfInformation(colorP);
 
-        var (pattern, patternP) = WeightedTable.Pick(TraitConfigV1.PatternTypes, DeterministicHash.Roll01(seed, partSalt + "_pattern"));
+        var (pattern, patternP) = WeightedTable.PickBiasedTowardRare(TraitConfigV1.PatternTypes, DeterministicHash.Roll01(seed, partSalt + "_pattern"), biasStrength);
         score += SelfInformation(patternP);
 
         if (pattern == PatternType.None)

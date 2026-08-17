@@ -31,22 +31,9 @@ A comissão em si (crédito de 10% + um `TransactionType.ReferralCommission` nov
 
 ---
 
-## 3. Ovo de peixe (loot box em diamante) (16/08/2026)
+## ~~3. Ovo de peixe (loot box em diamante)~~ — IMPLEMENTADO (17/08/2026)
 
-**O quê:** item comprado em diamante que entrega um peixe aleatório, com chance melhorada de atributos de alta raridade de acordo com o tier do item comprado.
-
-**Decisão já tomada:** metáfora "ovo de peixe", não "baú" — mais coerente com o tema aquário/genética do jogo (peixe nasce de ovo, não de tesouro), e alinhado com o sistema de raridade genética já existente.
-
-**Mecanismo reusável já existente (confirmado no código):** `WeightedTable.PickBiasedTowardRare<T>` (`Vivarium.Core/Generation/WeightedValue.cs`, linhas 130-156) já existe e já vieza um sorteio pro lado raro — hoje só é usado dentro da mutação do breeding (`TraitGenerator.BreedTraits`/`InheritOrMutate`). É exatamente o mecanismo pronto pra qualquer "loot" com odds melhoradas — cada tier de ovo passaria um `biasStrength` diferente.
-
-**A fazer quando implementar:** `TraitGenerator.Generate(seed, configVersion)` hoje sempre usa `WeightedTable.Pick` puro (sem bias). Precisa de uma variante (ex: `GenerateBiased(seed, biasStrength)`, ou um parâmetro opcional em `Generate`) que aplica o bias pelo menos no tier de shimmer (e possivelmente também cor/padrão das partes).
-
-**Decisões em aberto:**
-- Quantos tiers de ovo (ex: Comum/Raro/Lendário, preço em diamante crescente por tier)?
-- O peixe entregue vai pra Caixa de Entrada (consistente com Mercado/Transferência, `CLAUDE.md §7.19`) ou direto pro tanque/mochila como a coleta normal da fila?
-- `ItemService.BuyAsync` hoje é feito pra itens permanentes/consumíveis de manutenção (filtro, upgrade de tanque, sensor) — "abrir e gerar um peixe na hora" é um tipo de compra diferente (gera uma entidade nova, não só aplica um efeito num habitat). Pode precisar de um `ItemCategory` novo (`Egg`) tratado à parte no switch de `BuyAsync`, ou um endpoint dedicado em vez de reusar `/api/items/{key}/buy`.
-
-**Bloqueios:** nenhum técnico — diamante (premium) já existe como moeda e já pode ser ganho por outras vias (VIP, admin). O apelo comercial pleno da feature (jogador comprando diamante de verdade pra abrir ovos) depende do mesmo gap de processador de pagamento da feature 2, mas a mecânica em si já pode ser implementada e teria uso real (premium ganho de outras formas).
+Ver `CLAUDE.md §7.9` (itens) e `§7.6` (schema/motor). Preços/vieses iniciais (Comum 8💎/bias 0.15, Raro 30💎/bias 0.35, Lendário 90💎/bias 0.55) são um ponto de partida — recalibrar com uso real como qualquer outro sistema econômico do jogo.
 
 ---
 

@@ -22,7 +22,7 @@ O peixe é composto por 4 camadas visuais independentes, renderizadas sobre um c
 - **Nadadeira dorsal**
 - **Nadadeira peitoral**
 
-Cada peixe nasce com um **seed único e imutável**. Todo trait visual é derivado desse seed via hash determinístico no nascimento e depois **congelado** (ver §6/§7.19.2) — o mesmo peixe sempre renderiza igual, e só o seed + species + o JSON de traits já resolvido precisam ser persistidos.
+Cada peixe nasce com um **seed único e imutável**. Todo trait visual é derivado desse seed via hash determinístico no nascimento e depois **congelado** (ver §6) — o mesmo peixe sempre renderiza igual, e só o seed + species + o JSON de traits já resolvido precisam ser persistidos.
 
 ---
 
@@ -98,7 +98,7 @@ Se o corpo saiu em Tier 2, 3 ou 4, a tabela de peso de cor das partes é ajustad
 RarityScore = -log10(P_corpo × P_cauda × P_dorsal × P_peitoral × P_tamanho_extremo × P_opacidade_extremo)
 ```
 
-Onde cada `P_x` é a probabilidade (peso/100) do valor sorteado naquele trait. Calculado uma vez na criação do peixe e **congelado** no banco (§7.19.2) — nunca mais recalculado do zero.
+Onde cada `P_x` é a probabilidade (peso/100) do valor sorteado naquele trait. Calculado uma vez na criação do peixe e **congelado** no banco (§6) — nunca mais recalculado do zero.
 
 **Faixas de exibição ao jogador (vigentes hoje):**
 - Comum: score < 5.45
@@ -156,7 +156,7 @@ long Hash(long seed, string salt)
 
 **Mecanismo oficial de extensão:** adicionar um trait novo = adicionar um `salt` novo. Como cada trait deriva de `Hash(seed, salt)` isolado, incluir um trait não muda nenhum trait existente. Se o trait novo não entrar no rarity score (ou entrar só nos extremos, com peso), os scores de peixes existentes também não mudam. Só bumpar `TraitConfigVersion` quando **mudar pesos/algoritmo de um trait já existente**, não ao adicionar trait novo.
 
-**Estado atual do versionamento:** desde que os traits passaram a ser congelados no nascimento (§7.19.2), o motor não recalcula mais traits de peixes existentes a partir do `Seed` — `TraitConfigVersion` é hoje só um campo de auditoria (o gap histórico de versionamento nunca corrigido de verdade, que causava `RarityScore` desatualizado a cada rebalanceamento, está documentado em `HISTORY.md §7`). **Lição operacional que continua valendo:** depois de qualquer mudança que altere pesos/algoritmo de um trait já existente, rodar `dotnet run --project tools/Vivarium.AdminReset -- backfill-traits` em produção antes de considerar a mudança concluída, e rodar de novo **depois** do deploy do backend terminar (a janela entre migration e o backend novo subir pode criar peixes com `TraitsJson` nulo — achado real em `HISTORY.md §7.22.1`).
+**Estado atual do versionamento:** desde que os traits passaram a ser congelados no nascimento (§6), o motor não recalcula mais traits de peixes existentes a partir do `Seed` — `TraitConfigVersion` é hoje só um campo de auditoria (o gap histórico de versionamento nunca corrigido de verdade, que causava `RarityScore` desatualizado a cada rebalanceamento, está documentado em `HISTORY.md §7`). **Lição operacional que continua valendo:** depois de qualquer mudança que altere pesos/algoritmo de um trait já existente, rodar `dotnet run --project tools/Vivarium.AdminReset -- backfill-traits` em produção antes de considerar a mudança concluída, e rodar de novo **depois** do deploy do backend terminar (a janela entre migration e o backend novo subir pode criar peixes com `TraitsJson` nulo — achado real em `HISTORY.md §8.22.1`).
 
 ---
 
@@ -242,7 +242,7 @@ Sink de soft (custo dinâmico) + sink de tempo (pais fora do tanque durante a ge
 - **Piso de mutação:** quando um trait sofre mutação, o resultado nunca pode ficar mais comum que o pai mais fraco dos dois — `floorWeight = max(peso do valor do pai A, peso do valor do pai B)` restringe a tabela antes de sortear (`WeightedTable.Restrict` + `PickBiasedTowardRare`, `MutationRarityBiasStrength=0.15`). Auto-limitado: quando o pai mais fraco já é o valor mais comum da tabela, a regra não muda nada.
   - **Não garante score TOTAL do filhote ≥ pai mais fraco** — a garantia é só POR TRAIT; herança independente por slot pode perder o bônus de conjunto coeso que os pais tinham (ver `HISTORY.md §8.8`, "filhote de elite").
 - **Mutação:** `MutationChance = 0.04`.
-- **Sem mecanismo de avô** — removido por completo em 13/08/2026 quando os traits passaram a ser congelados no nascimento (§7.19.2); `BreedTraits` lê o `TraitsJson` real do pai direto, sem limite de profundidade de reconstrução (ver `HISTORY.md §8.8` pra a história completa do mecanismo removido).
+- **Sem mecanismo de avô** — removido por completo em 13/08/2026 quando os traits passaram a ser congelados no nascimento (§6); `BreedTraits` lê o `TraitsJson` real do pai direto, sem limite de profundidade de reconstrução (ver `HISTORY.md §8.8` pra a história completa do mecanismo removido).
 - **Prévia sem compromisso:** `GET /api/breeding/quote` — custo, gestação, `ChildTierDistribution`, `BreedCount`/risco de cada pai, sem gastar nada.
 - **Revelação clique-a-clique (Raro+):** `CollectCelebration` monta o peixe camada por camada a cada clique (corpo→brilho→cauda→dorsal→peitoral), raridade escondida até a última parte (`FishCanvas` prop `revealStep`). Aplica na coleta do tanque e no Ninho.
 - **Despedida do pai perdido:** se um pai não sobrevive, `CollectCelebration` mostra retrato em cinza + animação de entrada, separado do resto por linha divisória.
@@ -258,7 +258,7 @@ Sink de soft (custo dinâmico) + sink de tempo (pais fora do tanque durante a ge
 - **Cascudo:** peixe futuro (não item de loja) que ajudaria na limpeza passiva — hook comentado em `GameService.ApplyTickAsync`, sem implementação. O filtro automático (item comprado) já cobre a função equivalente hoje.
 - **Fusão de peixes:** cogitada e adiada — risco de canibalizar o sink de breeding se virar caminho determinístico/sem risco pra subir de raridade.
 - **Comentários no aquário visitado:** ver §7.16 — precisa de moderação básica antes de ir pra produção.
-- **Backlog de ideias novas ainda não implementadas** (notificação de venda no Mercado, link de indicação, ovo de peixe/loot box, redesenho da recompensa diária, rate limiting de login/forgot-password): ver `BACKLOG.md`.
+- **Backlog de ideias novas ainda não implementadas** (link de indicação, redesenho da recompensa diária, rate limiting de login/forgot-password): ver `BACKLOG.md`.
 
 ### 7.10 Recompensa diária
 
@@ -332,6 +332,18 @@ Editar email/senha a partir do ícone de conta + fluxo completo de redefinição
 - **Token de reset:** 32 bytes aleatórios, só o hash SHA256 fica no banco, expira em 1h, pedir de novo invalida o anterior. Resposta de "esqueci a senha" nunca revela se o email existe (anti-enumeração).
 - Endpoints: `POST /api/auth/forgot-password`, `POST /api/auth/reset-password`, `PUT /api/account/email`, `PUT /api/account/password` (sempre exigem senha atual).
 - Frontend sem router: link do email (`?resetToken=...`) checado direto em `App.jsx` via `URLSearchParams`.
+
+### 7.21 Ovo de peixe (loot box em diamante)
+
+Item consumível pago em premium (💎) que gera 1 peixe na hora, com viés de raridade — reaproveita `WeightedTable.PickBiasedTowardRare` (mesmo mecanismo já usado no piso de mutação do breeding, §7.8) em vez de inventar um sorteio novo.
+
+- **Motor:** `TraitGenerator.GenerateBiased(seed, biasStrength, configVersion)` — mesma geração fresca de `Generate`, mas aplica o bias aos mesmos 7 slots que já têm viés de raridade no breeding (tier de brilho + cor/padrão de cauda/dorsal/peitoral). `biasStrength=0` é byte-idêntico a `Generate(seed)` (nenhuma mudança de comportamento pra quem já chama sem viés — confirmado por teste). `CreatureCollector.CollectBiased` é o wrapper de coleta equivalente (sem o mecanismo de "desvantagem" da água suja, que não faz sentido numa compra deliberada).
+- **3 tiers** (`ItemCategory.Egg`, `ItemEffect.EggBiasStrength` lido do `EffectJson`): Ovo Comum (8💎, bias 0.15), Ovo Raro (30💎, bias 0.35), Ovo Lendário (90💎, bias 0.55). Preços/vieses iniciais — a recalibrar com uso real, mesmo espírito de todo outro sistema econômico do jogo.
+- **Multiplicador real de chance vs. coleta normal, medido empiricamente** (`dotnet run --project tools/Vivarium.Simulation -- eggodds`, 3M seeds por tier — não confiar só na fórmula, o rescale de `PickBiasedTowardRare` não é intuitivo): chance de sair **Lendário** sobe **3,2×** (Comum), **14,9×** (Raro), **63,4×** (Lendário — de 1 em 5.000 pra ~1 em 80). Tabela completa (todos os tiers de brilho × todos os tiers de ovo) espelhada no Guia de Raridade (`RarityGuide.jsx`, `EGG_ODDS`) e nas descrições da Loja (`StoreView.jsx`) — **os números aparecem pro jogador**, não só a fórmula interna (1ª versão da feature só tinha adjetivo vago tipo "chance melhorada", sem número; corrigido no mesmo dia a pedido do usuário, que perguntou explicitamente pelo multiplicador real).
+- **Entrega direta** (não pela Caixa de Entrada) — mesma regra "direto, como a fila normal" da coleta manual: `ItemService.BuyAsync` gera o peixe e chama `game.TryPlaceAsync` ANTES de debitar qualquer coisa; se não houver espaço no tanque nem na mochila, a compra é bloqueada sem custar nada.
+- **Moeda:** `ItemService.BuyAsync` agora resolve a moeda por categoria (`Egg`→PREMIUM, resto→SOFT) em vez de sempre assumir SOFT — generalização pequena que abre caminho pra qualquer item futuro pago em premium.
+- **Frontend:** card na Loja com preço em 💎 (em vez de `<Coin/>`), botão desabilitado sem saldo premium suficiente. Raro+ abre a mesma `CollectCelebration` (revelação clique-a-clique) da coleta normal — mesmo corte de `BANDS` usado no Tanque; Comum/Incomum só um toast.
+- Endpoint: reusa `POST /api/items/{key}/buy` (resposta ganhou um campo `creature`, presente só quando o item comprado gera um peixe).
 
 ---
 
@@ -443,6 +455,7 @@ CreatureInstance
 - ParentBId (FK -> CreatureInstance, nullable)
 - ParentASeed (bigint, nullable) -- histórico/auditoria
 - ParentBSeed (bigint, nullable)
+- ParentAGrandparentASeed/BSeed, ParentBGrandparentASeed/BSeed (bigint, nullable) -- histórico/auditoria; o mecanismo que os usava funcionalmente (puxar traço de avô) foi removido em 13/08/2026 (motor não lê mais esses campos, só a auditoria)
 - BreedCount (int, default 0)
 - LastBredAt (datetime, nullable)
 - IsDead (bool, default false)
@@ -555,7 +568,7 @@ Esse nível de desacoplamento (`Habitat` genérico, `CurrencyType` como tabela) 
 
 **Publicado e funcionando:** backend no Oracle Cloud (`https://vivarium-online.duckdns.org`, Docker Compose api+caddy, TLS via DuckDNS+Let's Encrypt); frontend no Cloudflare Pages/Workers (`https://vivarium.marcospdnnogueira.workers.dev`, auto-deploy a cada push em master). VM protegida (só chave SSH ed25519, senha desabilitada, fail2ban, firewall 22/80/443). **Deploy do backend NÃO é automático** — exige SSH+pull+rebuild manual; sempre conferir o commit rodando antes de assumir que um fix já está no ar.
 
-**Implementado (motor central + loop completo):** geração seed→traits com traits congelados no nascimento (§6/§7.19.2), backend completo (auth JWT, tick lazy, mercado, loja, transferência, ServiceResult), breeding com todos os mecanismos vigentes (§7.8), mochila, recompensa diária, anti-rush + premium, venda ao vendor, painel de admin, faixas de capacidade + filtros em nível, ranking + visita, limpeza automática VIP + sensor de água, opt-out de automação VIP, Caixa de Entrada, VIP (pacotes de dias em premium, sem renovação automática), perfil + esqueci senha (Resend).
+**Implementado (motor central + loop completo):** geração seed→traits com traits congelados no nascimento (§6), backend completo (auth JWT, tick lazy, mercado, loja, transferência, ServiceResult), breeding com todos os mecanismos vigentes (§7.8), mochila, recompensa diária, anti-rush + premium, venda ao vendor, painel de admin, faixas de capacidade + filtros em nível, ranking + visita, limpeza automática VIP + sensor de água, opt-out de automação VIP, Caixa de Entrada, VIP (pacotes de dias em premium, sem renovação automática), perfil + esqueci senha (Resend).
 
 **Pendente / gaps reais, não escondidos:**
 - ⏳ Tornar o repositório GitHub privado antes do lançamento oficial (hoje é público).
@@ -619,7 +632,7 @@ Esse nível de desacoplamento (`Habitat` genérico, `CurrencyType` como tabela) 
 | POST | `/api/inbox/mark-all-read` | ✓ | marca tudo como lido |
 | POST | `/api/inbox/clear-claimed` | ✓ | apaga entradas já resgatadas |
 
-**Itens do MVP:** `filter_basic` (20 soft), `auto_filter`/`auto_filter_2`/`auto_filter_3` (níveis, §7.15), `tank_upgrade`/`aquario_grande`/`aquario_master` (§7.15), `water_sensor` (§7.17).
+**Itens do MVP:** `filter_basic` (20 soft), `auto_filter`/`auto_filter_2`/`auto_filter_3` (níveis, §7.15), `tank_upgrade`/`aquario_grande`/`aquario_master` (§7.15), `water_sensor` (§7.17), `egg_common`/`egg_rare`/`egg_legendary` (premium, §7.21).
 
 **Testes de integração** (`tests/Vivarium.Api.Tests`): API completa via `WebApplicationFactory` contra SQLite in-memory.
 
@@ -654,6 +667,6 @@ Esse nível de desacoplamento (`Habitat` genérico, `CurrencyType` como tabela) 
   - **E2E (Cypress):** `frontend/cypress/e2e/*.cy.js` — builda produção (`vite preview`), mocka toda a API via `cy.intercept` (fixtures em `cypress/fixtures/`). Rodar: `npm run e2e` / `npm run cypress:open`.
   - CI roda os dois. **Lição de preferência do usuário:** rodar `npm test`/`npm run e2e` em vez de validar UI manualmente ou abrir Chrome — mas sempre perguntar antes de rodar a suíte completa (usuário pode já ter validado manualmente).
 - `tests/Vivarium.Core.Tests` — xUnit
-- `tools/Vivarium.Simulation` — console de validação estatística (`dotnet run --project tools/Vivarium.Simulation [N]`); modos `dump`, `economy`, `breed`, `simulate`, `mutationfloor`
+- `tools/Vivarium.Simulation` — console de validação estatística (`dotnet run --project tools/Vivarium.Simulation [N]`); modos `dump`, `economy`, `breed`, `simulate`, `mutationfloor`, `eggodds` (§7.21)
 - `tools/Vivarium.AdminReset` — ferramentas administrativas de produção: `backfill-traits`, `audit-ancestry`, `band-distribution`, `tank-income <email>`
 - `prototype/fish-composer.html` — protótipo visual standalone (Canvas)

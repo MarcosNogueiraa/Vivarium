@@ -8,6 +8,12 @@ using Vivarium.Core.Generation;
 // Modo alternativo: `dump [N]` imprime traits em formato canônico (1 linha por seed),
 // usado pra verificar que ports do motor (ex: o JS do protótipo Canvas) batem com o C#.
 
+if (args.Length >= 1 && args[0] == "eggodds")
+{
+    Vivarium.Simulation.EggOddsScratch.Run();
+    return;
+}
+
 if (args.Length >= 1 && args[0] == "dump")
 {
     int count = args.Length > 1 && int.TryParse(args[1], out var c) ? c : 1000;

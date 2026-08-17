@@ -22,6 +22,39 @@ public class TraitGeneratorTests
     }
 
     [Fact]
+    public void GenerateBiased_ComBiasZero_EIdenticoAGenerateSemVies()
+    {
+        // biasStrength=0 precisa ser byte-idêntico a Generate(seed) — PickBiasedTowardRare já
+        // cai em WeightedTable.Pick internamente quando bias<=0 (ver WeightedValue.cs).
+        for (long seed = 1; seed <= 200; seed++)
+            Assert.Equal(TraitGenerator.Generate(seed), TraitGenerator.GenerateBiased(seed, 0));
+    }
+
+    [Fact]
+    public void GenerateBiased_AumentaRarityScoreMedio_QuantoMaiorOVies()
+    {
+        // Ovo de peixe (BACKLOG.md #3) — cada tier de viés precisa render em média mais raro que
+        // o anterior. Amostra grande o bastante pra não depender de sorte de um seed específico.
+        const int sampleSize = 20_000;
+        double baseline = MeanScore(0, sampleSize);
+        double comum = MeanScore(0.15, sampleSize);
+        double raro = MeanScore(0.35, sampleSize);
+        double lendario = MeanScore(0.55, sampleSize);
+
+        Assert.True(comum > baseline, $"Ovo Comum ({comum}) deveria render mais que sem viés ({baseline})");
+        Assert.True(raro > comum, $"Ovo Raro ({raro}) deveria render mais que Ovo Comum ({comum})");
+        Assert.True(lendario > raro, $"Ovo Lendário ({lendario}) deveria render mais que Ovo Raro ({raro})");
+
+        static double MeanScore(double bias, int n)
+        {
+            double sum = 0;
+            for (long seed = 1; seed <= n; seed++)
+                sum += TraitGenerator.GenerateBiased(seed * 7919 + 13, bias).RarityScore;
+            return sum / n;
+        }
+    }
+
+    [Fact]
     public void CorpoSemBrilho_NaoTemCorNemOpacidade()
     {
         var semBrilho = ManySeeds().Select(s => TraitGenerator.Generate(s))

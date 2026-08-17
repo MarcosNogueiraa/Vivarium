@@ -89,4 +89,37 @@ describe("Loja", () => {
     cy.wait("@buyFail");
     cy.contains("Saldo de moeda soft insuficiente");
   });
+
+  const eggItems = [
+    ...items,
+    { key: "egg_common", name: "Ovo Comum", price: 8, owned: false, locked: false, currency: "PREMIUM" },
+  ];
+
+  it("ovo: mostra preço em diamante e desabilita o botão sem saldo premium", () => {
+    cy.intercept("GET", "/api/items/", { body: eggItems }).as("items");
+    login({ maintenanceLevel: 40 }); // wallet.PREMIUM = 0 (tank-empty.json)
+    cy.wait("@items");
+
+    cy.contains(".card", "Ovo Comum").within(() => {
+      cy.contains("💎8");
+      cy.get("button.btn-primary").should("be.disabled");
+    });
+  });
+
+  it("ovo: compra gera peixe e mostra a raridade sem abrir celebração pra Comum/Incomum", () => {
+    cy.intercept("GET", "/api/items/", { body: eggItems }).as("items");
+    login({ maintenanceLevel: 40, wallet: { SOFT: 100, PREMIUM: 50 } });
+    cy.wait("@items");
+
+    cy.intercept("POST", "/api/items/egg_common/buy", {
+      statusCode: 200,
+      body: { paid: 8, creature: { id: 999, rarityScore: 3, traits: {} } },
+    }).as("buyEgg");
+    cy.intercept("GET", "/api/game/tank", { fixture: "tank-empty.json" }).as("tankAfter");
+
+    cy.contains(".card", "Ovo Comum").contains("button", "Comprar").click();
+    cy.wait("@buyEgg");
+    cy.contains("Ovo Comum: Comum!");
+    cy.get(".celebrate").should("not.exist");
+  });
 });

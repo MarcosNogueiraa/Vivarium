@@ -205,6 +205,29 @@ public class VivariumDbContext(DbContextOptions<VivariumDbContext> options) : Db
                     Id = 8, Key = "water_sensor", Name = "Sensor de Qualidade da Água",
                     Category = ItemCategory.WaterSensor,
                     EffectJson = "{}", PriceSoft = 800m,
+                },
+                new ItemDefinition
+                {
+                    // Ovo de peixe (BACKLOG.md #3, 17/08/2026) — consumível pago em premium, gera
+                    // 1 peixe na hora (ItemService.BuyAsync) com viés de raridade aplicado aos 7
+                    // slots que já usam PickBiasedTowardRare no piso de mutação do breeding (tier
+                    // de brilho + cor/padrão das 3 partes). Preços/vieses iniciais, a recalibrar
+                    // com uso real — mesmo espírito de todo outro sistema econômico do jogo.
+                    Id = 9, Key = "egg_common", Name = "Ovo Comum",
+                    Category = ItemCategory.Egg,
+                    EffectJson = """{"eggBiasStrength":0.15}""", PriceSoft = 0m, PricePremium = 8m,
+                },
+                new ItemDefinition
+                {
+                    Id = 10, Key = "egg_rare", Name = "Ovo Raro",
+                    Category = ItemCategory.Egg,
+                    EffectJson = """{"eggBiasStrength":0.35}""", PriceSoft = 0m, PricePremium = 30m,
+                },
+                new ItemDefinition
+                {
+                    Id = 11, Key = "egg_legendary", Name = "Ovo Lendário",
+                    Category = ItemCategory.Egg,
+                    EffectJson = """{"eggBiasStrength":0.55}""", PriceSoft = 0m, PricePremium = 90m,
                 });
         });
 

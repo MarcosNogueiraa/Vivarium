@@ -5,6 +5,7 @@ using Vivarium.Api.Data;
 using Vivarium.Api.Http;
 using Vivarium.Core.Domain;
 using Vivarium.Core.Gameplay;
+using Vivarium.Core.Generation;
 
 namespace Vivarium.Api.Services;
 
@@ -34,6 +35,11 @@ public class ItemService(VivariumDbContext db, GameService game)
                 {
                     var (price, owned, locked, reason) = WaterSensorState(habitat);
                     return new ItemDto(i.Key, i.Name, i.Category.ToString(), price, owned, locked, reason);
+                }
+                if (i.Category == ItemCategory.Egg)
+                {
+                    // Consumível, nunca "possuído" — sempre comprável de novo, preço em premium.
+                    return new ItemDto(i.Key, i.Name, i.Category.ToString(), i.PricePremium ?? 0m, false, Currency: "PREMIUM");
                 }
                 return new ItemDto(i.Key, i.Name, i.Category.ToString(), i.PriceSoft, ownedIds.Contains(i.Id));
             })
@@ -72,16 +78,45 @@ public class ItemService(VivariumDbContext db, GameService game)
             if (owned) return ServiceResult.Bad("Você já tem o Sensor de Qualidade da Água");
             price = sensorPrice;
         }
+        else if (item.Category == ItemCategory.Egg)
+        {
+            price = item.PricePremium ?? 0m;
+        }
         else
         {
             price = item.PriceSoft;
         }
 
+        // Ovo de peixe (BACKLOG.md #3, 17/08/2026): gera o peixe ANTES de mexer em carteira —
+        // se não houver espaço no tanque/mochila, a compra é bloqueada sem debitar nada (mesma
+        // regra "direto, como a fila normal" já usada na coleta manual, CLAUDE.md §7.1/§7.7).
+        // A geração em si não tem efeito colateral (só cria o objeto em memória; só entra no
+        // change tracker via db.CreatureInstances.Add mais abaixo, depois do pagamento).
+        CreatureInstance? eggCreature = null;
+        if (item.Category == ItemCategory.Egg)
+        {
+            double biasStrength = ItemEffect.Parse(item.EffectJson).EggBiasStrength ?? 0;
+            var collected = CreatureCollector.CollectBiased(biasStrength, CreatureCollector.NewRandomSeed);
+            int speciesId = await db.Species
+                .Where(s => s.HabitatTypeId == habitat.HabitatTypeId).Select(s => s.Id).FirstAsync();
+            eggCreature = new CreatureInstance
+            {
+                SpeciesId = speciesId, OwnerId = userId, OriginalOwnerId = userId,
+                Seed = collected.Seed, TraitConfigVersion = collected.TraitConfigVersion,
+                RarityScore = collected.RarityScore,
+                TraitsJson = TraitsSerialization.Serialize(collected.Traits),
+                CreatedAt = now,
+            };
+            if (!await game.TryPlaceAsync(eggCreature, habitat))
+                return ServiceResult.Bad("Tanque e mochila cheios — libere espaço antes de comprar um ovo.");
+        }
+
         // Tick antes: a degradação pendente é aplicada antes de restaurar/pagar
         await game.ApplyTickAsync(habitat, now);
 
-        int softId = await db.CurrencyTypes.Where(c => c.Code == "SOFT").Select(c => c.Id).FirstAsync();
-        var wallet = await db.WalletBalances.FirstAsync(w => w.UserId == userId && w.CurrencyTypeId == softId);
+        string currencyCode = item.Category == ItemCategory.Egg ? "PREMIUM" : "SOFT";
+        int currencyId = await db.CurrencyTypes.Where(c => c.Code == currencyCode).Select(c => c.Id).FirstAsync();
+        var wallet = await db.WalletBalances.FirstAsync(w => w.UserId == userId && w.CurrencyTypeId == currencyId);
         if (wallet.Amount < price)
             return ServiceResult.Bad("Saldo insuficiente");
         wallet.Amount -= price;
@@ -103,6 +138,9 @@ public class ItemService(VivariumDbContext db, GameService game)
             case ItemCategory.WaterSensor:
                 habitat.HasWaterSensor = true;
                 break;
+            case ItemCategory.Egg:
+                db.CreatureInstances.Add(eggCreature!);
+                break;
         }
 
         // Compra do jogo = dinheiro sai da economia (sink)
@@ -110,7 +148,7 @@ public class ItemService(VivariumDbContext db, GameService game)
         {
             Type = TransactionType.ItemPurchase,
             FromUserId = userId,
-            CurrencyTypeId = softId,
+            CurrencyTypeId = currencyId,
             Amount = price,
             CreatedAt = now,
         });
@@ -128,6 +166,7 @@ public class ItemService(VivariumDbContext db, GameService game)
             paid = price,
             maintenanceLevel = habitat.MaintenanceLevel,
             capacity = habitat.Capacity,
+            creature = eggCreature is not null ? CreatureDto.From(eggCreature) : null,
         });
     }
 
@@ -179,9 +218,11 @@ public class ItemService(VivariumDbContext db, GameService game)
 /// <summary>
 /// Efeito de um <see cref="ItemDefinition"/>, lido de `EffectJson` (08/08/2026 — antes disso
 /// o campo era decorativo, nunca desserializado). Só os campos relevantes por categoria vêm
-/// preenchidos: `CapacityDelta` (HabitatUpgrade) ou `FilterCapacity` (AutoFilter).
+/// preenchidos: `CapacityDelta` (HabitatUpgrade), `FilterCapacity` (AutoFilter) ou
+/// `EggBiasStrength` (Egg, BACKLOG.md #3, 17/08/2026 — força do viés de raridade repassada pra
+/// <see cref="Vivarium.Core.Gameplay.CreatureCollector.CollectBiased"/>).
 /// </summary>
-public sealed record ItemEffect(int? CapacityDelta, decimal? FilterCapacity)
+public sealed record ItemEffect(int? CapacityDelta, decimal? FilterCapacity, double? EggBiasStrength = null)
 {
     public static ItemEffect Parse(string effectJson)
         => JsonSerializer.Deserialize<ItemEffect>(effectJson, JsonOptions) ?? new ItemEffect(null, null);

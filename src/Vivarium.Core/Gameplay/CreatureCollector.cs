@@ -31,6 +31,16 @@ public static class CreatureCollector
         return new CollectedCreature(seed, configVersion, (decimal)traits.RarityScore, traits);
     }
 
+    /// <summary>Ovo de peixe (BACKLOG.md #3, 17/08/2026) — geração fresca com viés de raridade
+    /// (ver <see cref="TraitGenerator.GenerateBiased"/>), sem o mecanismo de "desvantagem" da
+    /// água suja (não faz sentido pra uma compra deliberada).</summary>
+    public static CollectedCreature CollectBiased(double biasStrength, Func<long> seedSource, int configVersion = TraitConfigV1.Version)
+    {
+        long seed = seedSource();
+        var traits = TraitGenerator.GenerateBiased(seed, biasStrength, configVersion);
+        return new CollectedCreature(seed, configVersion, (decimal)traits.RarityScore, traits);
+    }
+
     /// <summary>Seed aleatório criptográfico, positivo (63 bits), pra uso em produção.</summary>
     public static long NewRandomSeed()
     {

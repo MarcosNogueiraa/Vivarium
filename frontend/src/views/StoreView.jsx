@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.js";
+import { bandOf, BANDS } from "../lib/fishRenderer.js";
 import { Coin } from "../components/Coin.jsx";
 import { ConfirmModal } from "../components/ConfirmModal.jsx";
+import { CollectCelebration } from "../components/CollectCelebration.jsx";
 import { FILTER_WARN_THRESHOLD, tankFishWeight } from "../lib/tankMath.js";
 import { useAutoToggles } from "../hooks/useAutoToggles.js";
 
@@ -14,6 +16,9 @@ const DESCRIPTIONS = {
   aquario_grande: "Troca para um aquário maior, com espaço para 5 a 10 peixes. Preço fixo e alto — é uma conquista de médio prazo, não um upgrade do dia a dia.",
   aquario_master: "Troca para o maior aquário do jogo, com espaço para 10 a 15 peixes. O investimento mais caro disponível.",
   water_sensor: "Permanente, por aquário: dá controle sobre a Limpeza Automática de VIP (veja o card VIP acima) — sem ele, VIP só limpa a água quando ela zera; com ele, você escolhe a partir de qual % isso acontece. Preço sobe se você trocar pra um aquário maior antes de comprar.",
+  egg_common: "Gera 1 peixe na hora, com ~3× mais chance de sair Lendário que a coleta normal. Vai direto pro tanque (ou mochila, se o tanque estiver cheio).",
+  egg_rare: "Gera 1 peixe na hora, com ~15× mais chance de sair Lendário que a coleta normal.",
+  egg_legendary: "Gera 1 peixe na hora, com ~63× mais chance de sair Lendário que a coleta normal (de 1 em 5.000 pra cerca de 1 em 80). Ainda é sorte, não garantia — veja a tabela completa no Guia de Raridade.",
 };
 
 // Ícone + "peso" visual por item — sem isso todo card da loja tinha o mesmo
@@ -27,8 +32,9 @@ const ICONS = {
   aquario_grande: "🐳",
   aquario_master: "👑",
   water_sensor: "🧪",
+  egg_common: "🥚", egg_rare: "🥚", egg_legendary: "🥚",
 };
-const TIERS = { aquario_grande: "rare", aquario_master: "premium" };
+const TIERS = { aquario_grande: "rare", aquario_master: "premium", egg_rare: "rare", egg_legendary: "premium" };
 
 const FILTER_KEYS = ["auto_filter", "auto_filter_2", "auto_filter_3"];
 
@@ -97,6 +103,7 @@ export function StoreView({ tank, refreshTank, notify }) {
   const [warnFilter, setWarnFilter] = useState(false);
   const [vip, setVip] = useState(null);
   const [vipBusy, setVipBusy] = useState(false);
+  const [celebrate, setCelebrate] = useState(null); // peixe raro+ recém-nascido de um ovo
 
   const refresh = useCallback(async () => { setItems(await api.items()); }, []);
   useEffect(() => { refresh().catch((err) => notify(err.message)); }, [refresh, notify]);
@@ -115,9 +122,17 @@ export function StoreView({ tank, refreshTank, notify }) {
   }
 
   async function doBuy(item) {
-    await api.buyItem(item.key);
+    const result = await api.buyItem(item.key);
     setWarnFilter(false);
-    notify(`${item.name} comprado!`);
+    if (result?.creature) {
+      // Raro+ ganha o mesmo momento de celebração da coleta normal (mesmo corte de BANDS);
+      // comum/incomum só um toast — o ovo já é uma compra deliberada, não precisa de suspense
+      // pra um resultado modesto.
+      if (Number(result.creature.rarityScore) >= BANDS[1].max) setCelebrate(result.creature);
+      else notify(`${item.name}: ${bandOf(Number(result.creature.rarityScore)).name}!`);
+    } else {
+      notify(`${item.name} comprado!`);
+    }
     await Promise.all([refresh(), refreshTank()]);
   }
 
@@ -203,14 +218,24 @@ export function StoreView({ tank, refreshTank, notify }) {
             ? <WaterSensorSlider tank={tank} notify={notify} onSaved={refreshTank} />
             : (
               <div className="card-row">
-                <span className="price"><Coin />{Number(item.price).toFixed(0)}</span>
+                <span className="price">
+                  {item.currency === "PREMIUM" ? "💎" : <Coin />}{Number(item.price).toFixed(0)}
+                </span>
                 {item.locked
                   ? <span className="owned">Bloqueado</span>
                   : item.owned
                     ? (item.key === activeFilterKey
                       ? <span className="owned owned-active">Ativo ✓</span>
                       : <span className="owned">{FILTER_KEYS.includes(item.key) ? "Possuído (nível anterior)" : "Adquirido ✓"}</span>)
-                    : <button className="btn-primary" onClick={() => buy(item)}>Comprar</button>}
+                    : (
+                      <button
+                        className="btn-primary" onClick={() => buy(item)}
+                        disabled={item.currency === "PREMIUM" && premiumBalance < item.price}
+                        title={item.currency === "PREMIUM" && premiumBalance < item.price ? "Saldo de moeda premium insuficiente" : undefined}
+                      >
+                        Comprar
+                      </button>
+                    )}
               </div>
             )}
         </div>
@@ -224,6 +249,7 @@ export function StoreView({ tank, refreshTank, notify }) {
           onConfirm={() => doBuy(filterItem)} onClose={() => setWarnFilter(false)}
         />
       )}
+      {celebrate && <CollectCelebration creature={celebrate} onClose={() => setCelebrate(null)} />}
     </div>
   );
 }
