@@ -658,6 +658,8 @@ Esse nível de desacoplamento (`Habitat` genérico, `CurrencyType` como tabela) 
 
 - **Concorrência otimista (`xmin`)** em `Habitat`, `WalletBalance`, `MarketListing`, `CreatureInstance` (condicional a `Database.IsNpgsql()`). Fecha compra dupla, double-list, corrida de preço, double-credit de renda. Endpoints tratam `DbUpdateConcurrencyException` (tick recarrega e segue; ações do usuário retornam 409).
 - **Rate limiting:** global 300/min por usuário/IP + grupo `auth` 10/min por IP. Atrás de proxy: `ForwardedHeaders__Enabled=true` liga `app.UseForwardedHeaders()`.
+- **Lockout de login por conta (18/08/2026, `SecurityConfig.cs`):** 5 senhas erradas seguidas travam a CONTA (não o IP) por 15 min; zera no login bem-sucedido, zera de novo junto com o lockout (não acumula pra sempre). Login com conta travada responde a MESMA mensagem genérica de senha errada — diferenciar vazaria que a conta existe.
+- **Freio de "esqueci minha senha" (18/08/2026):** intervalo mínimo de 5 min entre pedidos pro MESMO email + teto GLOBAL de 80 envios/dia calendário UTC (cota do Resend free tier, sem visibilidade da cota real — piso conservador). Os dois freios são silenciosos: a resposta HTTP continua sempre a mesma mensagem genérica (anti-enumeração), só o email não sai.
 - **Validação:** email via `MailAddress.TryCreate`; username `[A-Za-z0-9_-]`, 3–32.
 - **Deferidos, documentados e não feitos:** JWT sem revogação (validade 7d); taxa de mercado como sink; teto de listagens por usuário; multi-conta (soft sem cash-out limita o dano).
 - **CI:** `.github/workflows/ci.yml` — jobs `backend` (dotnet build+test) e `frontend` (npm ci+build), em push/PR pra master.

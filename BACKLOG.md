@@ -43,22 +43,32 @@ Ver `CLAUDE.md §7.10`. As 4 direções entraram nessa ordem: base = `max(25, co
 
 ---
 
-## 5. Rate limiting de login + limite de uso do "esqueci minha senha" (16/08/2026)
+## ~~5. Rate limiting de login + limite de uso do "esqueci minha senha"~~ — IMPLEMENTADO (18/08/2026)
 
-**O quê:**
-(a) Limitar tentativas de login pra reduzir exposição a força bruta.
-(b) Limitar o uso de "esqueci minha senha" porque o serviço de email (Resend, plano grátis) tem cota diária de envios.
+Ver `CLAUDE.md §11.1`/`SecurityConfig.cs`. Lockout por conta (5 falhas → 15 min, zera no
+sucesso) + freio de forgot-password (5 min entre pedidos por email + teto global de 80/dia)
+— ambos silenciosos, sem alterar a resposta HTTP (anti-enumeração intacta).
 
-**Estado atual confirmado no código:**
-- `Program.cs` (linhas 90-101): rate limit é só por IP (`RateLimiting:AuthPerMinute`, default 10/min, fixed-window, chave = IP da conexão), registrado como policy `"auth"`.
-- `AuthEndpoints.cs` (linha 17): TODO o grupo `/api/auth` (`/register`, `/login`, `/forgot-password`, `/reset-password`) compartilha essa mesma policy — `/forgot-password` não tem nenhum limite adicional além do genérico de 10/min/IP.
-- Não existe lockout POR CONTA após N tentativas de login falhas — nenhum campo tipo `FailedLoginCount`/`LockedUntil` existe no `User` hoje (confirmado via grep, zero resultados).
-- `PasswordResetService.RequestAsync` (linha 25) já tem anti-enumeração (sempre responde igual, exista ou não a conta) e já invalida tokens anteriores não usados ao pedir de novo — mas não tem nenhum teto de VOLUME de envio.
+---
 
-**Decisões em aberto:**
-- **Login:** decidir N (quantas tentativas falhas até travar), duração do lockout, e se o contador reseta no login bem-sucedido ou só depois do lockout expirar. Campo novo no `User`.
-- **Forgot-password:** precisa de um limite mais apertado que o "auth" geral (10/min/IP não impede um usuário de esgotar a cota diária de email só sendo paciente) — duas camadas possíveis, não necessariamente excludentes:
-  - Por conta/email: mínimo de tempo entre pedidos (ex: 1 por 5-10min por email).
-  - Teto diário GLOBAL de emails enviados pelo sistema inteiro (contador simples em banco/cache, já que não há visibilidade direta da cota real do Resend) — precisa bloquear silenciosamente sem quebrar a resposta anti-enumeração já existente (o teto de cota não pode vazar a informação de "atingiu o limite" de um jeito que ajude a enumerar contas).
+## 6. Rever lógica de filtros de limpeza + valores de limpeza conforme o aquário cresce (18/08/2026)
 
-**Bloqueios:** nenhum — pode ser puxada a qualquer momento. É a mais orientada a segurança das 5 (sem incidente reportado até agora, mas antecipatória).
+**O quê:** usuário pediu pra revisitar (a) a lógica dos filtros de limpeza (manual + automático em níveis, §7.15) e (b) os valores/degradação de água conforme a faixa de capacidade do aquário cresce (Aquário → Aquário Grande → Aquário Master).
+
+**Estado atual (referência, CLAUDE.md §7.15/§7.6):** `FilterCapacity` cobre X peixes comuns equivalentes, decai suavemente acima da cobertura (`FilterTaperExponent`); degradação da água já é ponderada por raridade (`DegradationPerFishFactor`) e por `CapacityBand.DegradationBandFactor` por faixa. Não foi registrado AINDA o que especificamente incomoda nesses valores — só o pedido de rever.
+
+**Decisões em aberto:** tudo — precisa de uma conversa específica sobre o que não está funcionando bem (filtro ficando fraco demais/forte demais em qual faixa? progressão de preço dos filtros vs. capacidade não acompanha o crescimento do tanque?) antes de mexer em números.
+
+**Bloqueios:** nenhum.
+
+---
+
+## 7. Níveis do jogador (18/08/2026)
+
+**O quê:** usuário quer discutir um sistema de níveis do JOGADOR (não do peixe/raridade) — mais uma forma de progressão e de comparação com amigos, além do Ranking atual (que hoje só compara raridade/renda do aquário, §7.16).
+
+**Estado atual:** não existe nenhum conceito de "nível de jogador" hoje — `User` não tem XP/nível, só `IsAdmin`/streaks pontuais (recompensa diária).
+
+**Decisões em aberto:** tudo — o que dá XP (coletar? cruzar? tempo de conta? diversidade de raridade?), o que o nível desbloqueia (nada, cosmético, vantagem real?), como aparece no Ranking/perfil. Precisa de conversa específica antes de desenhar.
+
+**Bloqueios:** nenhum.

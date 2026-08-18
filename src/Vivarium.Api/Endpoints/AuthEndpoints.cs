@@ -102,11 +102,34 @@ public static class AuthEndpoints
 
         group.MapPost("/login", async (LoginRequest req, VivariumDbContext db, TokenService tokens) =>
         {
+            var now = DateTime.UtcNow;
             var user = await db.Users.FirstOrDefaultAsync(u =>
                 u.Username == req.UsernameOrEmail || u.Email == req.UsernameOrEmail);
 
-            if (user is null || !PasswordHasher.Verify(req.Password, user.PasswordHash))
+            // Conta travada (BACKLOG.md #5, força bruta) — MESMA mensagem de senha errada;
+            // diferenciar vazaria que a conta existe (mesmo princípio do anti-enumeração já
+            // usado em forgot-password).
+            bool lockedOut = user?.LockedUntil is { } lockedUntil && lockedUntil > now;
+            if (user is null || lockedOut || !PasswordHasher.Verify(req.Password, user.PasswordHash))
+            {
+                if (user is not null && !lockedOut)
+                {
+                    user.FailedLoginCount++;
+                    if (user.FailedLoginCount >= SecurityConfig.LoginMaxFailedAttempts)
+                    {
+                        user.LockedUntil = now.AddMinutes(SecurityConfig.LoginLockoutMinutes);
+                        user.FailedLoginCount = 0; // some com o lockout; não acumula pra sempre
+                    }
+                    await db.SaveChangesAsync();
+                }
                 return ApiError.Unauthorized("Usuário ou senha incorretos");
+            }
+
+            if (user.FailedLoginCount > 0)
+            {
+                user.FailedLoginCount = 0;
+                await db.SaveChangesAsync();
+            }
 
             return Results.Ok(new AuthResponse(user.Id, user.Username, tokens.CreateToken(user)));
         });

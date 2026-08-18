@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
 
 namespace Vivarium.Api.Tests;
 
@@ -93,6 +94,78 @@ public class AuthTests : IClassFixture<VivariumApiFactory>
         var response = await client.GetAsync("/api/game/tank");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Login_CincoSenhasErradasSeguidas_TravaAContaMesmoComSenhaCorreta()
+    {
+        var (_, userId) = await _factory.RegisterAsync("travalogin");
+        var client = _factory.CreateClient();
+
+        for (int i = 0; i < Vivarium.Core.Gameplay.SecurityConfig.LoginMaxFailedAttempts; i++)
+        {
+            var fail = await client.PostAsJsonAsync("/api/auth/login", new
+            {
+                usernameOrEmail = "travalogin", password = "senha-incorreta-x",
+            });
+            Assert.Equal(HttpStatusCode.Unauthorized, fail.StatusCode);
+        }
+
+        // A conta travou — nem com a senha CERTA entra agora, e a mensagem é idêntica à de
+        // senha errada (não pode vazar que a conta existe/está travada).
+        var withCorrectPassword = await client.PostAsJsonAsync("/api/auth/login", new
+        {
+            usernameOrEmail = "travalogin", password = "senha-forte-123",
+        });
+        Assert.Equal(HttpStatusCode.Unauthorized, withCorrectPassword.StatusCode);
+
+        await _factory.WithDbAsync(async db =>
+        {
+            var user = await db.Users.FirstAsync(u => u.Id == userId);
+            Assert.NotNull(user.LockedUntil);
+            Assert.Equal(0, user.FailedLoginCount); // zera junto com o lockout
+        });
+    }
+
+    [Fact]
+    public async Task Login_ContaTravada_DestravaSozinhaDepoisDoLockoutExpirar()
+    {
+        var (_, userId) = await _factory.RegisterAsync("destravalogin");
+        var client = _factory.CreateClient();
+
+        await _factory.WithDbAsync(async db =>
+        {
+            var user = await db.Users.FirstAsync(u => u.Id == userId);
+            user.LockedUntil = DateTime.UtcNow.AddMinutes(-1); // já expirado
+        });
+
+        var response = await client.PostAsJsonAsync("/api/auth/login", new
+        {
+            usernameOrEmail = "destravalogin", password = "senha-forte-123",
+        });
+        response.EnsureSuccessStatusCode();
+    }
+
+    [Fact]
+    public async Task Login_SucessoDepoisDeFalhas_ZeraOContador()
+    {
+        var (_, userId) = await _factory.RegisterAsync("zeracontador");
+        var client = _factory.CreateClient();
+
+        await client.PostAsJsonAsync("/api/auth/login", new { usernameOrEmail = "zeracontador", password = "errada-1" });
+        await client.PostAsJsonAsync("/api/auth/login", new { usernameOrEmail = "zeracontador", password = "errada-2" });
+
+        var ok = await client.PostAsJsonAsync("/api/auth/login", new
+        {
+            usernameOrEmail = "zeracontador", password = "senha-forte-123",
+        });
+        ok.EnsureSuccessStatusCode();
+
+        await _factory.WithDbAsync(async db =>
+        {
+            var user = await db.Users.FirstAsync(u => u.Id == userId);
+            Assert.Equal(0, user.FailedLoginCount);
+        });
     }
 
     public record TankDto(

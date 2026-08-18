@@ -105,15 +105,65 @@ public partial class PasswordResetTests : IClassFixture<VivariumApiFactory>
     [Fact]
     public async Task Esqueci_PedidoDeNovo_InvalidaLinkAnterior()
     {
-        await _factory.RegisterAsync("resetar4");
+        var (_, userId) = await _factory.RegisterAsync("resetar4");
         var anon = _factory.CreateClient();
         await anon.PostAsJsonAsync("/api/auth/forgot-password", new { email = "resetar4@teste.com" });
         string firstToken = ExtractToken(_factory.Emails.Sent.Last(e => e.To == "resetar4@teste.com").Html);
+
+        // Simula o intervalo mínimo (BACKLOG.md #5) já ter passado — sem isso o 2º pedido,
+        // feito na hora, seria silenciosamente ignorado pelo freio anti-cota.
+        await _factory.WithDbAsync(async db =>
+        {
+            var row = await db.PasswordResetTokens.FirstAsync(t => t.UserId == userId);
+            row.CreatedAt = DateTime.UtcNow.AddMinutes(-10);
+        });
 
         await anon.PostAsJsonAsync("/api/auth/forgot-password", new { email = "resetar4@teste.com" });
 
         var response = await anon.PostAsJsonAsync("/api/auth/reset-password", new { token = firstToken, newPassword = "senha-forte-123" });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Esqueci_PedidoRepetidoRapido_NaoMandaEmailNovoAindaAssimRespondeIgual()
+    {
+        await _factory.RegisterAsync("intervalomin");
+        var anon = _factory.CreateClient();
+        await anon.PostAsJsonAsync("/api/auth/forgot-password", new { email = "intervalomin@teste.com" });
+        int afterFirst = _factory.Emails.Sent.Count;
+
+        var second = await anon.PostAsJsonAsync("/api/auth/forgot-password", new { email = "intervalomin@teste.com" });
+
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        Assert.Equal(afterFirst, _factory.Emails.Sent.Count); // segundo pedido rápido demais — nenhum email novo
+    }
+
+    [Fact]
+    public async Task Esqueci_TetoDiarioGlobalAtingido_BloqueiaOutraContaSemMandarEmail()
+    {
+        var (_, enchedorId) = await _factory.RegisterAsync("enchedorteto");
+        await _factory.RegisterAsync("tetoglobal");
+        var anon = _factory.CreateClient();
+
+        // Enche a cota GLOBAL do dia com tokens de outra conta — prova que o teto é do
+        // sistema inteiro, não por usuário (o freio de intervalo mínimo já cobre isso).
+        await _factory.WithDbAsync(async db =>
+        {
+            var now = DateTime.UtcNow;
+            for (int i = 0; i < Vivarium.Core.Gameplay.SecurityConfig.ForgotPasswordDailyGlobalCap; i++)
+            {
+                db.PasswordResetTokens.Add(new Vivarium.Core.Domain.PasswordResetToken
+                {
+                    UserId = enchedorId, TokenHash = $"fake-cap-{i}", ExpiresAt = now.AddHours(1), CreatedAt = now,
+                });
+            }
+        });
+
+        int before = _factory.Emails.Sent.Count;
+        var response = await anon.PostAsJsonAsync("/api/auth/forgot-password", new { email = "tetoglobal@teste.com" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode); // resposta continua igual (anti-enumeração)
+        Assert.Equal(before, _factory.Emails.Sent.Count); // mas nenhum email novo saiu
     }
 }

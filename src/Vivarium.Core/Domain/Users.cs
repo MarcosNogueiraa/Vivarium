@@ -15,6 +15,15 @@ public class User
     public int DailyRewardStreak { get; set; }
     /// <summary>Acesso a ferramentas administrativas (ex: painel /api/admin/*). Não é papel de jogo.</summary>
     public bool IsAdmin { get; set; }
+
+    /// <summary>Tentativas de senha errada seguidas (18/08/2026, BACKLOG.md #5) — zera no
+    /// login bem-sucedido; ao atingir SecurityConfig.LoginMaxFailedAttempts, vira
+    /// LockedUntil e zera de novo (não fica contando pra sempre depois de travar).</summary>
+    public int FailedLoginCount { get; set; }
+    /// <summary>Conta travada até este instante (UTC), nullable = nunca travou. Login
+    /// durante o travamento responde a MESMA mensagem genérica de senha errada — revelar
+    /// "conta travada" separado de "senha errada" vazaria que a conta existe.</summary>
+    public DateTime? LockedUntil { get; set; }
 }
 
 /// <summary>
