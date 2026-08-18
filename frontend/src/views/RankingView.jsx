@@ -199,7 +199,10 @@ export function RankingView({ notify, exitSpectatorSignal }) {
               <div key={`${e.rank}-${e.username}`} className={`leaderboard-row${e.isSelf ? " is-self" : ""}`}>
                 <span className="rank">#{e.rank}</span>
                 <span className="leaderboard-row-avatar">
-                  {e.avatar ? <FishCanvas creature={e.avatar} width={44} /> : null}
+                  {/* Renderiza em resolução bem maior que o box de 44px exibido (CSS força
+                      canvas a 100% do container, ver .leaderboard-row-avatar canvas) — sem
+                      isso ficava borrado em telas retina/alta densidade (pedido do usuário). */}
+                  {e.avatar ? <FishCanvas creature={e.avatar} width={132} /> : null}
                 </span>
                 <span className="username">{e.username}{e.isSelf && " (você)"} <small className="faint">Nv. {e.level}</small></span>
                 <span className="value mono">{active.icon ? active.icon : <Coin />}{active.format(Number(e.value))}<small>{active.suffix}</small></span>
