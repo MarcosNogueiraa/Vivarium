@@ -41,6 +41,12 @@ public class ItemService(VivariumDbContext db, GameService game)
                     // Consumível, nunca "possuído" — sempre comprável de novo, preço em premium.
                     return new ItemDto(i.Key, i.Name, i.Category.ToString(), i.PricePremium ?? 0m, false, Currency: "PREMIUM");
                 }
+                if (i.Category == ItemCategory.Filter)
+                {
+                    // Preço cresce por faixa (18/08/2026) — sem isso, 20 soft virava irrisório
+                    // no Aquário Master enquanto a renda cresce muito mais rápido que isso.
+                    return new ItemDto(i.Key, i.Name, i.Category.ToString(), CapacityBands.BandFor(habitat.Capacity).FilterBasicPrice, false);
+                }
                 return new ItemDto(i.Key, i.Name, i.Category.ToString(), i.PriceSoft, ownedIds.Contains(i.Id));
             })
             .ToList();
@@ -81,6 +87,10 @@ public class ItemService(VivariumDbContext db, GameService game)
         else if (item.Category == ItemCategory.Egg)
         {
             price = item.PricePremium ?? 0m;
+        }
+        else if (item.Category == ItemCategory.Filter)
+        {
+            price = CapacityBands.BandFor(habitat.Capacity).FilterBasicPrice;
         }
         else
         {

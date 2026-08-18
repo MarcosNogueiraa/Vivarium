@@ -92,6 +92,30 @@ public class ItemTests : IClassFixture<VivariumApiFactory>
     }
 
     [Fact]
+    public async Task Filtro_PrecoEscalaComAFaixaDoTanque()
+    {
+        // 18/08/2026, pedido do usuário: "o valor da limpeza de 20 pode crescer com o tanque
+        // maior" — 20 soft ficava irrisório num Aquário Master, onde a renda é bem maior.
+        var (client, userId) = await _factory.RegisterAsync("lojista12");
+        await GiveCurrency(userId, "SOFT", 200m);
+        await _factory.WithDbAsync(async db =>
+        {
+            var habitat = await db.Habitats.FirstAsync(h => h.UserId == userId && h.HabitatType!.Code == "Aquarium");
+            habitat.Capacity = 8; // Aquário Grande (5-10) — FilterBasicPrice = 50
+            habitat.MaintenanceLevel = 30m;
+        });
+
+        var items = await client.GetFromJsonAsync<List<ItemDto>>("/api/items/");
+        Assert.Contains(items!, i => i.Key == "filter_basic" && i.Price == 50m);
+
+        var walletBefore = (await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank"))!.Wallet["SOFT"];
+        (await client.PostAsync("/api/items/filter_basic/buy", null)).EnsureSuccessStatusCode();
+
+        var tank = await client.GetFromJsonAsync<AuthTests.TankDto>("/api/game/tank");
+        Assert.Equal(walletBefore - 50m, tank!.Wallet["SOFT"]);
+    }
+
+    [Fact]
     public async Task ComprarUpgrade_AumentaCapacidadeEPrecoSobe50PorCento()
     {
         var (client, _) = await _factory.RegisterAsync("lojista3");

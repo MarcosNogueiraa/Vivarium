@@ -301,6 +301,7 @@ Conta nova ganha 1 peixe já pronto pra coletar (`ReadyAt=now`) no mesmo `SaveCh
 - **Custo de transição entre faixas:** cobrado ao cruzar o teto de uma faixa — Aquário→Grande 4000 soft, Grande→Master 12000 soft (bem acima da curva suave, gate deliberado).
 - **3 produtos separados na loja:** `tank_upgrade` (curva suave dentro da faixa atual), `aquario_grande`, `aquario_master` (cada um trava/destrava conforme a capacidade atual, nunca recompra).
 - **Filtro em nível, sem penhasco:** `FilterCapacity` (decimal) substitui o binário antigo. Cobertura total reduz degradação pela metade; acima disso, `filterFactor` decai suavemente de volta a 1.0 (`FilterTaperExponent=1.0`), nunca corta abrupto. 3 níveis: `auto_filter` (cobre 5, 500 soft), `auto_filter_2` (cobre 10, 1200 soft), `auto_filter_3` (cobre 18, 2500 soft) — níveis não empilham, o melhor prevalece.
+- **Filtro manual (`filter_basic`) por faixa (18/08/2026):** preço deixou de ser fixo (20 soft sempre) — agora escala com `CapacityBand.FilterBasicPrice`: Aquário 20, Aquário Grande 50, Aquário Master 120 (pedido do usuário: 20 soft ficava irrisório num tanque endgame, onde a renda é bem maior). Mesmo padrão já usado pro `WaterSensorPrice`.
 - **Hook do cascudo:** ver §7.9 — comentário em `GameService.ApplyTickAsync`, sem implementação.
 
 ### 7.16 Ranking global + visita a aquário de outro jogador
@@ -650,7 +651,7 @@ Esse nível de desacoplamento (`Habitat` genérico, `CurrencyType` como tabela) 
 | POST | `/api/inbox/mark-all-read` | ✓ | marca tudo como lido |
 | POST | `/api/inbox/clear-claimed` | ✓ | apaga entradas já resgatadas |
 
-**Itens do MVP:** `filter_basic` (20 soft), `auto_filter`/`auto_filter_2`/`auto_filter_3` (níveis, §7.15), `tank_upgrade`/`aquario_grande`/`aquario_master` (§7.15), `water_sensor` (§7.17), `egg_common`/`egg_rare`/`egg_legendary` (premium, §7.21).
+**Itens do MVP:** `filter_basic` (preço por faixa, §7.15), `auto_filter`/`auto_filter_2`/`auto_filter_3` (níveis, §7.15), `tank_upgrade`/`aquario_grande`/`aquario_master` (§7.15), `water_sensor` (§7.17), `egg_common`/`egg_rare`/`egg_legendary` (premium, §7.21).
 
 **Testes de integração** (`tests/Vivarium.Api.Tests`): API completa via `WebApplicationFactory` contra SQLite in-memory.
 

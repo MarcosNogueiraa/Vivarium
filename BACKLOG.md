@@ -55,9 +55,11 @@ sucesso) + freio de forgot-password (5 min entre pedidos por email + teto global
 
 **O quê:** usuário pediu pra revisitar (a) a lógica dos filtros de limpeza (manual + automático em níveis, §7.15) e (b) os valores/degradação de água conforme a faixa de capacidade do aquário cresce (Aquário → Aquário Grande → Aquário Master).
 
-**Estado atual (referência, CLAUDE.md §7.15/§7.6):** `FilterCapacity` cobre X peixes comuns equivalentes, decai suavemente acima da cobertura (`FilterTaperExponent`); degradação da água já é ponderada por raridade (`DegradationPerFishFactor`) e por `CapacityBand.DegradationBandFactor` por faixa. Não foi registrado AINDA o que especificamente incomoda nesses valores — só o pedido de rever.
+**Estado atual (referência, CLAUDE.md §7.15/§7.6):** `FilterCapacity` cobre X peixes comuns equivalentes, decai suavemente acima da cobertura (`FilterTaperExponent`); degradação da água já é ponderada por raridade (`DegradationPerFishFactor`) e por `CapacityBand.DegradationBandFactor` por faixa.
 
-**Decisões em aberto:** tudo — precisa de uma conversa específica sobre o que não está funcionando bem (filtro ficando fraco demais/forte demais em qual faixa? progressão de preço dos filtros vs. capacidade não acompanha o crescimento do tanque?) antes de mexer em números.
+**Feito (18/08/2026):** preço do Filtro manual (`filter_basic`) escalando por faixa (20/50/120 soft, Aquário/Grande/Master) — era fixo em 20 soft sempre, ficando irrisório num tanque endgame. Ver `CLAUDE.md §7.15`.
+
+**Ainda em aberto:** o resto — progressão de preço/cobertura dos filtros AUTOMÁTICOS vs. o crescimento em capacidade E raridade do tanque (achado real na sessão passada: um Aquário Master cheio de peixe raro pode pesar bem mais que os 18 cobertos pelo Filtro Automático III), e qualquer outra coisa que incomodar na lógica de degradação por faixa. Precisa de mais conversa específica antes de mexer.
 
 **Bloqueios:** nenhum.
 
