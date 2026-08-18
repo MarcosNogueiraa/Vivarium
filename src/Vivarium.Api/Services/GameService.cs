@@ -57,6 +57,11 @@ public class GameService(VivariumDbContext db)
         // por tempo real decorrido + teto offline; cliente nunca envia valor).
         await AccrueIncomeAsync(habitat, outcome, fish);
 
+        // Snapshot de renda/hora (18/08/2026, BACKLOG.md #7) — reusa `fish` já carregado e o
+        // MaintenanceLevel já atualizado por ProcessTick; zero query extra. Usado pelo Ranking
+        // por renda, que não consegue traduzir a sinergia por cor pra SQL (LeaderboardService).
+        habitat.CoinsPerHourSnapshot = IncomeCalculator.TankRatePerHour(fish, habitat.MaintenanceLevel, TickConfig.Default);
+
         if (outcome.SpawnCount > 0)
         {
             int speciesId = await db.Species
@@ -326,6 +331,7 @@ public class GameService(VivariumDbContext db)
 
         int active = await CountActiveCreaturesAsync(habitat);
         int backpackCount = await CountBackpackAsync(habitat.UserId);
+        int collected = 0;
         foreach (var item in ready)
         {
             bool toTank = active < habitat.Capacity;
@@ -334,7 +340,12 @@ public class GameService(VivariumDbContext db)
 
             CollectOne(habitat, item, nowUtc, toTank, isNew: true);
             if (toTank) active++; else backpackCount++;
+            collected++;
         }
+
+        // XP em lote (18/08/2026, BACKLOG.md #7) — uma chamada só, não uma por peixe.
+        if (collected > 0)
+            await AwardXpAsync(habitat.UserId, collected * LevelConfig.Default.FishCollectXp);
     }
 
     /// <summary>
@@ -786,6 +797,8 @@ public class GameService(VivariumDbContext db)
         if (creature is null)
             return ServiceResult.Bad(error!);
 
+        await AwardXpAsync(userId, LevelConfig.Default.FishCollectXp);
+
         try
         {
             await db.SaveChangesAsync();
@@ -795,6 +808,18 @@ public class GameService(VivariumDbContext db)
             return ServiceResult.Conflict("Operação concorrente — tente de novo.");
         }
         return ServiceResult.Success(CreatureDto.From(creature));
+    }
+
+    /// <summary>
+    /// Progressão do jogador (18/08/2026, BACKLOG.md #7) — XP por contagem de ações, só
+    /// social/cosmético. Não chama SaveChanges: quem chama já salva tudo junto no fim do
+    /// próprio fluxo (mesma transação implícita da coleta/breeding).
+    /// </summary>
+    public async Task AwardXpAsync(long userId, long amount)
+    {
+        if (amount <= 0) return;
+        var user = await db.Users.FirstAsync(u => u.Id == userId);
+        user.Xp += amount;
     }
 
     public async Task<ServiceResult> GetBackpackAsync(long userId)

@@ -13,8 +13,8 @@ public class LeaderboardTests : IClassFixture<VivariumApiFactory>
 
     public LeaderboardTests(VivariumApiFactory factory) => _factory = factory;
 
-    private record LeaderboardEntryRow(int Rank, string Username, decimal Value, bool IsSelf);
-    private record LeaderboardResponseRow(string Metric, List<LeaderboardEntryRow> Entries, LeaderboardEntryRow? SelfOutsideTop);
+    private record LeaderboardEntryRow(int Rank, string Username, decimal Value, bool IsSelf, int Level, object? Avatar);
+    private record LeaderboardResponseRow(string Metric, int Page, int PageSize, int TotalCount, List<LeaderboardEntryRow> Entries, int SelfRank, decimal SelfValue);
     private record SpectatorCreatureRow(long Id, string Seed, string? ParentASeed, string? ParentBSeed);
     private record SpectatorBreedingRow(bool Active, SpectatorCreatureRow? ParentA, SpectatorCreatureRow? ParentB, DateTime? ReadyAt, bool IsReady);
     private record SpectatorTankRow(string Username, decimal MaintenanceLevel, string CapacityBandName, decimal RarityTotal, decimal CoinsPerHour, List<SpectatorCreatureRow> Creatures, SpectatorBreedingRow Breeding);
@@ -43,15 +43,17 @@ public class LeaderboardTests : IClassFixture<VivariumApiFactory>
     }
 
     /// <summary>Insere N usuários "fantasma" (aquário + 1 peixe caro cada), direto no banco — sem
-    /// passar pelo endpoint de registro, só pra empurrar um usuário real pra fora do top 100.</summary>
-    private async Task SeedFakeUsersAsync(int count, decimal startingRarity)
+    /// passar pelo endpoint de registro, só pra empurrar um usuário real pra fora do top 100.
+    /// <paramref name="namePrefix"/> evita colisão de username entre chamadas de testes
+    /// diferentes na mesma classe (banco compartilhado via IClassFixture).</summary>
+    private async Task SeedFakeUsersAsync(int count, decimal startingRarity, string namePrefix = "fantasma")
     {
         await _factory.WithDbAsync(async db =>
         {
             int aquariumTypeId = await db.HabitatTypes.Where(t => t.Code == "Aquarium").Select(t => t.Id).FirstAsync();
             for (int i = 0; i < count; i++)
             {
-                var user = new User { Username = $"fantasma{i}", Email = $"fantasma{i}@teste.com", PasswordHash = "x", CreatedAt = DateTime.UtcNow };
+                var user = new User { Username = $"{namePrefix}{i}", Email = $"{namePrefix}{i}@teste.com", PasswordHash = "x", CreatedAt = DateTime.UtcNow };
                 var habitat = new Habitat
                 {
                     User = user, HabitatTypeId = aquariumTypeId, Capacity = 5, MaintenanceLevel = 100,
@@ -77,14 +79,14 @@ public class LeaderboardTests : IClassFixture<VivariumApiFactory>
     }
 
     /// <summary>
-    /// A própria posição de quem pediu — a API sempre garante isso, esteja no top 100
-    /// (Entries, isSelf=true) ou fora dele (SelfOutsideTop). Usar isso em vez de procurar
-    /// por username nos Entries deixa os testes de ordenação independentes de quantos
-    /// outros usuários (de outros testes na mesma classe, mesmo banco compartilhado)
-    /// já estão acima na base — sem depender de estar no top 100.
+    /// A própria posição de quem pediu — SelfRank/SelfValue vêm sempre preenchidos
+    /// (18/08/2026, paginação real), independente da página pedida. Usar isso em vez de
+    /// procurar por username nos Entries deixa os testes de ordenação independentes de
+    /// quantos outros usuários (de outros testes na mesma classe, mesmo banco compartilhado)
+    /// já estão acima na base — sem depender de estar na primeira página.
     /// </summary>
-    private static LeaderboardEntryRow OwnRank(LeaderboardResponseRow response)
-        => response.Entries.SingleOrDefault(e => e.IsSelf) ?? response.SelfOutsideTop!;
+    private static (int Rank, decimal Value) OwnRank(LeaderboardResponseRow response)
+        => (response.SelfRank, response.SelfValue);
 
     [Fact]
     public async Task Rarity_OrdenaPelaSomaDeRarityScoreDoTanque()
@@ -100,8 +102,6 @@ public class LeaderboardTests : IClassFixture<VivariumApiFactory>
         Assert.True(entryB.Rank < entryA.Rank);
         Assert.Equal(12m, entryB.Value);
         Assert.Equal(5m, entryA.Value);
-        Assert.True(entryA.IsSelf);
-        Assert.True(entryB.IsSelf);
     }
 
     [Fact]
@@ -113,6 +113,10 @@ public class LeaderboardTests : IClassFixture<VivariumApiFactory>
         var (clientD, userIdD) = await _factory.RegisterAsync("rankD");
         await AddCreature(await HabitatIdOf(userIdC), userIdC, rarityScore: 20m, seed: 333);
         await AddCreature(await HabitatIdOf(userIdD), userIdD, rarityScore: 1m, seed: 444);
+        // CoinsPerHourSnapshot (18/08/2026) só é gravado dentro de ApplyTickAsync — sem isso
+        // "income" ficaria comparando 0 com 0 (creature inserida direto no banco, sem tick).
+        await clientC.GetAsync("/api/game/tank");
+        await clientD.GetAsync("/api/game/tank");
 
         var rarityC = OwnRank((await clientC.GetFromJsonAsync<LeaderboardResponseRow>("/api/leaderboard/rarity"))!).Rank;
         var rarityD = OwnRank((await clientD.GetFromJsonAsync<LeaderboardResponseRow>("/api/leaderboard/rarity"))!).Rank;
@@ -136,21 +140,33 @@ public class LeaderboardTests : IClassFixture<VivariumApiFactory>
     }
 
     [Fact]
-    public async Task UsuarioForaDoTop100_ApareceEmSelfOutsideTop()
+    public async Task UsuarioForaDaPrimeiraPagina_SelfRankSempreDisponivel()
     {
         var (client, _) = await _factory.RegisterAsync("baixinho1");
         // Tanque do "baixinho1" fica vazio (RarityTotal=0, o mesmo de qualquer conta recém-criada) —
-        // 100 fantasmas com raridade bem maior garantem que ele fique fora do top 100.
-        await SeedFakeUsersAsync(100, startingRarity: 17m);
+        // 60 fantasmas com raridade bem maior garantem que ele fique fora da 1ª página (pageSize=50).
+        await SeedFakeUsersAsync(60, startingRarity: 17m, namePrefix: "fantasmaA");
 
         var response = await client.GetFromJsonAsync<LeaderboardResponseRow>("/api/leaderboard/rarity");
 
-        Assert.Equal(100, response!.Entries.Count);
+        Assert.Equal(50, response!.Entries.Count);
         Assert.DoesNotContain(response.Entries, e => e.Username == "baixinho1");
-        Assert.NotNull(response.SelfOutsideTop);
-        Assert.Equal("baixinho1", response.SelfOutsideTop!.Username);
-        Assert.True(response.SelfOutsideTop.IsSelf);
-        Assert.True(response.SelfOutsideTop.Rank > 100);
+        Assert.Equal(0m, response.SelfValue);
+        Assert.True(response.SelfRank > 50);
+    }
+
+    [Fact]
+    public async Task Paginacao_SegundaPaginaTrazAsProximasLinhas()
+    {
+        var (client, _) = await _factory.RegisterAsync("paginador1");
+        await SeedFakeUsersAsync(60, startingRarity: 17m, namePrefix: "fantasmaB");
+
+        var page1 = await client.GetFromJsonAsync<LeaderboardResponseRow>("/api/leaderboard/rarity?page=1&pageSize=50");
+        var page2 = await client.GetFromJsonAsync<LeaderboardResponseRow>("/api/leaderboard/rarity?page=2&pageSize=50");
+
+        Assert.Equal(50, page1!.Entries.Count);
+        Assert.True(page2!.Entries.Count >= 1);
+        Assert.Empty(page1.Entries.Select(e => e.Username).Intersect(page2.Entries.Select(e => e.Username)));
     }
 
     [Fact]

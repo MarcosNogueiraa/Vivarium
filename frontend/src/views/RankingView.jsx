@@ -27,8 +27,11 @@ const METRICS = [
   { key: "income", label: "Renda por hora", suffix: "/h", icon: null, format: (v) => v.toFixed(1) },
 ];
 
+const PAGE_SIZE = 50;
+
 export function RankingView({ notify, exitSpectatorSignal }) {
   const [metric, setMetric] = useState("rarity");
+  const [page, setPage] = useState(1);
   const [data, setData] = useState(null);
   const [spectator, setSpectator] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
@@ -36,12 +39,14 @@ export function RankingView({ notify, exitSpectatorSignal }) {
   // — facilita analisar os peixes de quem você está visitando sem a lista ocupando a tela.
   const [listOpen, setListOpen] = useState(false);
 
-  const refresh = useCallback(async (m) => {
+  const refresh = useCallback(async (m, p) => {
     setData(null);
-    setData(await api.leaderboard(m));
+    setData(await api.leaderboard(m, p, PAGE_SIZE));
   }, []);
 
-  useEffect(() => { refresh(metric).catch((err) => notify(err.message)); }, [metric, refresh, notify]);
+  // Paginação real (18/08/2026, BACKLOG.md #7) — troca de métrica sempre volta pra página 1.
+  useEffect(() => { setPage(1); }, [metric]);
+  useEffect(() => { refresh(metric, page).catch((err) => notify(err.message)); }, [metric, page, refresh, notify]);
 
   // Clicar de novo na aba "Ranking" enquanto visita um aquário volta pra lista, sem precisar
   // clicar em "Voltar" (pedido do usuário, 12/08/2026) — GameView incrementa esse sinal a cada
@@ -188,35 +193,47 @@ export function RankingView({ notify, exitSpectatorSignal }) {
       {data === null && <p className="hint">Carregando ranking…</p>}
 
       {data && (
-        <div className="leaderboard glass">
-          {data.entries.map((e) => (
-            <div key={e.rank} className={`leaderboard-row${e.isSelf ? " is-self" : ""}`}>
-              <span className="rank">#{e.rank}</span>
-              <span className="username">{e.username}{e.isSelf && " (você)"}</span>
-              <span className="value mono">{active.icon ? active.icon : <Coin />}{active.format(Number(e.value))}<small>{active.suffix}</small></span>
-              {/* Sempre reserva o espaço do botão, mesmo na própria linha (sem "Visitar")
-                  — senão .username (flex:1) absorve esse espaço e o valor pula pra mais
-                  perto da borda direita, desalinhando a coluna de valores das outras
-                  linhas (achado real ao revisar o Ranking). */}
-              <button
-                className={e.isSelf ? "invisible" : undefined}
-                tabIndex={e.isSelf ? -1 : 0}
-                aria-hidden={e.isSelf || undefined}
-                onClick={() => !e.isSelf && visit(e.username)}
-              >
-                Visitar
-              </button>
-            </div>
-          ))}
-          {data.selfOutsideTop && (
-            <div className="leaderboard-row is-self leaderboard-self-outside">
-              <span className="rank">#{data.selfOutsideTop.rank}</span>
-              <span className="username">{data.selfOutsideTop.username} (você)</span>
-              <span className="value mono">{active.icon ? active.icon : <Coin />}{active.format(Number(data.selfOutsideTop.value))}<small>{active.suffix}</small></span>
-              <button className="invisible" tabIndex={-1} aria-hidden="true">Visitar</button>
+        <>
+          <div className="leaderboard glass">
+            {data.entries.map((e) => (
+              <div key={`${e.rank}-${e.username}`} className={`leaderboard-row${e.isSelf ? " is-self" : ""}`}>
+                <span className="rank">#{e.rank}</span>
+                <span className="avatar-fish-canvas" style={{ width: 28, height: 28, borderRadius: "50%", overflow: "hidden", flex: "none" }}>
+                  {e.avatar ? <FishCanvas creature={e.avatar} width={28} /> : null}
+                </span>
+                <span className="username">{e.username}{e.isSelf && " (você)"} <small className="faint">Nv. {e.level}</small></span>
+                <span className="value mono">{active.icon ? active.icon : <Coin />}{active.format(Number(e.value))}<small>{active.suffix}</small></span>
+                {/* Sempre reserva o espaço do botão, mesmo na própria linha (sem "Visitar")
+                    — senão .username (flex:1) absorve esse espaço e o valor pula pra mais
+                    perto da borda direita, desalinhando a coluna de valores das outras
+                    linhas (achado real ao revisar o Ranking). */}
+                <button
+                  className={e.isSelf ? "invisible" : undefined}
+                  tabIndex={e.isSelf ? -1 : 0}
+                  aria-hidden={e.isSelf || undefined}
+                  onClick={() => !e.isSelf && visit(e.username)}
+                >
+                  Visitar
+                </button>
+              </div>
+            ))}
+            {!data.entries.some((e) => e.isSelf) && (
+              <div className="leaderboard-row is-self leaderboard-self-outside">
+                <span className="rank">#{data.selfRank}</span>
+                <span className="username">você <small className="faint">sua posição</small></span>
+                <span className="value mono">{active.icon ? active.icon : <Coin />}{active.format(Number(data.selfValue))}<small>{active.suffix}</small></span>
+                <button className="invisible" tabIndex={-1} aria-hidden="true">Visitar</button>
+              </div>
+            )}
+          </div>
+          {data.totalCount > PAGE_SIZE && (
+            <div className="card-row" style={{ justifyContent: "center", gap: 12, marginTop: 12 }}>
+              <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>← Anterior</button>
+              <span className="hint">Página {data.page} de {Math.max(1, Math.ceil(data.totalCount / PAGE_SIZE))}</span>
+              <button disabled={page * PAGE_SIZE >= data.totalCount} onClick={() => setPage((p) => p + 1)}>Próxima →</button>
             </div>
           )}
-        </div>
+        </>
       )}
     </div>
   );

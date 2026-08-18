@@ -13,7 +13,7 @@ public static class LeaderboardEndpoints
         group.MapGet("/visit/{username}", async (string username, LeaderboardService svc) =>
             (await svc.GetSpectatorTankAsync(username)).ToHttp());
 
-        group.MapGet("/{metric}", async (string metric, ClaimsPrincipal principal, LeaderboardService svc) =>
-            (await svc.GetLeaderboardAsync(TokenService.GetUserId(principal), metric)).ToHttp());
+        group.MapGet("/{metric}", async (string metric, int? page, int? pageSize, ClaimsPrincipal principal, LeaderboardService svc) =>
+            (await svc.GetLeaderboardAsync(TokenService.GetUserId(principal), metric, page ?? 1, pageSize ?? 50)).ToHttp());
     }
 }

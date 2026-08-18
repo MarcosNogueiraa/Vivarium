@@ -65,12 +65,6 @@ sucesso) + freio de forgot-password (5 min entre pedidos por email + teto global
 
 ---
 
-## 7. Níveis do jogador (18/08/2026)
+## ~~7. Níveis do jogador~~ — IMPLEMENTADO (18/08/2026)
 
-**O quê:** usuário quer discutir um sistema de níveis do JOGADOR (não do peixe/raridade) — mais uma forma de progressão e de comparação com amigos, além do Ranking atual (que hoje só compara raridade/renda do aquário, §7.16).
-
-**Estado atual:** não existe nenhum conceito de "nível de jogador" hoje — `User` não tem XP/nível, só `IsAdmin`/streaks pontuais (recompensa diária).
-
-**Decisões em aberto:** tudo — o que dá XP (coletar? cruzar? tempo de conta? diversidade de raridade?), o que o nível desbloqueia (nada, cosmético, vantagem real?), como aparece no Ranking/perfil. Precisa de conversa específica antes de desenhar.
-
-**Bloqueios:** nenhum.
+Ver `CLAUDE.md §7.22`. XP por contagem de ações (coleta/breeding), só social/cosmético, nível sempre derivado ao vivo do XP. Avatar = peixe escolhido manualmente pelo jogador (não upload, não auto-atualização), aparece no Perfil e no Ranking. Ranking ganhou paginação real via SQL no mesmo pacote (motivado por essa feature precisar mostrar avatar/nível por linha).

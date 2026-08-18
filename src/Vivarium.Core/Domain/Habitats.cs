@@ -58,6 +58,16 @@ public class Habitat
     /// só impede a compra automática de filtro mesmo com o gatilho configurado.
     /// </summary>
     public bool AutoCleanEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Renda/hora (moedas, já com água + sinergia) recalculada e gravada a cada tick
+    /// (18/08/2026, BACKLOG.md #7) — a fórmula de sinergia por cor não é traduzível pra SQL,
+    /// então o Ranking por renda pagina sobre este snapshot em vez de recomputar tudo em
+    /// memória. Sempre atualizado de graça dentro de <c>GameService.ApplyTickAsync</c>
+    /// (reusa a lista de peixes já carregada) — pode ficar levemente desatualizado só pra quem
+    /// está offline há muito tempo (sem tick recente).
+    /// </summary>
+    public decimal CoinsPerHourSnapshot { get; set; }
 }
 
 public class Species

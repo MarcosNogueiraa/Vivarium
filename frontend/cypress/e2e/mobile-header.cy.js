@@ -66,7 +66,7 @@ describe("Cabeçalho mobile", () => {
   it("trocar pra uma aba fora da área visível funciona e ela rola até a vista", () => {
     login();
     cy.contains(".nav-pills button", "🏆 Ranking").as("rankingTab");
-    cy.intercept("GET", "/api/leaderboard/rarity", { body: { entries: [], selfOutsideTop: null } });
+    cy.intercept("GET", "/api/leaderboard/rarity*", { body: { metric: "rarity", page: 1, pageSize: 50, totalCount: 0, entries: [], selfRank: 1, selfValue: 0 } });
     cy.get("@rankingTab").click({ force: true });
     cy.get("@rankingTab").should("have.class", "active");
     // `.should(callback)` re-tenta até passar (ou expirar) — necessário porque o
@@ -99,7 +99,7 @@ describe("Cabeçalho mobile", () => {
       cy.intercept("GET", "/api/market/listings", { body: [] });
       cy.intercept("GET", "/api/items/", { body: [] });
       cy.intercept("GET", "/api/breeding", { body: { active: false } });
-      cy.intercept("GET", "/api/leaderboard/rarity", { body: { entries: [], selfOutsideTop: null } });
+      cy.intercept("GET", "/api/leaderboard/rarity*", { body: { metric: "rarity", page: 1, pageSize: 50, totalCount: 0, entries: [], selfRank: 1, selfValue: 0 } });
       login();
       cy.contains(".nav-pills button", label).click({ force: true });
       assertNoHorizontalOverflow();

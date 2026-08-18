@@ -13,79 +13,99 @@ namespace Vivarium.Api.Services;
 /// </summary>
 public class LeaderboardService(VivariumDbContext db)
 {
-    private readonly record struct HabitatSnapshot(long HabitatId, long UserId, string Username, decimal MaintenanceLevel);
+    private readonly record struct RankedRow(long UserId, string Username, decimal Value);
 
     /// <summary>
-    /// Snapshot de todos os aquários (não os habitats de reprodução) com raridade total e
-    /// renda/hora — duas queries (habitats, depois criaturas desses habitats), sem N+1.
-    /// Recalculado a cada request: pro tamanho atual do jogo (beta, poucas centenas de
-    /// jogadores) é rápido o bastante sem cache; se crescer, cachear por alguns minutos é
-    /// a melhoria natural — não implementado agora (otimização prematura pro estágio atual).
+    /// Paginação real via SQL (18/08/2026, BACKLOG.md #7) — não carrega mais todo mundo em
+    /// memória. "rarity" soma via GroupBy (traduzível pra SQL); "income" lê
+    /// <see cref="Habitat.CoinsPerHourSnapshot"/> (a sinergia por cor não é traduzível, por
+    /// isso o snapshot gravado a cada tick em <c>GameService.ApplyTickAsync</c>).
     /// </summary>
-    private async Task<List<(long UserId, string Username, decimal RarityTotal, decimal CoinsPerHour)>> AllAquariumSnapshotsAsync()
-    {
-        var habitats = await db.Habitats
-            .Where(h => h.HabitatType!.Code == "Aquarium")
-            .Select(h => new HabitatSnapshot(h.Id, h.UserId, h.User!.Username, h.MaintenanceLevel))
-            .ToListAsync();
-        if (habitats.Count == 0)
-            return [];
-
-        var habitatIds = habitats.Select(h => h.HabitatId).ToList();
-        var creatures = await db.CreatureInstances
-            .Where(c => c.HabitatId != null && habitatIds.Contains(c.HabitatId!.Value))
-            .Select(c => new CreatureInstance
-            {
-                Id = c.Id, Seed = c.Seed, RarityScore = c.RarityScore, TraitConfigVersion = c.TraitConfigVersion,
-                HabitatId = c.HabitatId, TraitsJson = c.TraitsJson, OriginalOwnerId = c.OriginalOwnerId,
-            })
-            .ToListAsync();
-        var byHabitat = creatures.GroupBy(c => c.HabitatId!.Value).ToDictionary(g => g.Key, g => g.ToList());
-
-        var result = new List<(long, string, decimal, decimal)>(habitats.Count);
-        foreach (var h in habitats)
-        {
-            var fish = byHabitat.TryGetValue(h.HabitatId, out var list) ? list : [];
-            decimal rarityTotal = fish.Sum(f => f.RarityScore);
-            var incomeFish = fish.Select(f =>
-            {
-                var (tail, dorsal, pectoral) = PartColorsResolver.Of(f);
-                return new FishIncome(f.RarityScore, tail, dorsal, pectoral);
-            }).ToList();
-            decimal coinsPerHour = IncomeCalculator.TankRatePerHour(incomeFish, h.MaintenanceLevel, TickConfig.Default);
-            result.Add((h.UserId, h.Username, rarityTotal, coinsPerHour));
-        }
-        return result;
-    }
-
-    public async Task<ServiceResult> GetLeaderboardAsync(long requestingUserId, string metric)
+    public async Task<ServiceResult> GetLeaderboardAsync(long requestingUserId, string metric, int page, int pageSize)
     {
         if (metric != "rarity" && metric != "income")
             return ServiceResult.Bad("Métrica inválida — use 'rarity' ou 'income'.");
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
 
-        var snapshot = await AllAquariumSnapshotsAsync();
-        var ordered = metric == "rarity"
-            ? snapshot.OrderByDescending(s => s.RarityTotal).ToList()
-            : snapshot.OrderByDescending(s => s.CoinsPerHour).ToList();
+        // GroupBy sobre a navegação opcional CreatureInstance.Habitat (FK nullable), e o record
+        // struct RankedRow construído dentro do Select, não traduzem de forma confiável quando
+        // compostos com Where/CountAsync (EF reconstrói o objeto inteiro dentro do predicado em
+        // vez de empurrar só a comparação — achado rodando os testes). Tipo anônimo + subquery
+        // correlacionada por habitat (partindo de Habitats, mesma base do "income") é o padrão
+        // que o EF Core traduz de forma confiável nos dois provedores (SQLite/Postgres).
+        var query = metric == "rarity"
+            ? db.Habitats
+                .Where(h => h.HabitatType!.Code == "Aquarium")
+                .Select(h => new
+                {
+                    h.UserId,
+                    Username = h.User!.Username,
+                    Value = db.CreatureInstances.Where(c => c.HabitatId == h.Id).Sum(c => (decimal?)c.RarityScore) ?? 0m,
+                })
+            : db.Habitats
+                .Where(h => h.HabitatType!.Code == "Aquarium")
+                .Select(h => new { h.UserId, Username = h.User!.Username, Value = h.CoinsPerHourSnapshot });
 
-        var entries = new List<LeaderboardEntryDto>(Math.Min(100, ordered.Count));
-        LeaderboardEntryDto? selfOutsideTop = null;
-        for (int i = 0; i < ordered.Count; i++)
+        int totalCount = await query.CountAsync();
+
+        decimal selfValue = await query
+            .Where(r => r.UserId == requestingUserId)
+            .Select(r => r.Value)
+            .FirstOrDefaultAsync();
+        int selfRank = await query.CountAsync(r => r.Value > selfValue) + 1;
+
+        var pageRows = (await query
+            .OrderByDescending(r => r.Value)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync())
+            .Select(r => new RankedRow(r.UserId, r.Username, r.Value))
+            .ToList();
+
+        // Rank de cada linha da página = quantos estão estritamente na frente + 1 — empate
+        // compartilha rank, de propósito (decidido pelo usuário, mais simples e correto).
+        var entries = new List<LeaderboardEntryDto>(pageRows.Count);
+        foreach (var row in pageRows)
         {
-            int rank = i + 1;
-            bool isSelf = ordered[i].UserId == requestingUserId;
-            decimal value = metric == "rarity" ? ordered[i].RarityTotal : ordered[i].CoinsPerHour;
-            if (i < 100)
-            {
-                entries.Add(new LeaderboardEntryDto(rank, ordered[i].Username, value, isSelf));
-            }
-            else if (isSelf)
-            {
-                selfOutsideTop = new LeaderboardEntryDto(rank, ordered[i].Username, value, true);
-                break;
-            }
+            int rank = row.Value == selfValue && row.UserId == requestingUserId
+                ? selfRank
+                : await query.CountAsync(r => r.Value > row.Value) + 1;
+            entries.Add(new LeaderboardEntryDto(rank, row.Username, row.Value, row.UserId == requestingUserId, 0, null));
         }
-        return ServiceResult.Success(new LeaderboardResponse(metric, entries, selfOutsideTop));
+
+        await AttachLevelsAndAvatarsAsync(entries, pageRows);
+
+        return ServiceResult.Success(new LeaderboardResponse(metric, page, pageSize, totalCount, entries, selfRank, selfValue));
+    }
+
+    /// <summary>Enriquece as entradas da página com nível + avatar — 2 queries batch (nunca
+    /// N+1): uma pra achar quem tem avatar escolhido, outra pra buscar essas criaturas.</summary>
+    private async Task AttachLevelsAndAvatarsAsync(List<LeaderboardEntryDto> entries, List<RankedRow> rows)
+    {
+        var userIds = rows.Select(r => r.UserId).ToList();
+        var users = await db.Users
+            .Where(u => userIds.Contains(u.Id))
+            .Select(u => new { u.Id, u.Xp, u.AvatarCreatureInstanceId })
+            .ToListAsync();
+        var usersById = users.ToDictionary(u => u.Id);
+
+        var avatarIds = users.Where(u => u.AvatarCreatureInstanceId.HasValue)
+            .Select(u => u.AvatarCreatureInstanceId!.Value).ToList();
+        var avatarsById = avatarIds.Count == 0
+            ? []
+            : (await db.CreatureInstances.Where(c => avatarIds.Contains(c.Id)).ToListAsync())
+                .ToDictionary(c => c.Id);
+
+        for (int i = 0; i < entries.Count; i++)
+        {
+            var u = usersById[rows[i].UserId];
+            int level = LevelCalculator.ProgressOf(u.Xp, LevelConfig.Default).Level;
+            CreatureDto? avatar = u.AvatarCreatureInstanceId is { } avatarId && avatarsById.TryGetValue(avatarId, out var creature)
+                ? CreatureDto.From(creature)
+                : null;
+            entries[i] = entries[i] with { Level = level, Avatar = avatar };
+        }
     }
 
     public async Task<ServiceResult> GetSpectatorTankAsync(string username)

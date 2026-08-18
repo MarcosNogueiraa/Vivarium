@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../lib/api.js";
 import { Modal } from "./Modal.jsx";
+import { FishCanvas } from "./FishCanvas.jsx";
 
 /** Editar perfil (14/08/2026): trocar email e trocar senha, cada um exigindo a senha
- * atual — mesmo padrão de qualquer ação sensível já usado no jogo (ex: transferência). */
+ * atual — mesmo padrão de qualquer ação sensível já usado no jogo (ex: transferência).
+ * Ganhou nível + avatar (18/08/2026, BACKLOG.md #7) — só social/cosmético. */
 export function ProfileModal({ me, onClose, onUpdated, notify }) {
   const [email, setEmail] = useState(me?.email ?? "");
   const [emailPassword, setEmailPassword] = useState("");
@@ -15,6 +17,27 @@ export function ProfileModal({ me, onClose, onUpdated, notify }) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [passwordError, setPasswordError] = useState(null);
+
+  const [ownedFish, setOwnedFish] = useState(null); // null = ainda carregando
+  const [avatarBusy, setAvatarBusy] = useState(false);
+
+  useEffect(() => {
+    Promise.all([api.tank(), api.backpack()])
+      .then(([tank, backpack]) => setOwnedFish([...tank.creatures, ...backpack.creatures]))
+      .catch(() => setOwnedFish([]));
+  }, []);
+
+  async function pickAvatar(creatureInstanceId) {
+    setAvatarBusy(true);
+    try {
+      const updated = await api.updateAvatar(creatureInstanceId);
+      onUpdated?.(updated);
+    } catch (err) {
+      notify(err.message);
+    } finally {
+      setAvatarBusy(false);
+    }
+  }
 
   async function submitEmail(e) {
     e.preventDefault();
@@ -56,6 +79,48 @@ export function ProfileModal({ me, onClose, onUpdated, notify }) {
   return (
     <Modal onClose={onClose}>
       <div className="eyebrow">Editar perfil</div>
+
+      {me && (
+        <div className="level-bar-wrap" style={{ marginBottom: 16 }}>
+          <div className="avatar-picker-current">
+            {me.avatar
+              ? <FishCanvas creature={me.avatar} width={72} />
+              : <div className="avatar-picker-option is-none" style={{ width: 72, height: 72, fontSize: "2rem" }}>👤</div>}
+          </div>
+          <div className="level-bar-label">Nível <strong>{me.level}</strong> · {me.currentLevelXp}/{me.xpForNextLevel} XP</div>
+          <div className="level-bar"><div className="level-bar-fill" style={{ width: `${Math.round(me.progress01 * 100)}%` }} /></div>
+        </div>
+      )}
+
+      <div className="avatar-section">
+        <p className="hint" style={{ padding: 0, marginBottom: 8 }}>Foto de perfil — escolha um peixe seu</p>
+        {ownedFish === null ? (
+          <p className="hint">Carregando seus peixes…</p>
+        ) : (
+          <div className="avatar-picker-grid">
+            <button
+              type="button"
+              className={`avatar-picker-option is-none${!me?.avatar ? " is-selected" : ""}`}
+              disabled={avatarBusy}
+              onClick={() => pickAvatar(null)}
+              title="Nenhum"
+            >
+              👤
+            </button>
+            {ownedFish.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                className={`avatar-picker-option${me?.avatar?.id === c.id ? " is-selected" : ""}`}
+                disabled={avatarBusy}
+                onClick={() => pickAvatar(c.id)}
+              >
+                <FishCanvas creature={c} width={48} />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       <form className="prompt-form" onSubmit={submitEmail}>
         <p className="hint" style={{ padding: 0, marginBottom: 4 }}>Trocar email</p>

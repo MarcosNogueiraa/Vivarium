@@ -24,6 +24,19 @@ public class User
     /// durante o travamento responde a MESMA mensagem genérica de senha errada — revelar
     /// "conta travada" separado de "senha errada" vazaria que a conta existe.</summary>
     public DateTime? LockedUntil { get; set; }
+
+    /// <summary>XP de progressão do JOGADOR (18/08/2026, BACKLOG.md #7) — só social/cosmético,
+    /// sem vantagem de gameplay. Concedido por contagem de ações (coleta, breeding); nível
+    /// exibido é sempre derivado ao vivo via LevelCalculator, nunca armazenado separado (evita
+    /// drift entre Xp e um campo Level desatualizado).</summary>
+    public long Xp { get; set; }
+
+    /// <summary>Peixe escolhido pelo jogador como foto de perfil (Perfil + Ranking). Nullable =
+    /// sem avatar, usa o ícone padrão. Escolha manual, não auto-atualização pro maior score —
+    /// mais barato de construir e dá controle ao jogador. Nunca cascade delete: CreatureInstance
+    /// nunca é hard-deletada mesmo vendida/morta, então a FK nunca fica pendurada.</summary>
+    public long? AvatarCreatureInstanceId { get; set; }
+    public CreatureInstance? AvatarCreatureInstance { get; set; }
 }
 
 /// <summary>

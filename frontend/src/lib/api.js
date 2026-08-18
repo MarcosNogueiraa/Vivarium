@@ -45,6 +45,7 @@ export const api = {
   resetPassword: (token, newPassword) => request("POST", "/api/auth/reset-password", { token, newPassword }),
   updateEmail: (newEmail, currentPassword) => request("PUT", "/api/account/email", { newEmail, currentPassword }),
   updatePassword: (currentPassword, newPassword) => request("PUT", "/api/account/password", { currentPassword, newPassword }),
+  updateAvatar: (creatureInstanceId) => request("PUT", "/api/account/avatar", { creatureInstanceId }),
   tank: () => request("GET", "/api/game/tank"),
   heartbeat: () => request("POST", "/api/game/heartbeat"),
   collect: (queueItemId) => request("POST", `/api/game/collect/${queueItemId}`),
@@ -88,7 +89,8 @@ export const api = {
   devFinishBreeding: () => request("POST", "/api/dev/breeding/finish"),
   dailyRewardStatus: () => request("GET", "/api/game/daily-reward"),
   claimDailyReward: () => request("POST", "/api/game/daily-reward/claim"),
-  leaderboard: (metric) => request("GET", `/api/leaderboard/${metric}`),
+  leaderboard: (metric, page = 1, pageSize = 50) =>
+    request("GET", `/api/leaderboard/${metric}?page=${page}&pageSize=${pageSize}`),
   spectatorTank: (username) => request("GET", `/api/leaderboard/visit/${encodeURIComponent(username)}`),
   vipStatus: () => request("GET", "/api/vip"),
   subscribeVip: (days) => request("POST", "/api/vip/subscribe", { days }),

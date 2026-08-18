@@ -306,7 +306,7 @@ Conta nova ganha 1 peixe já pronto pra coletar (`ReadyAt=now`) no mesmo `SaveCh
 
 ### 7.16 Ranking global + visita a aquário de outro jogador
 
-Dois rankings (`rarity`/`income`), sem opt-out, top 100 + posição própria. `LeaderboardService.AllAquariumSnapshotsAsync` recalcula a cada request (sem cache — ok pro tamanho atual). Visita é só-leitura (`GetSpectatorTankAsync`, não roda tick — não muta estado de outro jogador). Endpoints: `GET /api/leaderboard/{metric}`, `GET /api/leaderboard/visit/{username}`.
+Dois rankings (`rarity`/`income`), sem opt-out, com **paginação real via SQL** (18/08/2026, §7.22 — pensando em milhares de jogadores, não carrega mais todo mundo em memória). Visita é só-leitura (`GetSpectatorTankAsync`, não roda tick — não muta estado de outro jogador). Endpoints: `GET /api/leaderboard/{metric}?page&pageSize`, `GET /api/leaderboard/visit/{username}`.
 
 ### 7.17 Limpeza Automática (VIP) + Sensor de Qualidade da Água
 
@@ -364,6 +364,17 @@ Item consumível pago em premium (💎) que gera 1 peixe na hora, com viés de r
 - **Frontend:** card na Loja com preço em 💎 (em vez de `<Coin/>`), botão desabilitado sem saldo premium suficiente. **Toda** compra abre `CollectCelebration` (`variant="egg"`, não só Raro+) — primeiro um cluster de ova de peixe (não emoji de galinha 🥚, feedback do usuário) tingido pela cor do tier comprado (`eggTier`, reusa `--r-comum`/`--r-raro`/`--r-lendario`, a mesma paleta de raridade do resto do jogo) que "racha" ao toque (`hatchEgg`, animação CSS); depois disso, segue o fluxo normal — Raro+ ainda ganha a revelação clique-a-clique (`suspense`), Comum/Incomum aparece revelado na hora. Mesmo componente e mesmo corte de `BANDS` da coleta do Tanque, só com o passo do ovo antes.
 - Endpoint: reusa `POST /api/items/{key}/buy` (resposta ganhou um campo `creature`, presente só quando o item comprado gera um peixe).
 
+### 7.22 Níveis do jogador (18/08/2026)
+
+Progressão do JOGADOR (não do peixe/raridade) — **só social/cosmético, sem nenhuma vantagem de gameplay**. Mais uma forma de comparação com amigos além do Ranking (§7.16). Config em `LevelConfig.cs`/`LevelCalculator.cs` (`Vivarium.Core/Gameplay`), separada do `TickConfig` (100% economia).
+
+- **XP por contagem de ações**, não raridade acumulada nem tempo de conta: `FishCollectXp=5` (coleta manual e automática VIP, uma vez por peixe), `BreedingCollectXp=25` (coletar um filhote). Concedido via `GameService.AwardXpAsync(userId, amount)` — sem `SaveChanges` próprio, salva junto da mesma transação do fluxo que chamou (coleta/breeding). Coleta automática VIP (`CollectAllReadyAsync`) conta quantos peixes o lote realmente coletou e credita numa chamada só, não uma por peixe.
+- **Nível sempre derivado ao vivo** de `User.Xp` via `LevelCalculator.ProgressOf` — nunca armazenado separado (evita drift). Curva: `XpForLevel(level) = round(LevelBaseXp(100) · (level-1)^LevelExponent(1.6))`, nível 1 = 0 XP. Valores iniciais, a calibrar com uso real.
+- **Avatar = peixe escolhido manualmente pelo jogador** entre os que já possui (`User.AvatarCreatureInstanceId`, nullable FK) — não é upload nem auto-atualização pro maior score (mais barato de construir, dá controle ao jogador). Só exige posse (`OwnerId == userId`), não precisa estar no tanque. Endpoint `PUT /api/account/avatar` (`AccountService.SetAvatarAsync`); aparece no Perfil (`ProfileModal.jsx`, seletor em grid) e no botão de conta (`AccountMenu.jsx`, substitui o 👤 fixo) e em cada linha do Ranking.
+- **`/me` expandido:** `MeResponse` ganhou `Xp`/`Level`/`CurrentLevelXp`/`XpForNextLevel`/`Progress01`/`Avatar` (`CreatureDto?`) — montado por `AccountService.BuildMeResponseAsync`, reusado tanto pelo `GET /api/auth/me` quanto por qualquer ação de conta que devolve o perfil (ex: trocar email).
+- **Ranking com paginação real via SQL** (não mais "top 100 fixo + posição própria calculada em memória"): métrica `rarity` soma via `GroupBy` (traduzível pra SQL); métrica `income` lê `Habitat.CoinsPerHourSnapshot` — campo novo, recalculado de graça a cada tick em `GameService.ApplyTickAsync` (reusa a lista de peixes já carregada pro tick, zero query extra) porque a fórmula de sinergia por cor não é traduzível pra SQL. Rank de cada linha = `CountAsync(valor maior) + 1`; **empate compartilha o mesmo rank** (decisão consciente — mais simples e correto que desempate arbitrário). `SelfRank`/`SelfValue` sempre vêm na resposta, independente da página vista. Avatares/níveis da página carregados em batch (2 queries, nunca N+1).
+- **Frontend:** `AccountMenu.jsx` mostra um `.level-chip` (nível + barra fina) sempre visível no topbar, ao lado do avatar — não escondido atrás de clique/dropdown (1ª versão usava um selo redondo sobre o avatar, mudado por parecer notificação, e a barra só aparecia dentro do Perfil). `ProfileModal.jsx` mantém a mesma barra + seletor de avatar em grid, pra quem quer trocar. `RankingView.jsx` mostra avatar+nível por linha e paginação (Anterior/Próxima).
+
 ---
 
 ## 8. Schema de dados completo
@@ -386,6 +397,8 @@ User
 - CreatedAt
 - LastDailyRewardAt (datetime, nullable)
 - IsAdmin (bool, default false)
+- Xp (bigint, default 0) -- progressão do jogador (§7.22), nível sempre derivado ao vivo via LevelCalculator
+- AvatarCreatureInstanceId (FK -> CreatureInstance, nullable) -- peixe escolhido manualmente como foto de perfil (§7.22)
 
 VipSubscription
 - Id (PK)
@@ -436,6 +449,7 @@ Habitat
 - AutoCleanTriggerPercent (decimal, default 0)
 - AutoCollectEnabled (bool, default true)
 - AutoCleanEnabled (bool, default true)
+- CoinsPerHourSnapshot (decimal, default 0) -- renda/hora recalculada a cada tick (§7.22), usada pelo Ranking por renda (sinergia por cor não é traduzível pra SQL)
 
 Species
 - Id (PK)
@@ -616,6 +630,7 @@ Esse nível de desacoplamento (`Habitat` genérico, `CurrencyType` como tabela) 
 | POST | `/api/auth/reset-password` | — | token do email (1h, uso único) + nova senha |
 | PUT | `/api/account/email` | ✓ | troca email; exige senha atual |
 | PUT | `/api/account/password` | ✓ | troca senha; exige senha atual |
+| PUT | `/api/account/avatar` | ✓ | escolhe/limpa o peixe usado como foto de perfil (§7.22) |
 | POST | `/api/game/heartbeat` | ✓ | marca online; roda tick |
 | GET | `/api/game/tank` | ✓ | estado completo: fila, criaturas, carteira; roda tick |
 | POST | `/api/game/collect/{queueItemId}` | ✓ | coleta manual |
@@ -638,7 +653,7 @@ Esse nível de desacoplamento (`Habitat` genérico, `CurrencyType` como tabela) 
 | POST | `/api/breeding/rush` | ✓ | pula tempo restante pagando premium |
 | POST | `/api/admin/give-starter-fish-all` | ✓ (admin) | dá +1 peixe a todo aquário com espaço |
 | POST | `/api/admin/inbox/send` | ✓ (admin) | broadcast/lista de usernames |
-| GET | `/api/leaderboard/{metric}` | ✓ | ranking (`rarity`\|`income`), top 100 + posição própria |
+| GET | `/api/leaderboard/{metric}` | ✓ | ranking (`rarity`\|`income`), paginado (`?page&pageSize`), sua posição sempre incluída |
 | GET | `/api/leaderboard/visit/{username}` | ✓ | tanque de outro jogador, só leitura |
 | GET | `/api/vip` | ✓ | status VIP + tabela de preços |
 | POST | `/api/vip/subscribe` | ✓ | compra pacote (`{days}`: 7\|15\|30) em premium, estende se já ativo |

@@ -374,6 +374,8 @@ public class BreedingService(VivariumDbContext db, GameService game)
         slot.ParentADied = parentADied;
         slot.ParentBDied = parentBDied;
 
+        await game.AwardXpAsync(userId, LevelConfig.Default.BreedingCollectXp);
+
         try
         {
             await db.SaveChangesAsync();

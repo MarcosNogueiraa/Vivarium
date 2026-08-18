@@ -16,5 +16,8 @@ public static class AccountEndpoints
 
         group.MapPut("/password", async (UpdatePasswordRequest req, ClaimsPrincipal principal, AccountService accounts) =>
             (await accounts.UpdatePasswordAsync(TokenService.GetUserId(principal), req.CurrentPassword, req.NewPassword)).ToHttp());
+
+        group.MapPut("/avatar", async (UpdateAvatarRequest req, ClaimsPrincipal principal, AccountService accounts) =>
+            (await accounts.SetAvatarAsync(TokenService.GetUserId(principal), req.CreatureInstanceId)).ToHttp());
     }
 }

@@ -19,11 +19,12 @@ function fakeJwt(sub = "1", username = "jogador1") {
 }
 
 const rarityBoard = {
+  metric: "rarity", page: 1, pageSize: 50, totalCount: 2,
   entries: [
-    { rank: 1, username: "top1", value: 120.5, isSelf: false },
-    { rank: 2, username: "jogador1", value: 88.2, isSelf: true },
+    { rank: 1, username: "top1", value: 120.5, isSelf: false, level: 3, avatar: null },
+    { rank: 2, username: "jogador1", value: 88.2, isSelf: true, level: 2, avatar: null },
   ],
-  selfOutsideTop: null,
+  selfRank: 2, selfValue: 88.2,
 };
 
 function spectatorCreature(id, seed, rarityScore) {
@@ -37,11 +38,12 @@ function spectatorCreature(id, seed, rarityScore) {
 const noBreeding = { active: false, parentA: null, parentB: null, readyAt: null, isReady: false };
 
 const incomeBoard = {
+  metric: "income", page: 1, pageSize: 50, totalCount: 2,
   entries: [
-    { rank: 1, username: "top1", value: 340.1, isSelf: false },
-    { rank: 2, username: "jogador1", value: 210.4, isSelf: true },
+    { rank: 1, username: "top1", value: 340.1, isSelf: false, level: 3, avatar: null },
+    { rank: 2, username: "jogador1", value: 210.4, isSelf: true, level: 2, avatar: null },
   ],
-  selfOutsideTop: null,
+  selfRank: 2, selfValue: 210.4,
 };
 
 function login() {
@@ -60,7 +62,7 @@ function login() {
 
 describe("Ranking", () => {
   it("métrica de raridade mostra o troféu, não o ícone de moeda", () => {
-    cy.intercept("GET", "/api/leaderboard/rarity", { body: rarityBoard }).as("rarity");
+    cy.intercept("GET", "/api/leaderboard/rarity*", { body: rarityBoard }).as("rarity");
     login();
     cy.wait("@rarity");
 
@@ -73,8 +75,8 @@ describe("Ranking", () => {
   });
 
   it("métrica de renda mostra o ícone de moeda e o sufixo /h", () => {
-    cy.intercept("GET", "/api/leaderboard/rarity", { body: rarityBoard }).as("rarity");
-    cy.intercept("GET", "/api/leaderboard/income", { body: incomeBoard }).as("income");
+    cy.intercept("GET", "/api/leaderboard/rarity*", { body: rarityBoard }).as("rarity");
+    cy.intercept("GET", "/api/leaderboard/income*", { body: incomeBoard }).as("income");
     login();
     cy.wait("@rarity");
 
@@ -89,7 +91,7 @@ describe("Ranking", () => {
   });
 
   it("visitar outro jogador mostra o aquário dele em modo espectador e volta pro ranking", () => {
-    cy.intercept("GET", "/api/leaderboard/rarity", { body: rarityBoard }).as("rarity");
+    cy.intercept("GET", "/api/leaderboard/rarity*", { body: rarityBoard }).as("rarity");
     login();
     cy.wait("@rarity");
 
@@ -111,7 +113,7 @@ describe("Ranking", () => {
   });
 
   it("clicar de novo na aba Ranking enquanto visita volta pra lista sem precisar de Voltar (12/08/2026)", () => {
-    cy.intercept("GET", "/api/leaderboard/rarity", { body: rarityBoard }).as("rarity");
+    cy.intercept("GET", "/api/leaderboard/rarity*", { body: rarityBoard }).as("rarity");
     login();
     cy.wait("@rarity");
 
@@ -132,7 +134,7 @@ describe("Ranking", () => {
   });
 
   it("lista 'Peixes no tanque' do espectador nasce minimizada (12/08/2026)", () => {
-    cy.intercept("GET", "/api/leaderboard/rarity", { body: rarityBoard }).as("rarity");
+    cy.intercept("GET", "/api/leaderboard/rarity*", { body: rarityBoard }).as("rarity");
     login();
     cy.wait("@rarity");
 
@@ -156,7 +158,7 @@ describe("Ranking", () => {
   });
 
   it("mostra a perda por água suja ao visitar um aquário com água abaixo do patamar (12/08/2026)", () => {
-    cy.intercept("GET", "/api/leaderboard/rarity", { body: rarityBoard }).as("rarity");
+    cy.intercept("GET", "/api/leaderboard/rarity*", { body: rarityBoard }).as("rarity");
     login();
     cy.wait("@rarity");
 
@@ -176,7 +178,7 @@ describe("Ranking", () => {
   });
 
   it("não mostra perda por água suja quando a água está limpa", () => {
-    cy.intercept("GET", "/api/leaderboard/rarity", { body: rarityBoard }).as("rarity");
+    cy.intercept("GET", "/api/leaderboard/rarity*", { body: rarityBoard }).as("rarity");
     login();
     cy.wait("@rarity");
 
@@ -196,7 +198,7 @@ describe("Ranking", () => {
   });
 
   it("visitar mostra 'Ninho vazio' quando o jogador não tem gestação em andamento", () => {
-    cy.intercept("GET", "/api/leaderboard/rarity", { body: rarityBoard }).as("rarity");
+    cy.intercept("GET", "/api/leaderboard/rarity*", { body: rarityBoard }).as("rarity");
     login();
     cy.wait("@rarity");
 
@@ -215,7 +217,7 @@ describe("Ranking", () => {
   });
 
   it("visitar mostra os pais em gestação no Ninho, sem informação financeira (14/08/2026)", () => {
-    cy.intercept("GET", "/api/leaderboard/rarity", { body: rarityBoard }).as("rarity");
+    cy.intercept("GET", "/api/leaderboard/rarity*", { body: rarityBoard }).as("rarity");
     login();
     cy.wait("@rarity");
 

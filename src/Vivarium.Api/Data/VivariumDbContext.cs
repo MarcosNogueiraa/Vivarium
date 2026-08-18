@@ -48,6 +48,10 @@ public class VivariumDbContext(DbContextOptions<VivariumDbContext> options) : Db
             e.Property(u => u.Email).HasMaxLength(256);
             e.HasIndex(u => u.Username).IsUnique();
             e.HasIndex(u => u.Email).IsUnique();
+            // Sem navegação inversa em CreatureInstance (WithMany() vazio) — sem isso o EF não
+            // consegue decidir sozinho o lado dependente entre esta FK e CreatureInstance.Owner.
+            e.HasOne(u => u.AvatarCreatureInstance).WithMany()
+                .HasForeignKey(u => u.AvatarCreatureInstanceId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<PasswordResetToken>(e =>

@@ -134,11 +134,11 @@ public static class AuthEndpoints
             return Results.Ok(new AuthResponse(user.Id, user.Username, tokens.CreateToken(user)));
         });
 
-        group.MapGet("/me", async (ClaimsPrincipal principal, VivariumDbContext db) =>
+        group.MapGet("/me", async (ClaimsPrincipal principal, VivariumDbContext db, AccountService accounts) =>
         {
             long userId = TokenService.GetUserId(principal);
             var user = await db.Users.FirstAsync(u => u.Id == userId);
-            return Results.Ok(new MeResponse(user.Id, user.Username, user.Email));
+            return Results.Ok(await accounts.BuildMeResponseAsync(user));
         }).RequireAuthorization();
 
         // Sempre responde igual, exista ou não o email — evita enumeração de contas.
