@@ -817,7 +817,15 @@ input:focus {
 .vip-card { grid-column: 1 / -1; }
 .vip-card p { max-width: 640px; }
 .vip-card > .card-row { max-width: 640px; }
-.store-card strong { font-family: var(--display); font-size: 1.15rem; font-weight: 600; }
+/* Título de 1 linha ("Filtro") x 2 linhas ("Expansão do Tanque") reservavam alturas
+   diferentes, desalinhando cards vizinhos na mesma linha do grid (achado real, print
+   do usuário 18/08/2026) — mesmo princípio já aplicado à descrição: reserva sempre o
+   espaço de 2 linhas, cheio ou não. */
+.store-card strong {
+  font-family: var(--display); font-size: 1.15rem; font-weight: 600; line-height: 1.25;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  min-height: 2.5em;
+}
 .store-card p { font-size: 0.86rem; line-height: 1.5; flex: 1; }
 /* Descrições de tamanho MUITO desigual esticavam alguns cards bem mais que outros (feedback
    do usuário, com print — o Sensor de Qualidade da Água era o pior caso). Trunca em 3 linhas
@@ -834,7 +842,11 @@ input:focus {
 .owned-active { color: var(--r-incomum) !important; }
 .store-card-locked { opacity: 0.6; }
 .store-locked-reason { color: var(--coral) !important; font-size: 0.8rem !important; flex: none !important; }
-.filter-status-card { background: rgba(84, 230, 209, 0.05); border-color: rgba(84, 230, 209, 0.25); }
+/* Texto de tamanho livre (sem o clamp de .store-card-desc), igual ao VIP — mesmo motivo
+   pra ocupar a linha inteira em vez de parear com um card padrão de 1 frase (achado
+   real, print do usuário 18/08/2026: ficava bem mais alto que o vizinho "Filtro"). */
+.filter-status-card { background: rgba(84, 230, 209, 0.05); border-color: rgba(84, 230, 209, 0.25); grid-column: 1 / -1; }
+.filter-status-card p { max-width: 640px; }
 
 /* Slider do gatilho da Limpeza Automática (§8.18) — troca o botão "Comprar"
    assim que o Sensor de Qualidade da Água é adquirido. */
