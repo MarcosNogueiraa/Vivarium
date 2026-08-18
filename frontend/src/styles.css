@@ -1211,9 +1211,14 @@ input:focus {
 .trait-row { display: flex; justify-content: space-between; gap: 14px; padding: 5px 0; font-size: 0.9rem; }
 .trait-row .tr-label { color: var(--muted); flex-shrink: 0; }
 .trait-row .tr-value { text-align: right; }
-/* Nome da cor escrito na própria cor (ColorSpan.jsx) — glow claro sutil garante leitura
-   mesmo pro Preto sobre o fundo escuro do app. */
-.color-name { font-weight: 600; text-shadow: 0 0 6px rgba(255, 255, 255, 0.25); }
+/* Nome da cor escrito na própria cor (ColorSpan.jsx) — o texto sozinho ficava ilegível pro
+   Preto (quase a mesma cor do fundo escuro do app, mesmo com glow); swatch com contorno claro
+   sempre visível resolve pra qualquer cor, não só o caso ruim. */
+.color-name { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; text-shadow: 0 0 6px rgba(255, 255, 255, 0.25); }
+.color-swatch {
+  display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.45); flex-shrink: 0;
+}
 
 .bd-help { color: var(--faint); font-size: 0.82rem; margin-bottom: 10px; line-height: 1.5; }
 .breakdown { display: flex; flex-direction: column; gap: 7px; }
