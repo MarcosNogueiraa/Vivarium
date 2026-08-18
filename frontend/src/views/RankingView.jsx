@@ -198,8 +198,8 @@ export function RankingView({ notify, exitSpectatorSignal }) {
             {data.entries.map((e) => (
               <div key={`${e.rank}-${e.username}`} className={`leaderboard-row${e.isSelf ? " is-self" : ""}`}>
                 <span className="rank">#{e.rank}</span>
-                <span className="avatar-fish-canvas" style={{ width: 28, height: 28, borderRadius: "50%", overflow: "hidden", flex: "none" }}>
-                  {e.avatar ? <FishCanvas creature={e.avatar} width={28} /> : null}
+                <span className="leaderboard-row-avatar">
+                  {e.avatar ? <FishCanvas creature={e.avatar} width={44} /> : null}
                 </span>
                 <span className="username">{e.username}{e.isSelf && " (você)"} <small className="faint">Nv. {e.level}</small></span>
                 <span className="value mono">{active.icon ? active.icon : <Coin />}{active.format(Number(e.value))}<small>{active.suffix}</small></span>

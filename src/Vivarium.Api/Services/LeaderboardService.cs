@@ -79,8 +79,12 @@ public class LeaderboardService(VivariumDbContext db)
         return ServiceResult.Success(new LeaderboardResponse(metric, page, pageSize, totalCount, entries, selfRank, selfValue));
     }
 
-    /// <summary>Enriquece as entradas da página com nível + avatar — 2 queries batch (nunca
-    /// N+1): uma pra achar quem tem avatar escolhido, outra pra buscar essas criaturas.</summary>
+    /// <summary>Enriquece as entradas da página com nível + avatar. Quem não escolheu avatar
+    /// manualmente mostra o peixe de maior score que possui (18/08/2026, pedido do usuário —
+    /// todo mundo aparece com um ícone no Ranking, não só quem configurou). Batch em 3 queries
+    /// (nunca N+1): usuários da página, peixe de maior score de quem não tem avatar (subquery
+    /// correlacionada por usuário — GroupBy+First não traduz de forma confiável no SQLite,
+    /// achado nesta mesma sessão), e as criaturas finais de uma vez só.</summary>
     private async Task AttachLevelsAndAvatarsAsync(List<LeaderboardEntryDto> entries, List<RankedRow> rows)
     {
         var userIds = rows.Select(r => r.UserId).ToList();
@@ -90,18 +94,41 @@ public class LeaderboardService(VivariumDbContext db)
             .ToListAsync();
         var usersById = users.ToDictionary(u => u.Id);
 
-        var avatarIds = users.Where(u => u.AvatarCreatureInstanceId.HasValue)
-            .Select(u => u.AvatarCreatureInstanceId!.Value).ToList();
-        var avatarsById = avatarIds.Count == 0
+        var fallbackUserIds = users.Where(u => !u.AvatarCreatureInstanceId.HasValue).Select(u => u.Id).ToList();
+        var topFishIdByUser = fallbackUserIds.Count == 0
+            ? new Dictionary<long, long>()
+            : (await db.Users
+                .Where(u => fallbackUserIds.Contains(u.Id))
+                .Select(u => new
+                {
+                    u.Id,
+                    TopFishId = db.CreatureInstances
+                        .Where(c => c.OwnerId == u.Id)
+                        .OrderByDescending(c => c.RarityScore)
+                        .Select(c => (long?)c.Id)
+                        .FirstOrDefault(),
+                })
+                .Where(x => x.TopFishId != null)
+                .ToListAsync())
+                .ToDictionary(x => x.Id, x => x.TopFishId!.Value);
+
+        var creatureIds = users.Where(u => u.AvatarCreatureInstanceId.HasValue)
+            .Select(u => u.AvatarCreatureInstanceId!.Value)
+            .Concat(topFishIdByUser.Values)
+            .Distinct()
+            .ToList();
+        var creaturesById = creatureIds.Count == 0
             ? []
-            : (await db.CreatureInstances.Where(c => avatarIds.Contains(c.Id)).ToListAsync())
+            : (await db.CreatureInstances.Where(c => creatureIds.Contains(c.Id)).ToListAsync())
                 .ToDictionary(c => c.Id);
 
         for (int i = 0; i < entries.Count; i++)
         {
             var u = usersById[rows[i].UserId];
             int level = LevelCalculator.ProgressOf(u.Xp, LevelConfig.Default).Level;
-            CreatureDto? avatar = u.AvatarCreatureInstanceId is { } avatarId && avatarsById.TryGetValue(avatarId, out var creature)
+            long? avatarCreatureId = u.AvatarCreatureInstanceId
+                ?? (topFishIdByUser.TryGetValue(u.Id, out var topId) ? topId : null);
+            CreatureDto? avatar = avatarCreatureId is { } id && creaturesById.TryGetValue(id, out var creature)
                 ? CreatureDto.From(creature)
                 : null;
             entries[i] = entries[i] with { Level = level, Avatar = avatar };

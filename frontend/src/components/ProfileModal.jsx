@@ -23,7 +23,13 @@ export function ProfileModal({ me, onClose, onUpdated, notify }) {
 
   useEffect(() => {
     Promise.all([api.tank(), api.backpack()])
-      .then(([tank, backpack]) => setOwnedFish([...tank.creatures, ...backpack.creatures]))
+      .then(([tank, backpack]) => {
+        // Maior score primeiro (pedido do usuário, 18/08/2026) — facilita achar o peixe
+        // mais raro pra usar como avatar sem precisar rolar a lista toda.
+        const all = [...tank.creatures, ...backpack.creatures]
+          .sort((a, b) => Number(b.rarityScore) - Number(a.rarityScore));
+        setOwnedFish(all);
+      })
       .catch(() => setOwnedFish([]));
   }, []);
 

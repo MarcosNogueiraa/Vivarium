@@ -1543,6 +1543,11 @@ input:focus {
 }
 .leaderboard-row:last-child { border-bottom: none; }
 .leaderboard-row .rank { width: 3ch; color: var(--faint); font-variant-numeric: tabular-nums; }
+.leaderboard-row-avatar {
+  width: 44px; height: 44px; border-radius: 50%; overflow: hidden; flex: none;
+  background: var(--panel-strong); border: 1px solid var(--line);
+}
+.leaderboard-row-avatar canvas { width: 100%; height: 100%; }
 .leaderboard-row .username { flex: 1; font-weight: 600; }
 .leaderboard-row .value { display: flex; align-items: center; gap: 4px; }
 .leaderboard-row.is-self { background: rgba(84, 230, 209, 0.08); border-radius: 10px; }
