@@ -13,23 +13,12 @@ namespace Vivarium.Api.Services;
 /// dos handlers HTTP; devolve <see cref="ServiceResult"/> que o endpoint traduz.
 /// Sem taxa de mercado no MVP; compra é transacional + auditada no TransactionLog.
 /// </summary>
-public class MarketService(VivariumDbContext db, InboxService inbox)
+public class MarketService(VivariumDbContext db, InboxService inbox, GameService game)
 {
-    // Cortes de raridade espelhados de `frontend/src/lib/fishRenderer.js` BANDS (CLAUDE.md §5) —
-    // não existe uma representação de "banda" no backend hoje, só o RarityScore cru. Se os
-    // cortes mudarem lá (recalibração via Vivarium.Simulation), espelhar aqui também.
-    // 14/08/2026: pirâmide "Íngreme" (Lendário 1/5.000), sincronizado com BANDS (fishRenderer.js).
-    // 15/08/2026: Raro estava comum demais/Épico raro demais na prática — ajustado pra manter
-    // Raro em ~1,00% e Épico em ~0,30% (12.24→12.04, 14.85→13.78, Incomum doou o espaço);
-    // ver o bloco "CORTES ÍNGREME AJUSTADO" em Vivarium.Simulation.
-    private static string BandNameOf(decimal score) => score switch
-    {
-        < 5.45m => "Comum",
-        < 12.04m => "Incomum",
-        < 13.78m => "Raro",
-        < 16.60m => "Épico",
-        _ => "Lendário",
-    };
+    // 20/08/2026: promovido pra Vivarium.Core.Gameplay.RarityBands (fonte única, usada agora
+    // também pelo marco de raridade dos Níveis) — este método vira um wrapper fino, mesma
+    // assinatura, pra não precisar tocar em todo call site existente.
+    private static string BandNameOf(decimal score) => RarityBands.NameOf(score);
 
     // Cada valor pode ser uma lista separada por vírgula (ex: "Red,Green") — dentro do MESMO
     // atributo/parte, os valores são OU (qualquer um serve); entre partes/atributos diferentes
@@ -261,6 +250,8 @@ public class MarketService(VivariumDbContext db, InboxService inbox)
             "Peixe vendido no Mercado",
             $"Seu peixe foi vendido por {listing.PriceSoft:0.##} moedas, já creditadas na sua carteira.",
             senderUserId: buyerId, now);
+
+        await game.AwardXpAsync(listing.SellerId, LevelConfig.Default.MarketSaleXp);
 
         try
         {

@@ -37,6 +37,13 @@ public class User
     /// nunca é hard-deletada mesmo vendida/morta, então a FK nunca fica pendurada.</summary>
     public long? AvatarCreatureInstanceId { get; set; }
     public CreatureInstance? AvatarCreatureInstance { get; set; }
+
+    /// <summary>Bitmask de bandas de raridade (RarityBand, Gameplay.RarityBands) já
+    /// COLETADAS ao menos uma vez (20/08/2026) — dispara o bônus de XP único de "1º
+    /// Raro/Épico/Lendário". Bit = 1 &lt;&lt; (int)RarityBand. Só Raro+ usa isso na prática
+    /// (Comum/Incomum não têm bônus configurado em LevelConfig.RarityMilestoneXp), mas o
+    /// bitmask cobre as 5 bandas por uniformidade.</summary>
+    public int RarityBandMilestoneFlags { get; set; }
 }
 
 /// <summary>

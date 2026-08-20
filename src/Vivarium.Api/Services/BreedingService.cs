@@ -375,6 +375,7 @@ public class BreedingService(VivariumDbContext db, GameService game)
         slot.ParentBDied = parentBDied;
 
         await game.AwardXpAsync(userId, LevelConfig.Default.BreedingCollectXp);
+        await game.AwardRarityMilestoneXpAsync(userId, child.RarityScore);
 
         try
         {

@@ -338,9 +338,10 @@ public class GameService(VivariumDbContext db)
             if (!toTank && backpackCount >= HabitatDefaults.BackpackCapacity)
                 break; // tanque e mochila cheios — só aí a coleta automática realmente para
 
-            CollectOne(habitat, item, nowUtc, toTank, isNew: true);
+            var c = CollectOne(habitat, item, nowUtc, toTank, isNew: true);
             if (toTank) active++; else backpackCount++;
             collected++;
+            await AwardRarityMilestoneXpAsync(habitat.UserId, c.RarityScore);
         }
 
         // XP em lote (18/08/2026, BACKLOG.md #7) — uma chamada só, não uma por peixe.
@@ -601,6 +602,8 @@ public class GameService(VivariumDbContext db)
             });
         }
 
+        await AwardXpAsync(userId, LevelConfig.Default.DailyRewardClaimXp);
+
         try
         {
             await db.SaveChangesAsync();
@@ -798,6 +801,7 @@ public class GameService(VivariumDbContext db)
             return ServiceResult.Bad(error!);
 
         await AwardXpAsync(userId, LevelConfig.Default.FishCollectXp);
+        await AwardRarityMilestoneXpAsync(userId, creature.RarityScore);
 
         try
         {
@@ -819,6 +823,27 @@ public class GameService(VivariumDbContext db)
     {
         if (amount <= 0) return;
         var user = await db.Users.FirstAsync(u => u.Id == userId);
+        user.Xp += amount;
+    }
+
+    /// <summary>
+    /// Bônus de XP ÚNICO (20/08/2026, "quero mais formas" de subir de nível) na primeira vez
+    /// que o jogador COLETA um peixe de cada banda Raro+ (LevelConfig.RarityMilestoneXp não
+    /// tem entrada pra Comum/Incomum — universais demais pra marco). Idempotente via
+    /// User.RarityBandMilestoneFlags: chamar de novo pra uma banda já marcada não custa nada.
+    /// Chamado nos 3 pontos onde um peixe entra na posse do jogador por COLETA (fila manual/
+    /// automática, filhote do Ninho) — não em compra/transferência, que não são "coleta".
+    /// </summary>
+    public async Task AwardRarityMilestoneXpAsync(long userId, decimal rarityScore)
+    {
+        var band = RarityBands.BandOf(rarityScore);
+        if (!LevelConfig.Default.RarityMilestoneXp.TryGetValue(band, out long amount)) return;
+
+        int bit = 1 << (int)band;
+        var user = await db.Users.FirstAsync(u => u.Id == userId);
+        if ((user.RarityBandMilestoneFlags & bit) != 0) return;
+
+        user.RarityBandMilestoneFlags |= bit;
         user.Xp += amount;
     }
 
@@ -896,6 +921,8 @@ public class GameService(VivariumDbContext db)
             Amount = price,
             CreatedAt = now,
         });
+
+        await AwardXpAsync(userId, LevelConfig.Default.VendorSaleXp);
 
         try
         {

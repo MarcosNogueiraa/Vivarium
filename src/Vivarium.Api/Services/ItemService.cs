@@ -152,6 +152,8 @@ public class ItemService(VivariumDbContext db, GameService game)
             CreatedAt = now,
         });
 
+        await game.AwardXpAsync(userId, LevelConfig.Default.ItemPurchaseXp);
+
         try
         {
             await db.SaveChangesAsync();
