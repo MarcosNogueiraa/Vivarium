@@ -15,6 +15,7 @@ import { RarityGuide } from "./RarityGuide.jsx";
 import { useAutoToggles } from "../hooks/useAutoToggles.js";
 import { IconButton } from "../components/IconButton.jsx";
 import { CollapsibleSection } from "../components/CollapsibleSection.jsx";
+import { getEconomyMode, setEconomyMode } from "../lib/perfMode.js";
 
 export function TankView({ tank, refresh, notify, cinemaEnabled = true, toggleCinema }) {
   const dim = cinemaEnabled ? " cinema-dim" : "";
@@ -28,6 +29,12 @@ export function TankView({ tank, refresh, notify, cinemaEnabled = true, toggleCi
   const lowWater = Number(tank.maintenanceLevel) < 40;
   const decorTier = decorTierOf(tank.capacityBandName);
   const tierClass = decorTier >= 2 ? " tier-master" : decorTier >= 1 ? " tier-grande" : "";
+
+  // Modo econômico: preferência global (não por tanque), pra tablets/notebooks fracos que
+  // travam com o aquário em resolução/qualidade cheia (relato real 19/08/2026) — corta DPR
+  // extra e o blur da aura em AquariumCanvas (lib/perfMode.js).
+  const [economyMode, setEconomyModeState] = useState(getEconomyMode);
+  const toggleEconomyMode = () => setEconomyModeState((v) => { setEconomyMode(!v); return !v; });
 
   // ---- Modo "enfeite de monitor": clique, tela cheia, modo aquário e pop-up ----
   const [clickEnabled, setClickEnabled] = useState(() => localStorage.getItem("tankClicks") !== "false");
@@ -245,6 +252,12 @@ export function TankView({ tank, refresh, notify, cinemaEnabled = true, toggleCi
               {cinemaEnabled ? "🎬" : "💡"}
             </IconButton>
           )}
+          <IconButton className={`tool-btn${economyMode ? " active" : ""}`} onClick={toggleEconomyMode}
+            label={economyMode
+              ? "Modo econômico: ativado (menos nitidez/efeitos, melhor pra tablets/PCs fracos — clique pra desativar)"
+              : "Modo econômico: desativado (clique pra ativar — reduz nitidez/efeitos, ajuda em tablets/PCs fracos)"}>
+            {economyMode ? "🐢" : "🚀"}
+          </IconButton>
         </div>
 
         {tank.creatures.length === 0 && !aquariumMode && (

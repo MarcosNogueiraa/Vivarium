@@ -5,6 +5,7 @@ import {
   SUBSTRATE_BAND_H, swimSpeedOf, VIEW_H, VIEW_W,
 } from "../lib/fishRenderer.js";
 import { reducedMotion } from "../lib/motion.js";
+import { getEconomyMode, subscribeEconomyMode } from "../lib/perfMode.js";
 
 // Centro aproximado do peixe nas coordenadas do renderizador (pra girar/espelhar)
 const FISH_CX = 290;
@@ -49,7 +50,7 @@ const AURA_CX = AURA_PAD + FISH_CX * AURA_SCALE;
 const AURA_CY = AURA_PAD + FISH_CY * AURA_SCALE;
 const auraCache = new Map();
 
-function buildAuraSprite(bigSeed, traits, color) {
+function buildAuraSprite(bigSeed, traits, color, cheap) {
   const w = Math.ceil(VIEW_W * AURA_SCALE) + AURA_PAD * 2;
   const h = Math.ceil(VIEW_H * AURA_SCALE) + AURA_PAD * 2;
 
@@ -66,6 +67,12 @@ function buildAuraSprite(bigSeed, traits, color) {
   bctx.fillStyle = color;
   bctx.fillRect(0, 0, w, h);
 
+  // Modo econômico (19/08/2026, relato de travamento em tablet): `ctx.filter = blur()` é caro
+  // em GPUs fracas. O sprite já é cacheado (só builda 1x por peixe/cor), então o custo real do
+  // blur é só na criação — mas pular ele mesmo assim evita reconstruir caro quando o cache
+  // esvazia (troca de aba/tanque) e mantém a silhueta tingida (sem o contorno suave).
+  if (cheap) return base;
+
   // 2. borra a silhueta tingida → contorno suave
   const out = document.createElement("canvas");
   out.width = w; out.height = h;
@@ -75,10 +82,10 @@ function buildAuraSprite(bigSeed, traits, color) {
   return out;
 }
 
-function getAuraSprite(c, color) {
-  const key = `${c.id}:${color}`;
+function getAuraSprite(c, color, cheap) {
+  const key = `${c.id}:${color}:${cheap ? "cheap" : "full"}`;
   let sp = auraCache.get(key);
-  if (!sp) { sp = buildAuraSprite(c.bigSeed, c.traits, color); auraCache.set(key, sp); }
+  if (!sp) { sp = buildAuraSprite(c.bigSeed, c.traits, color, cheap); auraCache.set(key, sp); }
   return sp;
 }
 
@@ -114,6 +121,9 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
   const [hover, setHover] = useState(null);
   const [pipActive, setPipActive] = useState(false);
   const resScaleRef = useRef(1);
+  const economyRef = useRef(getEconomyMode());
+
+  useEffect(() => subscribeEconomyMode((on) => { economyRef.current = on; }), []);
 
   creaturesRef.current = useMemo(
     () => creatures.map((c) => {
@@ -135,7 +145,9 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
     function updateResolution() {
       const rect = el.getBoundingClientRect();
       if (!rect.width || !rect.height) return;
-      const dpr = window.devicePixelRatio || 1;
+      // Modo econômico: ignora o devicePixelRatio (some suspeito nº 1 de travamento em
+      // tablet retina — backing store de até 2.5× vira até ~6x mais pixel por frame).
+      const dpr = economyRef.current ? 1 : (window.devicePixelRatio || 1);
       const scale = Math.min(2.5, Math.max(1, (rect.width * dpr) / W));
       if (Math.abs(scale - resScaleRef.current) > 0.05) {
         resScaleRef.current = scale;
@@ -147,7 +159,8 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
     const ro = new ResizeObserver(updateResolution);
     ro.observe(el);
     window.addEventListener("resize", updateResolution);
-    return () => { ro.disconnect(); window.removeEventListener("resize", updateResolution); };
+    const unsubEconomy = subscribeEconomyMode(updateResolution);
+    return () => { ro.disconnect(); window.removeEventListener("resize", updateResolution); unsubEconomy(); };
   }, []);
 
   useEffect(() => {
@@ -363,15 +376,19 @@ export const AquariumCanvas = forwardRef(function AquariumCanvas({
 
           // Aura no contorno pra peixes raros+ (lendário reluz de leve).
           // Cortes seguem BANDS (não literais soltos) — acompanham a recalibração.
+          const economy = economyRef.current;
           const rscore = Number(c.rarityScore);
           if (rscore >= BANDS[1].max) {
             const legendary = rscore >= BANDS[3].max;
-            const pulse = legendary ? 0.82 + 0.18 * Math.sin(time / 650 + s.phase) : 1;
-            drawAura(ctx, getAuraSprite(c, bandOf(rscore).color), s.x, y, s.facing > 0, (legendary ? 0.55 : 0.36) * pulse);
+            // Modo econômico: sem contorno-blur (sprite "cheap") e sem pulso animado do
+            // lendário (Math.sin todo frame por peixe lendário, custo pequeno mas junto do
+            // resto some da lista de coisas a cortar num tablet fraco).
+            const pulse = (legendary && !economy) ? 0.82 + 0.18 * Math.sin(time / 650 + s.phase) : 1;
+            drawAura(ctx, getAuraSprite(c, bandOf(rscore).color, economy), s.x, y, s.facing > 0, (legendary ? 0.55 : 0.36) * pulse);
           }
           // Aura de seleção (aqua, seguindo o contorno)
           if (c.id === selectedRef.current) {
-            drawAura(ctx, getAuraSprite(c, "#54e6d1"), s.x, y, s.facing > 0, 0.5);
+            drawAura(ctx, getAuraSprite(c, "#54e6d1", economy), s.x, y, s.facing > 0, 0.5);
           }
 
           ctx.translate(s.x, y);
