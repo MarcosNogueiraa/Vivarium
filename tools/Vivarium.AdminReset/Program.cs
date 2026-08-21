@@ -690,6 +690,65 @@ switch (args[0])
             return 1;
         }
     }
+    case "db-usage":
+    {
+        // Só leitura — diagnóstico pontual (20/08/2026, usuário perto do teto de 5GB de
+        // "Network Transfer" do Neon free tier, avaliando se compensa migrar de banco antes
+        // de trocar de provedor às cegas). Mede tamanho das tabelas (o que pesa por linha
+        // trafegada) e conta usuários ativos (proxy pro volume de polling: heartbeat 60s +
+        // refresh do tanque 30s por cliente, App.jsx) — os dois multiplicam pra formar o
+        // tráfego real, não dá pra culpar só um lado sem medir.
+        Console.WriteLine("Tamanho das tabelas (maiores primeiro):\n");
+        await using (var cmd = db.Database.GetDbConnection().CreateCommand())
+        {
+            await db.Database.OpenConnectionAsync();
+            cmd.CommandText = @"
+                SELECT relname AS tabela,
+                       pg_size_pretty(pg_total_relation_size(relid)) AS tamanho_total,
+                       pg_size_pretty(pg_relation_size(relid)) AS tamanho_dados,
+                       n_live_tup AS linhas
+                FROM pg_stat_user_tables
+                ORDER BY pg_total_relation_size(relid) DESC
+                LIMIT 15;";
+            await using var reader = await cmd.ExecuteReaderAsync();
+            Console.WriteLine($"{"Tabela",-28} {"Total",-12} {"Dados",-12} {"Linhas",-10}");
+            while (await reader.ReadAsync())
+                Console.WriteLine($"{reader.GetString(0),-28} {reader.GetString(1),-12} {reader.GetString(2),-12} {reader.GetInt64(3),-10}");
+        }
+
+        Console.WriteLine("\nTamanho total do banco:");
+        await using (var cmd2 = db.Database.GetDbConnection().CreateCommand())
+        {
+            cmd2.CommandText = "SELECT pg_size_pretty(pg_database_size(current_database()));";
+            var size = await cmd2.ExecuteScalarAsync();
+            Console.WriteLine($"  {size}");
+        }
+
+        int totalUsers = await db.Users.CountAsync();
+        var since30d = DateTime.UtcNow.AddDays(-30);
+        int activeHeartbeat30d = await db.Habitats.CountAsync(h => h.LastHeartbeatAt != null && h.LastHeartbeatAt >= since30d);
+        Console.WriteLine($"\nUsuários totais: {totalUsers}");
+        Console.WriteLine($"Habitats com heartbeat nos últimos 30 dias (proxy de jogador ativo/polling): {activeHeartbeat30d}");
+
+        var traitsLens = await db.CreatureInstances
+            .Where(c => c.TraitsJson != null)
+            .Select(c => c.TraitsJson!.Length)
+            .ToListAsync();
+        if (traitsLens.Count > 0)
+        {
+            double avgLen = traitsLens.Average();
+            Console.WriteLine($"\nTraitsJson: {traitsLens.Count} criatura(s), tamanho médio {avgLen:0} bytes, total ~{pg_size(traitsLens.Sum())}");
+        }
+
+        return 0;
+
+        static string pg_size(long bytes) => bytes switch
+        {
+            < 1024 => $"{bytes} B",
+            < 1024 * 1024 => $"{bytes / 1024.0:0.0} KB",
+            _ => $"{bytes / 1024.0 / 1024.0:0.0} MB",
+        };
+    }
     default:
         Console.WriteLine("Comando desconhecido. Use 'reset-password', 'list-users', 'check-cross-refs', 'delete-users' ou 'list-creatures'.");
         return 1;

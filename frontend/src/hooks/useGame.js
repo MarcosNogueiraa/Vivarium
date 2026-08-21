@@ -46,9 +46,16 @@ export function useGame() {
       if (failCountRef.current >= SYNC_ERROR_THRESHOLD) setSyncError(true);
     }
 
-    const beat = () => api.heartbeat().then(refreshTank).then(onSuccess).catch(onFailure);
-    beat();
-    const heartbeatTimer = setInterval(beat, HEARTBEAT_MS);
+    // 21/08/2026 (perto do teto de "Network Transfer" do Neon free tier): heartbeat e
+    // refresh do tanque eram dois timers INDEPENDENTES que os dois buscavam o tanque
+    // completo — a cada 60s, o tanque era buscado 3x (2 do tankTimer de 30s + 1 encadeada
+    // aqui no heartbeat), sem nenhuma precisar de fato de dado mais fresco que a outra.
+    // Heartbeat agora só marca online (POST leve, sem buscar o tanque); quem mantém o
+    // tanque atualizado é só o tankTimer de 30s — corta 1/3 do tráfego de tanque de graça.
+    // A carga INICIAL continua precisando buscar o tanque na hora (heartbeat sozinho não
+    // devolve o tanque, e o primeiro tick do tankTimer só dispara 30s depois do mount).
+    api.heartbeat().then(refreshTank).then(onSuccess).catch(onFailure);
+    const heartbeatTimer = setInterval(() => api.heartbeat().then(onSuccess).catch(onFailure), HEARTBEAT_MS);
     const tankTimer = setInterval(() => refreshTank().then(onSuccess).catch(onFailure), TANK_REFRESH_MS);
     return () => { clearInterval(heartbeatTimer); clearInterval(tankTimer); };
   }, [refreshTank]);
